@@ -51,10 +51,10 @@ sudo apt-get install -y git
 sudo mkdir -p /opt/dayday_erp
 sudo chown "$USER":"$USER" /opt/dayday_erp
 cd /opt/dayday_erp
-git clone https://github.com/china630/dayday_erp .
+git clone YOUR_GIT_URL .
 ```
 
-Укажите реальный URL репозитория (HTTPS или SSH).
+Подставьте вместо `YOUR_GIT_URL` URL вашего удалённого репозитория (HTTPS или SSH), например `https://github.com/<org>/<repo>.git` или `git@github.com:<org>/<repo>.git`.
 
 ## 5. Файл окружения (`.env`)
 

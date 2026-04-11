@@ -54,7 +54,7 @@ cd /opt/dayday_erp
 git clone YOUR_GIT_URL .
 ```
 
-Use your real Git remote (HTTPS or SSH).
+Replace `YOUR_GIT_URL` with your remote (HTTPS or SSH), e.g. `https://github.com/<org>/<repo>.git` or `git@github.com:<org>/<repo>.git`.
 
 ## 5. Environment file (`.env`)
 
