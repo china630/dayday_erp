@@ -459,6 +459,7 @@ export const resources = {
         miniErr: "Краткие финпоказатели: {{status}}",
         miniPeriod: "Период: {{period}} (UTC)",
         miniPl: "P&L — чистая прибыль",
+        miniPI: "P&L — чистая прибыль",
         miniPlHint:
           "Формула как в отчёте P&L (начисление) за текущий месяц.",
         miniPIHint:
@@ -1909,6 +1910,7 @@ export const resources = {
         miniErr: "Qısa maliyyə: {{status}}",
         miniPeriod: "Dövr: {{period}} (UTC)",
         miniPl: "Mənfəət — təmiz mənfəət",
+        miniPI: "Mənfəət — təmiz mənfəət",
         miniPlHint:
           "P&L hesabatındakı kimi (hesablama) cari ay üçün.",
         miniPIHint:

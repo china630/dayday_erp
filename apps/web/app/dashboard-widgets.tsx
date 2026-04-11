@@ -495,9 +495,11 @@ export function DashboardWidgets() {
                   {t("dashboard.miniPeriod", { period: miniFin.periodLabel })}
                 </p>
                 <h3 className="mb-2 text-[13px] font-semibold text-[#34495E]">
-                  {t("dashboard.miniPl")}
+                  {t("dashboard.miniPI")}
                 </h3>
-                <p className="mb-2 text-[11px] text-[#7F8C8D]">{t("dashboard.miniPlHint")}</p>
+                <p className="mb-2 text-[11px] text-[#7F8C8D]">
+                  {t("dashboard.miniPIHint")}
+                </p>
                 <MoneyAzn
                   value={miniFin.plNetProfit}
                   className="mt-auto text-xl font-semibold text-[#34495E]"
