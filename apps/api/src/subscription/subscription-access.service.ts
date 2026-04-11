@@ -5,6 +5,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, SubscriptionTier } from "@dayday/database";
+import {
+  isOrganizationUuid,
+  parseOrganizationId,
+} from "../common/organization-id.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { type ModuleEntitlementKey } from "./subscription.constants";
 
@@ -92,25 +96,6 @@ function entitlementsFromConstructorModules(
 function normalizeActiveModules(m: unknown): string[] {
   if (!Array.isArray(m)) return [];
   return m.map((x) => String(x).trim()).filter(Boolean);
-}
-
-/** Prisma @db.Uuid: пустая строка / мусор дают ошибку клиента («пустой where» / невалидный UUID). */
-const ORG_ID_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isOrganizationUuid(id: string): boolean {
-  return ORG_ID_UUID_RE.test(id);
-}
-
-/**
- * Допустимый organizationId для запросов в БД; иначе — не вызывать Prisma.
- */
-function parseOrganizationId(raw: unknown): string | null {
-  if (raw == null) return null;
-  if (typeof raw !== "string") return null;
-  const t = raw.trim();
-  if (!t || t === "undefined" || t === "null") return null;
-  return t;
 }
 
 function isSubscriptionTier(v: unknown): v is SubscriptionTier {

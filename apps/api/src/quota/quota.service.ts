@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { SubscriptionTier } from "@dayday/database";
+import { resolveOrganizationUuid } from "../common/organization-id.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { SystemConfigService } from "../system-config/system-config.service";
 import { QuotaExceededException } from "./quota-exceeded.exception";
@@ -27,14 +28,20 @@ function utcMonthBoundsUtc(now = new Date()): { from: Date; to: Date } {
 
 @Injectable()
 export class QuotaService {
+  private readonly logger = new Logger(QuotaService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly systemConfig: SystemConfigService,
   ) {}
 
   private async getTier(organizationId: string): Promise<SubscriptionTier> {
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      throw new NotFoundException("Organization subscription not found");
+    }
     const sub = await this.prisma.organizationSubscription.findUnique({
-      where: { organizationId },
+      where: { organizationId: orgId },
       select: { tier: true },
     });
     if (!sub) {
@@ -48,12 +55,16 @@ export class QuotaService {
   }
 
   async assertEmployeeQuota(organizationId: string): Promise<void> {
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      throw new NotFoundException("Organization subscription not found");
+    }
     const tier = await this.getTier(organizationId);
     const { maxEmployees } = await this.quotasForTier(tier);
     if (maxEmployees == null) return;
 
     const current = await this.prisma.employee.count({
-      where: { organizationId },
+      where: { organizationId: orgId },
     });
     if (current >= maxEmployees) {
       throw new QuotaExceededException("maxEmployees", maxEmployees, current);
@@ -93,6 +104,10 @@ export class QuotaService {
   }
 
   async assertInvoiceMonthlyQuota(organizationId: string): Promise<void> {
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      throw new NotFoundException("Organization subscription not found");
+    }
     const tier = await this.getTier(organizationId);
     const { maxInvoicesPerMonth } = await this.quotasForTier(tier);
     if (maxInvoicesPerMonth == null) return;
@@ -100,7 +115,7 @@ export class QuotaService {
     const { from, to } = utcMonthBoundsUtc();
     const current = await this.prisma.invoice.count({
       where: {
-        organizationId,
+        organizationId: orgId,
         createdAt: { gte: from, lte: to },
       },
     });
@@ -119,19 +134,38 @@ export class QuotaService {
     max: number | null;
     atLimit: boolean;
   }> {
-    const sub = await this.prisma.organizationSubscription.findUnique({
-      where: { organizationId },
-      select: { tier: true },
-    });
-    if (!sub) {
-      throw new NotFoundException("Organization subscription not found");
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      return { current: 0, max: null, atLimit: false };
     }
-    const { maxEmployees } = await this.quotasForTier(sub.tier);
-    const current = await this.prisma.employee.count({
-      where: { organizationId },
-    });
-    const atLimit =
-      maxEmployees != null && current >= maxEmployees;
+
+    let tier: SubscriptionTier = SubscriptionTier.STARTER;
+    try {
+      const sub = await this.prisma.organizationSubscription.findUnique({
+        where: { organizationId: orgId },
+        select: { tier: true },
+      });
+      if (sub?.tier != null) {
+        tier = sub.tier;
+      }
+    } catch (e) {
+      this.logger.warn(
+        `getEmployeeQuotaSnapshot: subscription findUnique failed for ${orgId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+
+    const { maxEmployees } = await this.quotasForTier(tier);
+    let current = 0;
+    try {
+      current = await this.prisma.employee.count({
+        where: { organizationId: orgId },
+      });
+    } catch (e) {
+      this.logger.warn(
+        `getEmployeeQuotaSnapshot: employee count failed for ${orgId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    const atLimit = maxEmployees != null && current >= maxEmployees;
     return { current, max: maxEmployees, atLimit };
   }
 
@@ -141,21 +175,41 @@ export class QuotaService {
     max: number | null;
     atLimit: boolean;
   }> {
-    const sub = await this.prisma.organizationSubscription.findUnique({
-      where: { organizationId },
-      select: { tier: true },
-    });
-    if (!sub) {
-      throw new NotFoundException("Organization subscription not found");
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      return { current: 0, max: null, atLimit: false };
     }
-    const { maxInvoicesPerMonth } = await this.quotasForTier(sub.tier);
+
+    let tier: SubscriptionTier = SubscriptionTier.STARTER;
+    try {
+      const sub = await this.prisma.organizationSubscription.findUnique({
+        where: { organizationId: orgId },
+        select: { tier: true },
+      });
+      if (sub?.tier != null) {
+        tier = sub.tier;
+      }
+    } catch (e) {
+      this.logger.warn(
+        `getInvoiceMonthlyQuotaSnapshot: subscription findUnique failed for ${orgId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+
+    const { maxInvoicesPerMonth } = await this.quotasForTier(tier);
     const { from, to } = utcMonthBoundsUtc();
-    const current = await this.prisma.invoice.count({
-      where: {
-        organizationId,
-        createdAt: { gte: from, lte: to },
-      },
-    });
+    let current = 0;
+    try {
+      current = await this.prisma.invoice.count({
+        where: {
+          organizationId: orgId,
+          createdAt: { gte: from, lte: to },
+        },
+      });
+    } catch (e) {
+      this.logger.warn(
+        `getInvoiceMonthlyQuotaSnapshot: invoice count failed for ${orgId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
     const atLimit =
       maxInvoicesPerMonth != null && current >= maxInvoicesPerMonth;
     return { current, max: maxInvoicesPerMonth, atLimit };
