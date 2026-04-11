@@ -403,11 +403,13 @@ export const resources = {
       dashboard: {
         title: "Дашборд",
         cash: "Касса и банк (101, 221)",
-        obligations521531: "Обязательства (налоги и кредиторская задолженность)",
-        payables521531Title: "Обязательства: налоги и кредиторская задолженность (521, 531)",
+        obligations521531:
+          "Обязательства (налоги и кредиторская задолженность), учёт NAS",
+        payables521531Title:
+          "Обязательства: налоги и кредиторская задолженность (521, 531), учёт NAS",
         currentMonthExpenses721: "Расходы текущего месяца",
         currentMonthExpenses721Hint:
-          "Счёт 721 — административные расходы за текущий месяц",
+          "Счёт 721 (NAS): административные расходы текущего месяца, суммы в AZN",
         tax521: "Предстоящие налоги (521), кредитовый остаток",
         topProducts: "Топ продаваемых товаров",
         topProductsHint: "(по оплаченным инвойсам)",
@@ -458,6 +460,8 @@ export const resources = {
         miniPeriod: "Период: {{period}} (UTC)",
         miniPl: "P&L — чистая прибыль",
         miniPlHint:
+          "Формула как в отчёте P&L (начисление) за текущий месяц.",
+        miniPIHint:
           "Формула как в отчёте P&L (начисление) за текущий месяц.",
         miniAssets: "Баланс — активы",
         miniLiabEq: "Баланс — обязательства + капитал",
@@ -631,7 +635,7 @@ export const resources = {
           postOrder: "Провести",
           loadErr: "Не удалось загрузить данные кассы",
           loadErrHint:
-            "Обновите страницу или обратитесь к администратору при ошибке доступа (403).",
+            "Обновите страницу или обратитесь к администратору при ошибке доступа или сервера (403 / 500).",
           backLink: "Назад",
           btnAdvanceTop: "Авансовый отчет",
           quickCashOutTitle: "Быстрый расход",
@@ -835,8 +839,9 @@ export const resources = {
       },
       hrPositions: {
         title: "Штатные единицы",
-        subtitle: "Должности, подразделения, вилка оклада и число ставок.",
-        tableTitle: "Список должностей",
+        subtitle:
+          "Должности, подразделения, вилка оклада (AZN) и число ставок по плану NAS.",
+        tableTitle: "Список штатных единиц",
         salaryFork: "Вилка ЗП (AZN)",
         minSalary: "Мин. оклад",
         maxSalary: "Макс. оклад",
@@ -868,7 +873,7 @@ export const resources = {
         batchApply: "Применить",
         batchRangeErr: "Некорректный диапазон дней",
         legendHint:
-          "Клик по ячейке переключает тип. M — отпуск, X — больничный (из отпусков). Заблокированные ячейки — из отпусков.",
+          "Клик по ячейке переключает тип дня. M — отпуск (məzuniyyət), X — больничный. Ячейки из утверждённых Absence заблокированы. Термины АР: см. подсказки ниже.",
         absenceLocked: "Из отпуска (нельзя менять)",
         codeWork: "W",
         codeVacation: "M",
@@ -882,12 +887,13 @@ export const resources = {
         typeTrip: "Служебная поездка (ezamiyyət)",
         termSalahiyyat: "Səlahiyyət",
         termSalahiyyatDesc:
-          "термин кадрового законодательства АР: полномочия / разрешительный режим",
+          "официальный термин трудового законодательства АР: полномочия / разрешительный режим кадровых действий",
         termMezuniyyat: "Məzuniyyət",
-        termMezuniyyatDesc: "отпуск (в табеле обозначение — M)",
+        termMezuniyyatDesc:
+          "отпуск по законодательству АР; в табеле код — M",
         termEzamiyyat: "Ezamiyyət",
         termEzamiyyatDesc:
-          "служебная командировка (тип BUSINESS_TRIP; термин АР)",
+          "служебная командировка (ezamiyyət), тип BUSINESS_TRIP по законодательству АР",
       },
       hrStructure: {
         title: "Оргструктура и штат",
@@ -1189,7 +1195,8 @@ export const resources = {
         thBalance: "Долг",
         total: "Итого",
         none: "Нет задолженности по счёту 211.",
-        emptyHint: "Когда появятся неоплаченные отгрузки, контрагенты отобразятся в этой таблице.",
+        emptyHint:
+          "Неоплаченная дебиторская задолженность по счёту 211 (NAS) после отгрузки и признания выручки отобразится здесь.",
         loadErr: "Ошибка загрузки",
         account: "Счёт",
       },
@@ -1273,7 +1280,7 @@ export const resources = {
         title: "Подписка",
         subtitle: "Тариф, лимиты и аддоны организации.",
         subtitleV10:
-          "Текущая организация, модули (Касса, Банк и др.) и итоговая сумма в месяц.",
+          "Текущая организация, модули и общая сумма",
         currentOrganization: "Текущая организация",
         voenLabel: "VÖEN",
         modulesTitle: "Модули",
@@ -1283,8 +1290,7 @@ export const resources = {
         totalBase: "Базовая подписка",
         totalModules: "Выбранные модули",
         totalMonthly: "Всего в месяц",
-        enterpriseAllModules:
-          "Тариф Enterprise: все модули уже включены; переключатели недоступны.",
+        enterpriseAllModules: "Тариф Enterprise: все модули включены",
         readOnlyModules:
           "Срок подписки истёк — изменение модулей недоступно. Оформите оплату.",
         currentPlan: "Текущий тариф",
@@ -1344,6 +1350,12 @@ export const resources = {
           bankPasha: "Pasha Bank",
           bankAbb: "ABB",
           bankKapital: "Kapital Bank",
+        },
+        paymentHistory: {
+          title: "История платежей",
+          subtitle:
+            "Агрегированные счета платформы (по TZ §14.8) по организациям, где вы владелец; PDF — платформенный счёт.",
+          empty: "Пока нет платежей.",
         },
       },
       paymentHistory: {
@@ -1842,11 +1854,12 @@ export const resources = {
       dashboard: {
         title: "Panel",
         cash: "Kassa və bank (101, 221)",
-        obligations521531: "Öhdəliklər (vergi və borclar)",
-        payables521531Title: "Öhdəliklər: vergi və kreditor borcu (521, 531)",
+        obligations521531: "Öhdəliklər (vergi və borclar), NAS uçotu",
+        payables521531Title:
+          "Öhdəliklər: vergi və kreditor borcu (521, 531), NAS uçotu",
         currentMonthExpenses721: "Cari ayın xərcləri",
         currentMonthExpenses721Hint:
-          "721 hesabı — cari ayın idarəetmə xərcləri",
+          "721 hesabı (NAS): cari ayın idarəetmə xərcləri, məbləğlər AZN ilə",
         tax521: "521 vergi (kredit qalığı)",
         topProducts: "Ən çox satılan məhsullar",
         topProductsHint: "(ödənilmiş hesablar üzrə)",
@@ -1897,6 +1910,8 @@ export const resources = {
         miniPeriod: "Dövr: {{period}} (UTC)",
         miniPl: "Mənfəət — təmiz mənfəət",
         miniPlHint:
+          "P&L hesabatındakı kimi (hesablama) cari ay üçün.",
+        miniPIHint:
           "P&L hesabatındakı kimi (hesablama) cari ay üçün.",
         miniAssets: "Balans — aktivlər",
         miniLiabEq: "Balans — öhdəliklər + kapital",
@@ -2068,9 +2083,9 @@ export const resources = {
           notes: "Qeyd",
           saveDraft: "Qaralama yarat",
           postOrder: "Keçir",
-          loadErr: "Məlumat yüklənmədi",
+          loadErr: "Kassa məlumatları yüklənmədi",
           loadErrHint:
-            "Səhifəni yeniləyin və ya 403 halında administratorla əlaqə saxlayın.",
+            "Səhifəni yeniləyin və ya giriş/server xətası (403 / 500) halında təşkilat administratoruna müraciət edin.",
           backLink: "Geri",
           btnAdvanceTop: "Avans hesabatı",
           quickCashOutTitle: "Sürətli məxaric",
@@ -2273,10 +2288,11 @@ export const resources = {
         quotaExceeded: "Seçilmiş vəzifə üzrə boş yer qalmayıb.",
       },
       hrPositions: {
-        title: "Ştat cədvəli",
-        subtitle: "Vəzifələr, bölmələr, maaş çəngəli və yer sayı.",
-        tableTitle: "Mövcud ştat vahidləri",
-        salaryFork: "Maaş çəngəli",
+        title: "Ştat vahidləri",
+        subtitle:
+          "Vəzifələr, bölmələr, maaş çəngəli (AZN) və NAS planı üzrə yer sayı.",
+        tableTitle: "Ştat vahidlərinin siyahısı",
+        salaryFork: "Maaş çəngəli (AZN)",
         minSalary: "Min. maaş",
         maxSalary: "Maks. maaş",
         minMaxErr: "Minimum maksimumdan böyük ola bilməz.",
@@ -2307,7 +2323,7 @@ export const resources = {
         batchApply: "Tətbiq et",
         batchRangeErr: "Gün aralığı yanlışdır",
         legendHint:
-          "Xanaya klik növü dəyişir. M — məzuniyyət, X — xəstəlik. Absence-dan gələn xanalar kilidlidir.",
+          "Xanaya klik gün növünü dəyişir. M — məzuniyyət, X — xəstəlik. Təsdiqlənmiş Absence xanaları kilidlidir. AR terminləri: aşağıdakı izahlar.",
         absenceLocked: "Absence (dəyişmək olmaz)",
         codeWork: "W",
         codeVacation: "M",
@@ -2320,11 +2336,14 @@ export const resources = {
         typeOff: "İstirahət",
         typeTrip: "Ezamiyyət (BUSINESS_TRIP)",
         termSalahiyyat: "Səlahiyyət",
-        termSalahiyyatDesc: "səlahiyyət / icazəli kadr əməliyyatları",
+        termSalahiyyatDesc:
+          "AR əmək qanunvericiliyinin rəsmi terminidir: səlahiyyət / icazəli kadr hərəkətləri",
         termMezuniyyat: "Məzuniyyət",
-        termMezuniyyatDesc: "məzuniyyət (tabeldə — M)",
+        termMezuniyyatDesc:
+          "AR qanunvericiliyinə görə məzuniyyət; tabeldə kod — M",
         termEzamiyyat: "Ezamiyyət",
-        termEzamiyyatDesc: "ezamiyyət (növ BUSINESS_TRIP)",
+        termEzamiyyatDesc:
+          "AR qanunvericiliyinə görə ezamiyyət; növ BUSINESS_TRIP",
       },
       hrStructure: {
         title: "Orqstruktur və ştat",
@@ -2625,7 +2644,8 @@ export const resources = {
         thBalance: "Borc",
         total: "Cəmi",
         none: "211 üzrə borc yoxdur.",
-        emptyHint: "Ödənilməmiş göndərmələr olduqda kontragentlər burada görünəcək.",
+        emptyHint:
+          "211 hesabı (NAS) üzrə ödənilməmiş debitor borcu göndərmə və gəlirin əksindən sonra burada görünəcək.",
         loadErr: "Yükləmə xətası",
         account: "Hesab",
       },
@@ -2710,7 +2730,7 @@ export const resources = {
         title: "Abunəlik",
         subtitle: "Tarif, limitlər və əlavə modullar.",
         subtitleV10:
-          "Cari təşkilat, modullar (Kassa, Bank və s.) və aylıq ümumi məbləğ.",
+          "Cari təşkilat, modullar və aylıq ümumi məbləğ",
         currentOrganization: "Cari təşkilat",
         voenLabel: "VÖEN",
         modulesTitle: "Modullar",
@@ -2720,8 +2740,7 @@ export const resources = {
         totalBase: "Baza abunə",
         totalModules: "Seçilmiş modullar",
         totalMonthly: "Ayda cəmi",
-        enterpriseAllModules:
-          "Enterprise tarifində bütün modullar daxildir; keçidlər söndürülüb.",
+        enterpriseAllModules: "Enterprise tarifində bütün modullar daxildir",
         readOnlyModules:
           "Abunəlik müddəti bitib — modulları dəyişmək mümkün deyil. Ödəniş edin.",
         currentPlan: "Cari tarif",
@@ -2781,6 +2800,12 @@ export const resources = {
           bankPasha: "Pasha Bank",
           bankAbb: "ABB",
           bankKapital: "Kapital Bank",
+        },
+        paymentHistory: {
+          title: "Ödəniş tarixçəsi",
+          subtitle:
+            "TZ §14.8 üzrə platforma hesabları (sahibi olduğunuz təşkilatlar); PDF — platforma hesabı.",
+          empty: "Hələ ödəniş yoxdur.",
         },
       },
       paymentHistory: {
