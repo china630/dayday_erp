@@ -1,12 +1,15 @@
 /**
- * TZ §17: scan apps/web/app for t("...") and <Trans i18nKey="..." />;
- * require non-empty RU + AZ in resources; EN warns only.
+ * TZ §17: scan apps/web/app and apps/web/components for t("...") and
+ * <Trans i18nKey="..." />; require non-empty RU + AZ in resources; EN warns only.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { resources } from "../apps/web/lib/i18n/resources";
 
-const APP_ROOT = path.join(process.cwd(), "apps/web/app");
+const SCAN_ROOTS = [
+  path.join(process.cwd(), "apps/web/app"),
+  path.join(process.cwd(), "apps/web/components"),
+];
 
 const ru = resources.ru.translation as Record<string, unknown>;
 const az = resources.az.translation as Record<string, unknown>;
@@ -69,7 +72,16 @@ function extractTransKeys(source: string): Set<string> {
 }
 
 function main(): void {
-  const files = walk(APP_ROOT);
+  const seen = new Set<string>();
+  const files: string[] = [];
+  for (const root of SCAN_ROOTS) {
+    for (const f of walk(root)) {
+      if (!seen.has(f)) {
+        seen.add(f);
+        files.push(f);
+      }
+    }
+  }
   const missingRu: string[] = [];
   const missingAz: string[] = [];
   const notString: string[] = [];
@@ -111,7 +123,7 @@ function main(): void {
 
   if (!missingRu.length && !missingAz.length && !notString.length) {
     console.info(
-      `i18n audit: OK (RU + AZ) for ${files.length} file(s) under apps/web/app.`,
+      `i18n audit: OK (RU + AZ) for ${files.length} file(s) under apps/web/app + components.`,
     );
     process.exit(0);
   } else {

@@ -478,7 +478,7 @@ export const resources = {
         title: "Банк и Касса",
         accountsTitle: "Банковские счета",
         accountsHint:
-          "Текущие остатки по счетам 101 (касса) и 221–224 (банк). Период ОСВ — с 1 января по сегодня; книга NAS/IFRS в шапке.",
+          "Текущие остатки по счетам 101 (касса) и 221–224 (банк). Период ОСВ — с 1 января по сегодня; книга NAS (MHBS) / IFRS — переключатель в шапке.",
         accountsLoadErr: "Не удалось загрузить карточки счетов",
         accountsLoadErrHint:
           "Ошибка 403 или сети. Обратитесь к администратору организации за доступом.",
@@ -1917,7 +1917,7 @@ export const resources = {
         title: "Bank və Kassa",
         accountsTitle: "Bank hesabları",
         accountsHint:
-          "101 (kassa) və 221–224 (bank) üzrə cari qalıqlar. OSV dövrü — ilin əvvəlindən bu günə; NAS/IFRS kitabı başlıqda.",
+          "101 (kassa) və 221–224 (bank) üzrə cari qalıqlar. OSV dövrü — ilin əvvəlindən bu günə; NAS (MHBS) / IFRS kitabı başlıqda.",
         accountsLoadErr: "Hesab kartları yüklənmədi",
         accountsLoadErrHint:
           "403 və ya şəbəkə xətası. İcazə üçün təşkilat administratoruna müraciət edin.",

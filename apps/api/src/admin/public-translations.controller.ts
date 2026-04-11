@@ -12,6 +12,8 @@ export class PublicTranslationsController {
   @Get()
   @ApiOperation({
     summary: "Переопределения i18n из БД для слияния с resources на клиенте",
+    description:
+      "Возвращает плоский объект overrides и cacheVersion. Полный словарь — статический бандл apps/web/lib/i18n/resources.ts; клиент подмешивает overrides поверх него (глубокое слияние). Не заменяет resources.ts целиком. Избегайте ключей-родителей (например banking.cash как строка), иначе затрутся вложенные banking.cash.*.",
   })
   async list(@Query("locale") locale = "az") {
     const loc = (locale || "az").trim().toLowerCase();
