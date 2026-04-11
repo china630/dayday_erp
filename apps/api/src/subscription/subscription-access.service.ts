@@ -1,10 +1,12 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, SubscriptionTier } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
-import {
-  DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES,
-  type ModuleEntitlementKey,
-} from "./subscription.constants";
+import { type ModuleEntitlementKey } from "./subscription.constants";
 
 /**
  * v8.9 / v12.5: аварийный полный доступ к модулям только вне production (TZ §14.6).
@@ -87,11 +89,68 @@ function entitlementsFromConstructorModules(
   };
 }
 
+function normalizeActiveModules(m: unknown): string[] {
+  if (!Array.isArray(m)) return [];
+  return m.map((x) => String(x).trim()).filter(Boolean);
+}
+
+/** Prisma @db.Uuid: пустая строка / мусор дают ошибку клиента («пустой where» / невалидный UUID). */
+const ORG_ID_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isOrganizationUuid(id: string): boolean {
+  return ORG_ID_UUID_RE.test(id);
+}
+
+/**
+ * Допустимый organizationId для запросов в БД; иначе — не вызывать Prisma.
+ */
+function parseOrganizationId(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  if (!t || t === "undefined" || t === "null") return null;
+  return t;
+}
+
+function isSubscriptionTier(v: unknown): v is SubscriptionTier {
+  return (
+    v === SubscriptionTier.STARTER ||
+    v === SubscriptionTier.BUSINESS ||
+    v === SubscriptionTier.ENTERPRISE
+  );
+}
+
+/** Минимальный снимок без строки подписки (в схеме нет tier FREE — STARTER = базовый доступ). */
+function emptyOrganizationSnapshot(): {
+  tier: SubscriptionTier;
+  activeModules: string[];
+  customConfig: unknown | null;
+  modules: OrganizationModuleEntitlements;
+  expiresAt: Date | null;
+  isTrial: boolean;
+} {
+  return {
+    tier: SubscriptionTier.STARTER,
+    activeModules: [],
+    customConfig: null,
+    modules: {
+      manufacturing: false,
+      fixedAssets: false,
+      ifrsMapping: false,
+      bankingPro: false,
+      hrFull: false,
+    },
+    expiresAt: null,
+    isTrial: false,
+  };
+}
+
 function computeEntitlementsLegacy(sub: {
   tier: SubscriptionTier;
   activeModules: string[];
 }): OrganizationModuleEntitlements {
-  const modules = new Set(sub.activeModules);
+  const modules = new Set(normalizeActiveModules(sub.activeModules));
   const has = (slug: string) => modules.has(slug);
   return {
     manufacturing:
@@ -118,7 +177,15 @@ function computeEntitlements(sub: {
   activeModules: string[];
   customConfig: unknown | null;
 }): OrganizationModuleEntitlements {
-  if (sub.tier === SubscriptionTier.ENTERPRISE) {
+  const tier = isSubscriptionTier(sub.tier)
+    ? sub.tier
+    : SubscriptionTier.STARTER;
+  const safe = {
+    tier,
+    activeModules: normalizeActiveModules(sub.activeModules),
+    customConfig: sub.customConfig ?? null,
+  };
+  if (safe.tier === SubscriptionTier.ENTERPRISE) {
     return {
       manufacturing: true,
       fixedAssets: true,
@@ -127,11 +194,11 @@ function computeEntitlements(sub: {
       hrFull: true,
     };
   }
-  const customList = parseCustomModules(sub.customConfig);
+  const customList = parseCustomModules(safe.customConfig);
   if (customList && customList.length > 0) {
     return entitlementsFromConstructorModules(customList);
   }
-  return computeEntitlementsLegacy(sub);
+  return computeEntitlementsLegacy(safe);
 }
 
 /**
@@ -165,6 +232,8 @@ function isAllowedByConstructorModules(
 
 @Injectable()
 export class SubscriptionAccessService {
+  private readonly logger = new Logger(SubscriptionAccessService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -259,7 +328,11 @@ export class SubscriptionAccessService {
       });
     }
 
-    const ent = computeEntitlements(sub);
+    const ent = computeEntitlements({
+      tier: sub.tier,
+      activeModules: normalizeActiveModules(sub.activeModules),
+      customConfig: sub.customConfig ?? null,
+    });
     let allowed = false;
     switch (moduleKey) {
       case "manufacturing":
@@ -279,7 +352,9 @@ export class SubscriptionAccessService {
         allowed = ent.hrFull;
         break;
       default:
-        allowed = new Set(sub.activeModules).has(String(moduleKey));
+        allowed = new Set(normalizeActiveModules(sub.activeModules)).has(
+          String(moduleKey),
+        );
     }
 
     if (!allowed) {
@@ -302,62 +377,88 @@ export class SubscriptionAccessService {
     expiresAt: Date | null;
     isTrial: boolean;
   }> {
-    let sub = await this.prisma.organizationSubscription.findUnique({
-      where: { organizationId },
-    });
-    if (!sub) {
-      const org = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-      });
-      if (!org) {
-        throw new NotFoundException("Organization not found");
+    const id = parseOrganizationId(organizationId);
+    if (!id || !isOrganizationUuid(id)) {
+      if (organizationId !== undefined && organizationId !== null && organizationId !== "") {
+        this.logger.warn(
+          `getOrganizationSnapshot: invalid organizationId (no DB query), raw=${String(organizationId)}`,
+        );
       }
-      const demoExpiresAt = new Date();
-      demoExpiresAt.setUTCDate(demoExpiresAt.getUTCDate() + 14);
-      sub = await this.prisma.organizationSubscription.create({
-        data: {
-          organizationId,
-          tier: SubscriptionTier.BUSINESS,
-          activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
-          customConfig: undefined,
-          isTrial: true,
-          expiresAt: demoExpiresAt,
-          isBlocked: false,
-        },
-      });
-      await this.prisma.organization.update({
-        where: { id: organizationId },
-        data: { activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES] },
-      });
+      return emptyOrganizationSnapshot();
     }
 
-    const now = new Date();
-    if (
-      sub.expiresAt &&
-      sub.expiresAt.getTime() < now.getTime() &&
-      sub.isTrial
-    ) {
-      await this.prisma.organizationSubscription.update({
-        where: { organizationId },
-        data: {
-          tier: SubscriptionTier.STARTER,
-          isTrial: false,
-          activeModules: [],
-        },
-      });
-      sub = await this.prisma.organizationSubscription.findUniqueOrThrow({
-        where: { organizationId },
-      });
-    }
+    try {
+      let sub: Awaited<
+        ReturnType<PrismaService["organizationSubscription"]["findUnique"]>
+      >;
+      try {
+        sub = await this.prisma.organizationSubscription.findUnique({
+          where: { organizationId: id },
+        });
+      } catch (e) {
+        this.logger.warn(
+          `getOrganizationSnapshot: subscription findUnique failed for ${id}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        return emptyOrganizationSnapshot();
+      }
 
-    return {
-      tier: sub.tier,
-      activeModules: sub.activeModules,
-      customConfig: sub.customConfig ?? null,
-      modules: computeEntitlements(sub),
-      expiresAt: sub.expiresAt,
-      isTrial: sub.isTrial,
-    };
+      if (!sub) {
+        this.logger.warn(
+          `getOrganizationSnapshot: no subscription row for org ${id}, returning default snapshot`,
+        );
+        return emptyOrganizationSnapshot();
+      }
+
+      const now = new Date();
+      if (
+        sub.expiresAt &&
+        sub.expiresAt.getTime() < now.getTime() &&
+        sub.isTrial
+      ) {
+        await this.prisma.organizationSubscription.update({
+          where: { organizationId: id },
+          data: {
+            tier: SubscriptionTier.STARTER,
+            isTrial: false,
+            activeModules: [],
+          },
+        });
+        const refreshed = await this.prisma.organizationSubscription.findUnique({
+          where: { organizationId: id },
+        });
+        if (!refreshed) {
+          this.logger.warn(
+            `getOrganizationSnapshot: subscription row missing after trial rollover for ${id}`,
+          );
+          return emptyOrganizationSnapshot();
+        }
+        sub = refreshed;
+      }
+
+      const tier = isSubscriptionTier(sub.tier)
+        ? sub.tier
+        : SubscriptionTier.STARTER;
+      const activeModules = normalizeActiveModules(sub.activeModules);
+      const customConfig = sub.customConfig ?? null;
+
+      return {
+        tier,
+        activeModules,
+        customConfig,
+        modules: computeEntitlements({
+          tier,
+          activeModules,
+          customConfig,
+        }),
+        expiresAt: sub.expiresAt ?? null,
+        isTrial: Boolean(sub.isTrial),
+      };
+    } catch (e) {
+      this.logger.warn(
+        `getOrganizationSnapshot failed for ${id}: ${e instanceof Error ? e.stack ?? e.message : String(e)}`,
+      );
+      return emptyOrganizationSnapshot();
+    }
   }
 
   async updateTier(

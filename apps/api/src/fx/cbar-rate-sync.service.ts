@@ -44,10 +44,16 @@ export class CbarRateSyncService {
 
   /** Синхронизация по «сегодня» в URL (якорь); в БД пишется дата из атрибута Date в XML. */
   async syncTodayFromCbar(): Promise<void> {
+    if (!this.cbar.isExternalCbarFetchEnabled()) {
+      return;
+    }
     await this.ingestFromNetworkAnchor(new Date());
   }
 
   async ingestFromNetworkAnchor(anchorDate: Date): Promise<void> {
+    if (!this.cbar.isExternalCbarFetchEnabled()) {
+      return;
+    }
     const url = this.cbar.buildCbarUrl(anchorDate);
     const body = await this.cbar.fetchCbarXmlBodyForDate(anchorDate);
     if (!body) {

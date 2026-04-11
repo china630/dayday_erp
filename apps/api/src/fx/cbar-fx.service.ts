@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { XMLParser } from "fast-xml-parser";
 import axios from "axios";
 
@@ -135,6 +136,16 @@ export class CbarFxService {
     attributeNamePrefix: "@_",
   });
 
+  constructor(private readonly config: ConfigService) {}
+
+  /**
+   * С TAX_LOOKUP_MOCK=1 (как в TaxService) внешние запросы к cbar.az отключены —
+   * без таймаутов и шума в логах при локальной разработке.
+   */
+  isExternalCbarFetchEnabled(): boolean {
+    return this.config.get<string>("TAX_LOOKUP_MOCK") !== "1";
+  }
+
   /** Дата в календаре Азербайджана (Asia/Baku) → DD.MM.YYYY для URL ЦБА */
   formatBakuDate(d: Date): string {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -167,6 +178,9 @@ export class CbarFxService {
    * Используется синхронизацией и fetchRatesForDateOnce.
    */
   async fetchCbarXmlBodyForDate(d: Date): Promise<string | null> {
+    if (!this.isExternalCbarFetchEnabled()) {
+      return null;
+    }
     const url = this.buildCbarUrl(d);
     this.logger.debug(`CBAR GET ${url}`);
     try {
@@ -178,9 +192,6 @@ export class CbarFxService {
       });
       if (res.status === 404) return null;
       const body = new TextDecoder("utf-8").decode(new Uint8Array(res.data));
-      if (body.length > 0) {
-        console.log("[DEBUG FX] XML Received: ", body.substring(0, 100));
-      }
       return body;
     } catch (e) {
       this.logger.warn(`CBAR request failed ${url}: ${e instanceof Error ? e.message : String(e)}`);
