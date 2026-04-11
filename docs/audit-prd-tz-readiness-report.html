@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DayDay ERP — полный технический аудит (PRD / TZ)</title>
+  <style>
+    :root {
+      --primary: #34495e;
+      --action: #2980b9;
+      --secondary: #7f8c8d;
+      --border: #d5dadf;
+      --bg: #ebedf0;
+      --card: #ffffff;
+      --red: #c0392b;
+      --amber: #d68910;
+      --green: #1e8449;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 2rem 1.5rem 3rem;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 14px; line-height: 1.5; color: var(--primary); background: var(--bg);
+    }
+    .wrap {
+      max-width: 1100px; margin: 0 auto; background: var(--card);
+      border: 1px solid var(--border); border-radius: 2px;
+      padding: 2rem 2rem 2.5rem; box-shadow: 0 1px 3px rgba(52,73,94,.08);
+    }
+    h1 { margin: 0 0 .5rem; font-size: 1.5rem; font-weight: 600; color: var(--primary); }
+    .meta { font-size: 13px; color: var(--secondary); margin-bottom: 1.75rem; }
+    h2 {
+      margin: 2rem 0 .75rem; font-size: 1.1rem; font-weight: 600; color: var(--primary);
+      border-bottom: 2px solid var(--action); padding-bottom: .35rem; display: inline-block;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: .75rem; }
+    th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #f8f9fa; font-weight: 600; color: var(--primary); }
+    table.tbl-pct td:nth-child(2) { white-space: nowrap; }
+    table.tbl-pct td:nth-child(3),
+    table.tbl-pct td:nth-child(4) { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.tbl-plain td:nth-child(2) { white-space: nowrap; text-align: center; }
+    .legend { margin: 1rem 0 .5rem; font-size: 13px; color: var(--secondary); }
+    ul.priorities { margin: .5rem 0 0; padding-left: 1.25rem; }
+    ul.priorities li { margin-bottom: .65rem; }
+    .summary {
+      margin-top: 1.5rem; padding: 1rem 1.25rem; background: #f4f6f8;
+      border-left: 4px solid var(--action); font-size: 13px; color: var(--primary);
+    }
+    code {
+      font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+      background: #f0f2f5; padding: .1em .35em; border-radius: 2px;
+    }
+    footer {
+      margin-top: 2rem; padding-top: 1rem;
+      border-top: 1px solid var(--border); font-size: 12px; color: var(--secondary);
+    }
+    .launch-score {
+      margin: 1.25rem 0 1.5rem; padding: 1.25rem 1.5rem;
+      background: linear-gradient(135deg,#f8fafc 0%,#eef2f7 100%);
+      border: 1px solid var(--border); border-radius: 2px; border-left: 4px solid var(--action);
+    }
+    .launch-score-label { margin: 0 0 .5rem; font-size: 13px; font-weight: 600; color: var(--primary); }
+    .launch-score-values {
+      margin: 0 0 .75rem; font-size: 1.75rem; font-weight: 700;
+      font-variant-numeric: tabular-nums; letter-spacing: .02em; color: var(--primary);
+    }
+    .launch-score-values .was { color: var(--secondary); font-weight: 600; }
+    .launch-score-values .arrow { color: var(--secondary); font-weight: 400; font-size: 1.25rem; padding: 0 .35rem; }
+    .launch-score-values .now { color: var(--action); }
+    .launch-score-hint { margin: 0; font-size: 12px; color: var(--secondary); line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Полный технический аудит DayDay ERP</h1>
+    <p class="meta">
+      Сопоставление кода с <strong>PRD.md</strong> (§7.12 Billing v10.0) и <strong>TZ.md</strong> (§14.8).<br />
+      Первичный снимок: 6 апреля 2026 г.<br />
+      Текущий прогон: <strong>7 апреля 2026 г.</strong> (4-й аудит кода).<br />
+      Репозиторий: monorepo <code>apps/web</code>, <code>apps/api</code>, <code>packages/database</code>.
+    </p>
+
+    <!-- ───── Общая оценка ───── -->
+    <div class="launch-score" role="region" aria-label="Общая готовность к запуску">
+      <p class="launch-score-label">Общая готовность системы к запуску (шкала 0–100)</p>
+      <p class="launch-score-values">
+        <span class="was" title="3-й аудит">80</span><span class="arrow">→</span><span class="now" title="4-й аудит">81</span>
+      </p>
+      <p class="launch-score-hint">
+        <strong>Методика:</strong> взвешенная сумма по §1: Core 20 %, IAM 18 %, Banking 15 %, Billing 25 %, Inventory 10 %, Super-Admin 12 %.<br />
+        <strong>80 → 81:</strong> рост за счёт таблицы <code>organization_modules</code> с <code>priceSnapshot</code> (TZ §14.8.3), полного цикла toggle + cancel/reactivate и UI на фронте.<br />
+        Порог коммерческого запуска — ~85+.
+      </p>
+    </div>
+
+    <p class="legend">
+      🔴 критичный разрыв с ТЗ · 🟡 частично / MVP · 🟢 соответствует ожиданиям этапа.<br />
+      <strong>Было %</strong> — 3-й аудит; <strong>Стало %</strong> — этот (4-й) аудит.
+    </p>
+
+    <!-- ───── §1 Модули ───── -->
+    <h2>1. Таблица модульной готовности</h2>
+    <table class="tbl-pct">
+      <thead>
+        <tr>
+          <th>Область (PRD / TZ)</th>
+          <th>Статус</th>
+          <th>Было %</th>
+          <th>Стало %</th>
+          <th>Комментарий</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <!-- Core -->
+        <tr>
+          <td><strong>Core &amp; Accounting</strong><br /><small>Двойная запись, Ledger, план счетов</small></td>
+          <td>🟢</td>
+          <td>~83%</td>
+          <td>~83%</td>
+          <td>
+            <code>AccountingService</code> + <code>prisma.$transaction</code> + <code>validateBalance</code> (TZ §3).<br />
+            План счетов с сидом JSON; журнал, ручные операции — реализованы.<br />
+            Закрытие периода: Owner/Admin (PRD §12).<br />
+            IFRS/NAS параллель — дорожная карта (PRD §5).<br />
+            Изменений с прошлого прогона: нет.
+          </td>
+        </tr>
+
+        <!-- IAM -->
+        <tr>
+          <td><strong>IAM &amp; Multi-Tenancy</strong><br /><small>Изоляция, роли, регистрация</small></td>
+          <td>🟢</td>
+          <td>~88%</td>
+          <td>~88%</td>
+          <td>
+            <code>OrganizationMembership</code>, JWT с <code>organizationId</code>, <code>POST /auth/switch</code>.<br />
+            AccessRequest / Invite — по TZ §2.<br />
+            Prisma tenant extension + <code>AsyncLocalStorage</code> — PRD §7.7 / TZ §16.<br />
+            Изменений: нет.
+          </td>
+        </tr>
+
+        <!-- Banking -->
+        <tr>
+          <td><strong>Banking &amp; Cash</strong><br /><small>PKO/RKO, остатки, импорт выписок</small></td>
+          <td>🟡</td>
+          <td>~75%</td>
+          <td>~75%</td>
+          <td>
+            Касса <code>/banking/cash</code>: PKO/RKO, журнал, 244, авансовые отчёты — <code>CashOrderService</code> в транзакциях.<br />
+            Хаб банка: импорт CSV/Excel, реестр, match.<br />
+            Прямые API банков — вне MVP (PRD §6.3).<br />
+            Изменений: нет.
+          </td>
+        </tr>
+
+        <!-- Billing -->
+        <tr>
+          <td><strong>Billing v10.0</strong> <em>(критично)</em><br /><small>Оплата на владельца; модули по org; история счетов</small></td>
+          <td>🟢</td>
+          <td>~84%</td>
+          <td>~88%</td>
+          <td>
+            <strong>Owner-only:</strong> 🟢<br />
+            <code>assertOwnerForBilling</code> — checkout, toggle, summary, invoices, PDF.<br />
+            <code>assertOwnerHasPortfolio</code> — портфель только для OWNER.<br /><br />
+
+            <strong>API TZ §14.8.5:</strong> 🟢<br />
+            <code>GET /billing/summary</code> — оценка помесячно + <code>estimatedNextPaymentAzn</code>.<br />
+            <code>GET /billing/invoices</code> — пагинация, строки с VÖEN + <code>pdfUrl</code>.<br />
+            <code>GET /billing/invoices/:id/pdf</code> — PDF по <code>SubscriptionInvoice</code>.<br />
+            <code>POST /billing/toggle-module</code> — включение/отключение + pro-rata.<br />
+            <code>POST /billing/checkout</code>, <code>GET /billing/catalog</code>, <code>GET /billing/plans</code>.<br /><br />
+
+            <strong>organization_modules (новое!):</strong> 🟢<br />
+            Модель <code>OrganizationModule</code> в Prisma: <code>priceSnapshot</code>, <code>activatedAt</code>, <code>cancelledAt</code>, <code>accessUntil</code> (TZ §14.8.3).<br />
+            Составной PK <code>(organizationId, moduleKey)</code>, таблица <code>organization_modules</code>.<br />
+            <code>OrganizationModuleService</code>: <code>upsertActiveInTx</code>, <code>scheduleCancellationInTx</code>, <code>finalizeExpiredModuleCancellations</code>.<br /><br />
+
+            <strong>Toggle + cancellation policy:</strong> 🟢<br />
+            <code>BillingToggleService.toggle</code> проверяет <code>organizationModule</code>, обрабатывает reactivation до конца периода.<br />
+            Отключение → <code>scheduleCancellationInTx</code> (доступ до конца UTC-месяца).<br />
+            <code>finalizeExpiredModuleCancellations</code> — снятие модулей после <code>accessUntil</code>.<br /><br />
+
+            <strong>UI toggle (новое!):</strong> 🟢<br />
+            <code>settings/subscription/page.tsx</code> вызывает <code>POST /api/billing/toggle-module</code>.<br />
+            Обработка pro-rata / <code>paymentUrl</code> / <code>reactivated_before_period_end</code>.<br />
+            i18n: <code>modulesUpdated</code> — RU + AZ.<br /><br />
+
+            <strong>Месячный цикл:</strong> 🟢<br />
+            <code>BillingMonthlyService</code> + <code>BillingMonthlyWorker</code> (BullMQ).<br />
+            Идемпотентность по <code>(userId, periodStart)</code>.<br /><br />
+
+            <strong>Emergency bypass:</strong> 🟢<br />
+            Пустая строка при <code>NODE_ENV=production</code> — prod-safe.<br /><br />
+
+            <strong>Остаточные разрывы:</strong> 🟡<br />
+            End-to-end staging сценарий — не подтверждён.<br />
+            Вызов <code>finalizeExpiredModuleCancellations</code> по расписанию — не проверен как cron/BullMQ repeatable.
+          </td>
+        </tr>
+
+        <!-- Inventory -->
+        <tr>
+          <td><strong>Inventory &amp; Production</strong><br /><small>Склад, спецификации, инвентаризация</small></td>
+          <td>🟡</td>
+          <td>~69%</td>
+          <td>~70%</td>
+          <td>
+            <code>InventoryService</code>: движения, корректировки, складские переводы — <code>$transaction</code> (TZ §10).<br />
+            <code>InventoryAuditController</code>: <code>POST /inventory/audits/:id/approve</code> — проведение описи в одной транзакции (TZ §10.1).<br />
+            <code>InventoryAuditService</code>: 4 вызова <code>$transaction</code>.<br />
+            Производство: <code>ProductRecipe</code>, <code>manufacturing</code>.<br />
+            Полнота сценариев PRD — требует приёмочных тестов.
+          </td>
+        </tr>
+
+        <!-- Super-Admin -->
+        <tr>
+          <td><strong>Super-Admin</strong><br /><small>Тарифы, аудит</small></td>
+          <td>🟡</td>
+          <td>~73%</td>
+          <td>~73%</td>
+          <td>
+            <code>PricingModule</code>, <code>PricingBundle</code>, <code>SystemConfig</code>.<br />
+            UI Super-Admin — по TZ §15.2.<br />
+            <code>GET /admin/audit-logs</code>, <code>POST /admin/impersonate/:userId</code>.<br />
+            Отдельный реестр «сессий» как security dashboard — не в ТЗ.<br />
+            Изменений: нет.
+          </td>
+        </tr>
+
+      </tbody>
+    </table>
+
+    <!-- ───── §2 DESIGN ───── -->
+    <h2>2. Проверка визуальных стандартов (DESIGN.md)</h2>
+    <table class="tbl-pct">
+      <thead>
+        <tr>
+          <th>Требование</th>
+          <th>Статус</th>
+          <th>Было %</th>
+          <th>Стало %</th>
+          <th>Наблюдения</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Кнопки действий — <strong>#2980B9</strong></td>
+          <td>🟢</td>
+          <td>~90%</td>
+          <td>~90%</td>
+          <td>
+            <code>PRIMARY_BUTTON_CLASS</code> в <code>lib/design-system.ts</code> — массово используется.<br />
+            Без изменений.
+          </td>
+        </tr>
+        <tr>
+          <td>Lucide <code>size={16}</code> в меню</td>
+          <td>🟢</td>
+          <td>~95%</td>
+          <td>~95%</td>
+          <td>
+            <code>app-shell.tsx</code>: <code>SideNavItem</code> передаёт <code>size={16}</code>.<br />
+            Без изменений.
+          </td>
+        </tr>
+        <tr>
+          <td>Z-index и палитра дашборда</td>
+          <td>🟢</td>
+          <td>~97%</td>
+          <td>~97%</td>
+          <td>
+            <code>QuickActionsDropdown</code>: <code>z-[100]</code>; шапка <code>z-50</code>.<br />
+            SVG графика выручки: все <code>stroke</code> — <strong>#2980B9</strong>.<br />
+            <strong>Замечание:</strong> иконка «Обязательства» (<code>IconPayables</code>) — <code>#b45309</code> (amber).<br />
+            Это семантический цвет для «внимание/долг», не primary action — допустимо.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ───── §3 i18n ───── -->
+    <h2>3. Статус локализации (i18n)</h2>
+    <p style="font-size:13px; margin-top:.5rem;">
+      Ключи <code>t("BANKING.CASH.COL*")</code> — отдельное дерево <code>BANKING.CASH</code> в <code>resources.ts</code> (RU/AZ).<br />
+      Дашборд: ключи <code>dashboard.*</code> и <code>common.*</code>.
+    </p>
+    <table class="tbl-pct">
+      <thead>
+        <tr>
+          <th>Зона</th>
+          <th>Статус</th>
+          <th>Было %</th>
+          <th>Стало %</th>
+          <th>Комментарий</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Касса (<code>banking/cash</code>)</td>
+          <td>🟡</td>
+          <td>~69%</td>
+          <td>~69%</td>
+          <td>
+            <code>banking.cash.*</code> / <code>BANKING.CASH.*</code> — RU/AZ.<br />
+            Риск missing keys при EN/БД-override — по-прежнему.<br />
+            CI-чек не подтверждён.
+          </td>
+        </tr>
+        <tr>
+          <td>Дашборд</td>
+          <td>🟢</td>
+          <td>~79%</td>
+          <td>~79%</td>
+          <td>
+            Ключи <code>dashboard.*</code> унифицированы.<br />
+            Явных сырых ключей нет.
+          </td>
+        </tr>
+        <tr>
+          <td>Подписка (toggle-модулей)</td>
+          <td>🟢</td>
+          <td>—</td>
+          <td>~80%</td>
+          <td>
+            <code>subscriptionSettings.modulesUpdated</code> — RU: «Аддоны сохранены», AZ: «Əlavələr saxlanıldı».<br />
+            EN-слоя нет (fallback на RU).
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ───── §4 Hardening ───── -->
+    <h2>4. Технический долг и Hardening</h2>
+    <table class="tbl-plain">
+      <thead>
+        <tr>
+          <th style="width:25%">Тема</th>
+          <th style="width:8%">Статус</th>
+          <th>Детали</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Транзакционность<br />(биллинг, проводки)</td>
+          <td>🟢</td>
+          <td>
+            42 вызова <code>$transaction</code> в 24 сервисах <code>apps/api/src</code>.<br />
+            Проводки, инвойсы, касса, склад, взаимозачёт, инвентаризация — <code>$transaction</code>.<br />
+            Toggle-module: 3 вызова <code>$transaction</code> в <code>billing-toggle.service</code>.<br />
+            Оплата: продление + <code>recordPaidOrderInvoice</code> — единая транзакция.<br />
+            Месячный биллинг: <code>BillingMonthlyService</code> — <code>$transaction</code> для инвойса + строк.
+          </td>
+        </tr>
+        <tr>
+          <td>Безопасность:<br />биллинг только Owner</td>
+          <td>🟢</td>
+          <td>
+            <code>assertOwnerForBilling</code> — checkout, toggle-module.<br />
+            <code>assertOwnerHasPortfolio</code> — summary, invoices, PDF.<br />
+            UI: подписка и история — только <code>user.role === "OWNER"</code>.<br />
+            Соответствует PRD §7.12.1 / TZ §14.8.
+          </td>
+        </tr>
+        <tr>
+          <td>Emergency bypass<br />(TZ §14.7)</td>
+          <td>🟢</td>
+          <td>
+            <code>EMERGENCY_MODULE_ACCESS_EMAIL_DEV</code> — пустая строка при <code>NODE_ENV=production</code>.<br />
+            <code>isEmergencyModuleAccessEmail</code> → <code>false</code> в production.<br />
+            Проверки в <code>subscription-access.service.ts</code>: строки 179, 203.
+          </td>
+        </tr>
+        <tr>
+          <td>ValidationPipe strict<br />(TZ §17)</td>
+          <td>🟢</td>
+          <td>
+            <code>main.ts</code>: <code>whitelist: true</code>, <code>forbidNonWhitelisted: true</code>, <code>transform: true</code>.
+          </td>
+        </tr>
+        <tr>
+          <td>Нормализация модулей<br />(TZ §14.8.3)</td>
+          <td>🟢</td>
+          <td>
+            Таблица <code>organization_modules</code>: <code>priceSnapshot</code>, <code>activatedAt</code>, <code>cancelledAt</code>, <code>accessUntil</code>.<br />
+            <code>OrganizationModuleService</code>: upsert, scheduled cancellation, finalize.<br />
+            Синхронизация с <code>activeModules[]</code> через <code>updateModuleAddons</code>.
+          </td>
+        </tr>
+        <tr>
+          <td>Месячный биллинг-цикл<br />(PRD §7.12.5)</td>
+          <td>🟢</td>
+          <td>
+            <code>BillingMonthlyWorker</code> — BullMQ repeatable job.<br />
+            <code>BillingMonthlyQueueService</code> — управление расписанием.<br />
+            <code>BillingMonthlyService.runMonthlyBilling</code> — один счёт на владельца, строки по org, идемпотентность.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ───── §5 Action Plan ───── -->
+    <h2>5. Top Priority Action Plan (5 шагов)</h2>
+    <ol class="priorities">
+      <li>
+        <strong>End-to-end staging:</strong><br />
+        Сквозной сценарий: регистрация → trial → toggle-module → checkout → mock-pay → счёт в истории → PDF → disable → reactivate.<br />
+        Пока не подтверждён как пройденный тестовый флоу.
+      </li>
+      <li>
+        <strong>Cron: <code>finalizeExpiredModuleCancellations</code>:</strong><br />
+        Убедиться, что метод вызывается по расписанию (BullMQ repeatable или cron), а не только вручную.<br />
+        Без этого отключённые модули не снимаются с <code>activeModules</code> после <code>accessUntil</code>.
+      </li>
+      <li>
+        <strong>i18n QA:</strong><br />
+        CI-скрипт проверки missing keys для RU/AZ/EN.<br />
+        Toggle-модулей: EN fallback.<br />
+        Касса: подтверждение полноты <code>BANKING.CASH.*</code>.
+      </li>
+      <li>
+        <strong>DESIGN — точечный проход:</strong><br />
+        <code>#b45309</code> на <code>IconPayables</code> — документировать как допустимый amber или заменить.<br />
+        Остальные экраны: финальная проверка палитры.
+      </li>
+      <li>
+        <strong>Inventory — приёмочные тесты:</strong><br />
+        Полный цикл инвентаризации: черновик → approve → корректировки → проводки.<br />
+        Производство: выпуск по рецепту → списание компонентов + приход ГП.
+      </li>
+    </ol>
+
+    <!-- ───── Итог ───── -->
+    <div class="summary">
+      <strong>Итог 4-го аудита:</strong><br /><br />
+      Billing v10.0 достиг уровня 🟢: реализована таблица <code>organization_modules</code> c <code>priceSnapshot</code> (TZ §14.8.3),
+      полный цикл toggle/cancel/reactivate с pro-rata, UI на фронте с i18n (RU/AZ), фоновый месячный биллинг.<br /><br />
+      Ядро учёта, IAM, касса, Owner-only безопасность, emergency prod-guard — стабильны без регресса.<br /><br />
+      <strong>Интегральная готовность к запуску: 80 → 81</strong> из 100.<br />
+      До коммерческого коридора (~85+): staging e2e, cron finalize, i18n QA, inventory acceptance tests.
+    </div>
+
+    <footer>
+      DayDay ERP · 4-й аудит PRD/TZ · <code>docs/audit-prd-tz-readiness-report.html</code>
+    </footer>
+  </div>
+</body>
+</html>

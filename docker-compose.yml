@@ -1,0 +1,35 @@
+# Тома данных на диске D (см. DOCKER_DATA_ROOT в .env) — не используем named volumes на диске C.
+# Создайте каталоги один раз: см. D:\DockerData\dayday_erp\README.txt
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dayday-postgres
+    environment:
+      POSTGRES_USER: dayday
+      POSTGRES_PASSWORD: dayday
+      POSTGRES_DB: dayday
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DOCKER_DATA_ROOT:-D:/DockerData/dayday_erp}/postgres:/var/lib/postgresql/data
+      - ./packages/database/prisma/docker-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dayday -d dayday"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dayday-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ${DOCKER_DATA_ROOT:-D:/DockerData/dayday_erp}/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

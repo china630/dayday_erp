@@ -1,0 +1,240 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { apiFetch } from "../../../lib/api-client";
+import { inputFieldClass } from "../../../lib/form-classes";
+import { useRequireAuth } from "../../../lib/use-require-auth";
+import { ModulePageLinks } from "../../../components/module-page-links";
+import { EmptyState } from "../../../components/empty-state";
+import { formatMoneyAzn } from "../../../lib/format-money";
+import {
+  CARD_CONTAINER_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  BORDER_MUTED_CLASS,
+} from "../../../lib/design-system";
+
+type DeptFlat = { id: string; name: string; parentId: string | null };
+
+type JobPositionRow = {
+  id: string;
+  name: string;
+  totalSlots: number;
+  minSalary: unknown;
+  maxSalary: unknown;
+  department: { id: string; name: string };
+  _count: { employees: number };
+};
+
+const lbl =
+  "block text-xs font-bold text-[#7F8C8D] uppercase tracking-wide mb-1.5";
+
+export default function HrPositionsPage() {
+  const { t } = useTranslation();
+  const { token, ready } = useRequireAuth();
+  const [flat, setFlat] = useState<DeptFlat[]>([]);
+  const [positions, setPositions] = useState<JobPositionRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [posDeptId, setPosDeptId] = useState("");
+  const [posName, setPosName] = useState("");
+  const [posSlots, setPosSlots] = useState("1");
+  const [posMin, setPosMin] = useState("0");
+  const [posMax, setPosMax] = useState("0");
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    const [fl, jp] = await Promise.all([
+      apiFetch("/api/hr/departments"),
+      apiFetch("/api/hr/job-positions"),
+    ]);
+    if (!fl.ok) {
+      setError(`${t("hrStructure.loadErr")}: ${fl.status}`);
+      setFlat([]);
+    } else {
+      setFlat(await fl.json());
+    }
+    if (!jp.ok) {
+      setError((e) => e ?? `${t("hrStructure.loadErr")}: ${jp.status}`);
+      setPositions([]);
+    } else {
+      setPositions((await jp.json()) as JobPositionRow[]);
+    }
+    setLoading(false);
+  }, [token, t]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    void load();
+  }, [load, ready, token]);
+
+  useEffect(() => {
+    if (flat.length && !posDeptId) setPosDeptId(flat[0].id);
+  }, [flat, posDeptId]);
+
+  async function createPosition(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !posDeptId || !posName.trim()) return;
+    const minN = Number(posMin) || 0;
+    const maxN = Number(posMax) || 0;
+    if (minN > maxN) {
+      alert(t("hrPositions.minMaxErr"));
+      return;
+    }
+    setBusy(true);
+    const res = await apiFetch("/api/hr/job-positions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        departmentId: posDeptId,
+        name: posName.trim(),
+        totalSlots: Number(posSlots) || 1,
+        minSalary: minN,
+        maxSalary: maxN,
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      alert(await res.text());
+      return;
+    }
+    setPosName("");
+    setPosSlots("1");
+    setPosMin("0");
+    setPosMax("0");
+    await load();
+  }
+
+  if (!ready) {
+    return (
+      <div className="text-gray-600">
+        <p>{t("common.loading")}</p>
+      </div>
+    );
+  }
+  if (!token) return null;
+
+  return (
+    <div className="space-y-8 max-w-4xl">
+      <ModulePageLinks
+        items={[
+          { href: "/", labelKey: "nav.home" },
+          { href: "/employees", labelKey: "nav.employees" },
+        ]}
+      />
+      <div>
+        <h1 className="text-2xl font-semibold text-[#34495E]">{t("hrPositions.title")}</h1>
+        <p className="text-sm text-[#7F8C8D] mt-1">{t("hrPositions.subtitle")}</p>
+      </div>
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      <section className={`${CARD_CONTAINER_CLASS} p-6`}>
+        <h2 className="text-lg font-semibold text-[#34495E] mb-4">{t("hrPositions.tableTitle")}</h2>
+        {loading && <p className="text-gray-600 text-sm">{t("common.loading")}</p>}
+        {!loading && positions.length === 0 && (
+          <EmptyState title={t("hrStructure.positionsEmpty")} description={t("hrStructure.positionsEmptyHint")} />
+        )}
+        {!loading && positions.length > 0 && (
+          <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS}`}>
+            <table className="text-sm min-w-full">
+              <thead>
+                <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
+                  <th className="text-left p-2">{t("hrStructure.positionName")}</th>
+                  <th className="text-left p-2">{t("hrStructure.department")}</th>
+                  <th className="text-right p-2">{t("hrStructure.slots")}</th>
+                  <th className="text-right p-2">{t("hrPositions.salaryFork")}</th>
+                  <th className="text-right p-2">{t("hrStructure.positionsEmployees")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((p) => (
+                  <tr key={p.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
+                    <td className="p-2 font-medium text-gray-900">{p.name}</td>
+                    <td className="p-2">{p.department.name}</td>
+                    <td className="p-2 text-right tabular-nums">{p.totalSlots}</td>
+                    <td className="p-2 text-right tabular-nums text-xs">
+                      {formatMoneyAzn(p.minSalary)} — {formatMoneyAzn(p.maxSalary)}
+                    </td>
+                    <td className="p-2 text-right tabular-nums">{p._count.employees}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className={`${CARD_CONTAINER_CLASS} p-6 border-[#2980B9]/25`}>
+        <h2 className="text-lg font-semibold text-[#34495E] mb-4">{t("hrStructure.addPosition")}</h2>
+        <form noValidate onSubmit={(e) => void createPosition(e)} className="grid gap-4 max-w-lg">
+          <div>
+            <span className={lbl}>{t("hrStructure.department")}</span>
+            <select
+              value={posDeptId}
+              onChange={(e) => setPosDeptId(e.target.value)}
+              className={inputFieldClass}
+            >
+              {flat.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <span className={lbl}>{t("hrStructure.positionName")}</span>
+            <input
+              value={posName}
+              onChange={(e) => setPosName(e.target.value)}
+              className={inputFieldClass}
+            />
+          </div>
+          <div>
+            <span className={lbl}>{t("hrStructure.slots")}</span>
+            <input
+              type="number"
+              min={1}
+              value={posSlots}
+              onChange={(e) => setPosSlots(e.target.value)}
+              className={inputFieldClass}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className={lbl}>{t("hrPositions.minSalary")}</span>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={posMin}
+                onChange={(e) => setPosMin(e.target.value)}
+                className={inputFieldClass}
+              />
+            </div>
+            <div>
+              <span className={lbl}>{t("hrPositions.maxSalary")}</span>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={posMax}
+                onChange={(e) => setPosMax(e.target.value)}
+                className={inputFieldClass}
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={busy || flat.length === 0}
+            className={`${PRIMARY_BUTTON_CLASS} w-fit disabled:opacity-50`}
+          >
+            {t("hrStructure.savePosition")}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}

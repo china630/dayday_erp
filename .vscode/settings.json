@@ -1,0 +1,7 @@
+{
+  "terminal.integrated.env.windows": {
+    "NPM_CONFIG_CACHE": "D:/DockerData/dayday_erp/npm-cache",
+    "TMP": "D:/DockerData/dayday_erp/tmp",
+    "TEMP": "D:/DockerData/dayday_erp/tmp"
+  }
+}

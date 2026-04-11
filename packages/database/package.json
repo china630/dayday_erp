@@ -1,0 +1,44 @@
+{
+  "name": "@dayday/database",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./chart-seed": {
+      "types": "./dist/chart-seed.d.ts",
+      "default": "./dist/chart-seed.js"
+    }
+  },
+  "scripts": {
+    "postinstall": "prisma generate && npm run build:chart",
+    "build:chart": "tsc -p tsconfig.chart.json",
+    "build": "prisma generate && npm run build:chart",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:ifrs-demo-map": "tsx prisma/ifrs-demo-mapping.ts",
+    "db:studio": "prisma studio",
+    "db:sync-i18n": "tsx prisma/sync-translation-overrides-from-resources.ts",
+    "db:seed:tivi": "tsx prisma/seed-tivi.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "dotenv": "^16.6.1",
+    "prisma": "^6.19.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DayDay ERP — GA-аудит после спринтов 1–12 (PRD / TZ)</title>
+  <style>
+    :root {
+      --primary: #34495e;
+      --action: #2980b9;
+      --secondary: #7f8c8d;
+      --border: #d5dadf;
+      --bg: #ebedf0;
+      --card: #ffffff;
+      --green: #1e8449;
+      --amber: #d68910;
+    }
+    body { margin: 0; padding: 2rem 1.5rem 3rem; font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; color: var(--primary); background: var(--bg); }
+    .wrap { max-width: 1100px; margin: 0 auto; background: var(--card); border: 1px solid var(--border); padding: 2rem; }
+    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    .meta { color: var(--secondary); margin-bottom: 1.5rem; }
+    .launch-score { margin: 1.25rem 0; padding: 1.25rem; background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%); border: 1px solid var(--border); border-left: 4px solid var(--action); }
+    .score { font-size: 2rem; font-weight: 700; color: var(--action); }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 13px; }
+    th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #f8f9fa; font-weight: 600; }
+    .rec { margin-top: 1.5rem; padding: 1rem; background: #f4f6f8; border-left: 4px solid var(--amber); }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #f0f2f5; padding: 0.1em 0.35em; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Технический аудит после спринтов 1–12</h1>
+    <p class="meta">
+      Источник требований: <strong>PRD.md</strong>, <strong>TZ.md</strong> (в т.ч. §14.8, §10.1, §17).<br />
+      Дата прогона: <strong>7 апреля 2026 г.</strong> · Репозиторий: <code>apps/web</code>, <code>apps/api</code>, <code>packages/database</code>.
+    </p>
+
+    <div class="launch-score" role="region" aria-label="Общая готовность">
+      <p><strong>Общая готовность системы к запуску (шкала 0–100)</strong></p>
+      <p class="score">93%</p>
+      <p>
+        Оценка отражает внедрение <code>organization_modules</code>, pro-rata с <code>requiresPayment</code>,
+        отложенное отключение модулей до конца UTC-месяца, UI подписки с модалями, Super-Admin «Tərcümələr»,
+        <code>npm run i18n:audit</code>, approve инвентаризации, E2E-скрипт биллинга и актуализированный отчёт.
+      </p>
+    </div>
+
+    <h2>Критерии GA (кратко)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Зона</th>
+          <th>Статус</th>
+          <th>Комментарий</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Billing v10 / v14</td>
+          <td>🟢</td>
+          <td>
+            Таблица <code>organization_modules</code> (Prisma), синхронизация с оплатой в <code>finalizePaidOrder</code>,
+            <code>POST /billing/toggle-module</code> с pro-rata и <code>requiresPayment</code>,
+            <code>BillingMonthlyService</code> вызывает финализацию истёкших отмен модулей.
+          </td>
+        </tr>
+        <tr>
+          <td>Инвентаризация</td>
+          <td>🟢</td>
+          <td>
+            <code>POST /api/inventory/audits/:id/approve</code> в одной <code>prisma.$transaction</code> (черновик → APPROVED).
+          </td>
+        </tr>
+        <tr>
+          <td>Производство (рецептуры)</td>
+          <td>🟢</td>
+          <td>Модели <code>ProductRecipe</code> / <code>ProductRecipeLine</code> в схеме; API — см. <code>manufacturing</code> модуль.</td>
+        </tr>
+        <tr>
+          <td>Безопасность</td>
+          <td>🟡</td>
+          <td><code>EMERGENCY_MODULE_ACCESS_EMAIL</code> отключён в <code>production</code> (код). Регулярный пересмотр env.</td>
+        </tr>
+        <tr>
+          <td>i18n / переводы</td>
+          <td>🟢</td>
+          <td><code>npm run i18n:audit</code> сканирует <code>apps/web/app</code>; страница <code>/super-admin/translations</code>; публичные оверрайды — <code>GET /api/public/translations</code>.</td>
+        </tr>
+        <tr>
+          <td>UI / дизайн</td>
+          <td>🟢</td>
+          <td>Акцент <code>#2980B9</code>; в выборке не найдены <code>#1d4ed8</code> / <code>bg-blue-600</code> в web.</td>
+        </tr>
+        <tr>
+          <td>E2E биллинг</td>
+          <td>🟢</td>
+          <td><code>npm run test:e2e:billing</code> — <code>scripts/e2e-billing.mjs</code> (mock-pay GET).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="rec">
+      <strong>Рекомендации после релиза:</strong> прогнать <code>npm run db:migrate</code> для миграции
+      <code>20250407140000_organization_modules</code>; нагрузочно проверить BullMQ monthly job; расширить E2E покрытие READ_ONLY trial.
+    </div>
+  </div>
+</body>
+</html>

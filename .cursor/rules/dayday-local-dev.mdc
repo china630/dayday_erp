@@ -1,0 +1,62 @@
+---
+description: DayDay ERP — локальная инфраструктура, Windows, Next/Nest, .env
+alwaysApply: true
+---
+
+# Локальная разработка DayDay ERP
+
+## Один источник правды: корневой `.env`
+
+- Скопируй **`.env.example` → `.env`** в **корне** монорепо.
+- API читает **`apps/api/.env`** (если есть), затем **корневой `.env`** (`ConfigModule` + пути из `load-env-paths.ts`).
+- Команды **`npm run dev:api`**, **`dev:web`**, **`db:*`** из корня подмешивают корневой `.env` через **dotenv-cli**.
+- Обязательно задай **`JWT_SECRET`**, **`JWT_REFRESH_SECRET`**, **`DATABASE_URL`**, **`REDIS_URL`**.
+
+## Docker (Postgres + Redis)
+
+1. `npm run infra:d` — каталоги на `D:\DockerData\dayday_erp\`.
+2. `npm run docker:up` (или **`npm run infra:up`** = оба шага).
+3. При необходимости: `npm run db:migrate` из корня.
+
+## Запуск приложений
+
+**Чтобы открывался http://localhost:3000/** — должен быть запущен фронт: **`npm run dev:web`** или **`START-WEB.bat`**.
+
+**Логин / регистрация** ходят на API (**по умолчанию http://127.0.0.1:4000**). Если запущен только фронт, в браузере будет «Failed to fetch» — поднимите API: **`npm run dev:api`** или сразу оба: **`npm run dev`** / **`START-ERP.bat`**.
+
+Перед **`dev`**, **`dev:api`**, **`dev:web`**, **`dev:web:clean`** автоматически вызывается **`scripts/free-dev-ports.mjs`** (пакет `kill-port`): освобождаются **3000** и **4000**, чтобы не было **EADDRINUSE** после старого Next/Nest.
+
+`npm run dev:web` вызывает **`scripts/run-dev-web.mjs`**: если есть корневой **`.env`**, подмешивает его через `dotenv-cli`; если нет — стартует Next всё равно (с предупреждением).
+
+Next слушает **`0.0.0.0:3000`** — доступны и `localhost`, и `127.0.0.1`, и LAN.
+
+| Команда | Назначение |
+|---------|------------|
+| **`npm run dev`** | API + Web: Web ждёт порт **4000** (`wait-on`), при выходе одного процесса падает второй (`-k`). |
+| **`npm run dev:api`** | Только Nest (порт **4000**). |
+| **`npm run dev:web`** | Только Next (**3000**). |
+| **`npm run dev:web:clean`** | Очистка **`.next`**, затем Next (сначала останови Next, если EPERM). |
+| **`npm run restart:web`** | Только Next: `stop:next` + `dev:web:clean`. |
+| **`npm run restart:api`** | Только API: `stop:api` + `dev:api`. |
+
+Если запущен **`npm run dev`**, останавливай **одним Ctrl+C** в этом терминале. Не полагайся на **`stop:api`** / **`stop:next`** вместо этого — `concurrently` может остаться в несогласованном состоянии.
+
+## Порядок `.env` в API
+
+Файлы подключаются в порядке: **корень монорепо** → **`apps/api/.env`**. Последний перекрывает предыдущий.
+
+## Windows: остановка процессов (точечно)
+
+- **`npm run stop:next`** — только Next.js по путям `dayday_erp` (Nest не трогать).
+- **`npm run stop:api`** — только Nest API по тем же путям.
+- Не использовать общий фильтр «все node с dayday_erp» — убьёт и API, и Web.
+
+## Next.js и папка `.next`
+
+- Не удалять **`.next`**, пока запущен **`next dev`**.
+- Не гонять **`npm run build`** по web параллельно с **`dev:web`** (EPERM / битый кэш).
+- При ошибках `routes-manifest` / `962.js`: **`npm run stop:next`**, затем **`npm run dev:web:clean`**.
+
+## Антивирус
+
+- Исключить из сканирования в реальном времени: папку проекта или минимум **`apps/web/.next`**.

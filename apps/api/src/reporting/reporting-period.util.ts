@@ -1,0 +1,67 @@
+/** Ключ периода YYYY-MM по UTC-календарю даты проводки. */
+export function monthKeyUtc(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+export function parseIsoDateOnly(s: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
+  if (!m) {
+    throw new Error(`Invalid date (expected YYYY-MM-DD): ${s}`);
+  }
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0));
+}
+
+/** Конец календарного дня UTC для сравнения с DateTime. */
+export function endOfUtcDay(dateFromParse: Date): Date {
+  return new Date(
+    Date.UTC(
+      dateFromParse.getUTCFullYear(),
+      dateFromParse.getUTCMonth(),
+      dateFromParse.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
+}
+
+/** Первый и последний календарный день месяца (UTC 00:00, для сравнения с @db.Date). */
+export function monthRangeUtc(year: number, month1to12: number): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(year, month1to12 - 1, 1, 0, 0, 0, 0));
+  const lastDay = new Date(Date.UTC(year, month1to12, 0, 0, 0, 0, 0)).getUTCDate();
+  const end = new Date(Date.UTC(year, month1to12 - 1, lastDay, 0, 0, 0, 0));
+  return { start, end };
+}
+
+export function getClosedPeriodKeys(settingsJson: unknown): string[] {
+  if (!settingsJson || typeof settingsJson !== "object") return [];
+  const r = (settingsJson as Record<string, unknown>).reporting;
+  if (!r || typeof r !== "object") return [];
+  const cp = (r as Record<string, unknown>).closedPeriods;
+  if (!Array.isArray(cp)) return [];
+  return cp.filter((x): x is string => typeof x === "string");
+}
+
+export function mergeClosedPeriod(
+  settingsJson: unknown,
+  key: string,
+): Record<string, unknown> {
+  const base =
+    settingsJson && typeof settingsJson === "object"
+      ? { ...(settingsJson as Record<string, unknown>) }
+      : {};
+  const rep =
+    base.reporting && typeof base.reporting === "object"
+      ? { ...(base.reporting as Record<string, unknown>) }
+      : {};
+  const prev = Array.isArray(rep.closedPeriods)
+    ? [...(rep.closedPeriods as string[])]
+    : [];
+  if (!prev.includes(key)) prev.push(key);
+  rep.closedPeriods = prev.sort();
+  base.reporting = rep;
+  return base;
+}

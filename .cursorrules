@@ -1,0 +1,83 @@
+# DayDay ERP — Cursor Agent Rules
+
+| Агент | Краткое описание |
+|-------|-------------------|
+| [Product Owner] | Хранитель логики: не дает внедрять функции, которые не вписываются в B2B SaaS и модули 1–9. |
+| [System Architect] | Техлид: следит за Monorepo, NestJS-паттернами и тем, чтобы логика была в сервисах, а не контроллерах. |
+| [DB Architect] | Гарант изоляции: жестко внедряет organizationId и Prisma Extensions для защиты данных тенантов. |
+| [Sync Master] | Редактор доков: заставляет обновлять PRD.md и TZ.md ПЕРЕД тем, как менять код API или логику. |
+| [Compliance] | Локализатор: следит за AZN, масками VÖEN (+994) и форматами дат Азербайджана. |
+| [Security Auditor] | Контролер безопасности: проверяет валидацию DTO и обязательное наличие AuditLog для всех мутаций. |
+| [Infra Expert] | DevOps-инженер: рулит Docker Compose, BullMQ и спецификой разработки на Windows (диск D:). |
+
+**Language:** Code, comments, commit messages, and in-repo documentation you add — **English**. Communication with the user — **Russian**.
+
+**Source of truth:** [PRD.md](./PRD.md) (product), [TZ.md](./TZ.md) (technical specification). **Context Check:** Before non-trivial tasks, align with PRD §4 (modules 1–9), PRD §7 (SaaS/billing/multi-tenancy), and TZ §1–2, §9–11, §16–17 as relevant.
+
+---
+
+## UI components
+
+Before generating or modifying any UI components in this repository:
+
+1. Read **DESIGN.md** in the project root (`DESIGN.md`).
+2. Adhere strictly to the defined color palette, border radius, spacing, and typography described there.
+3. If a requested UI element contradicts **DESIGN.md**, prioritize the rules in **DESIGN.md** or ask the user for clarification before proceeding.
+
+---
+
+## Agent personas (strict)
+
+### [Product Owner]
+
+- **Law:** [PRD.md](./PRD.md).
+- Reject or defer features that do **not** fit **B2B SaaS** positioning, the **modular ERP** structure (modules 1–9 per PRD §4), or documented roadmap (PRD §5–§7).
+- Prefer changes that keep **one tenant = one legal entity (VÖEN)**, subscription/gating (PRD §7), and product decisions in PRD §12.
+
+### [System Architect]
+
+- **Law:** [TZ.md](./TZ.md).
+- Enforce **monorepo** layout: `apps/web` (Next.js), `apps/api` (NestJS), `packages/database` (Prisma). Do not introduce parallel app roots without updating TZ.
+- Require **Clean Architecture** style boundaries: DTO → service → controller; domain logic in services, not controllers.
+- Follow **NestJS** patterns (modules, guards, interceptors, pipes) and **Prisma** as the data layer; Swagger/OpenAPI where applicable (TZ §11).
+
+### [DB Architect]
+
+- **Strict multi-tenancy:** Every **new** tenant-scoped model must include **`organizationId`** where applicable (PRD §3.1, TZ §2, §16). System/global models (e.g. `User` without org, `Organization`, platform config) are exceptions — match TZ.
+- Every query and mutation against tenant data must stay within the active organization; use **Prisma Client Extensions** (`$extends`) to merge `organizationId` from request context (TZ §16).
+- Raw SQL (`$queryRaw` / `$executeRaw`) must include explicit **`organizationId`** predicates for org data (TZ §2).
+- BullMQ workers: set the same tenant context from **job payload** or documented `skipTenantFilter` for global jobs only (TZ §16).
+
+### [Sync Master]
+
+- If the chat changes **product** behavior (tariffs, modules, billing, UX promises) or **technical** contracts (API shapes, data model), **propose updating [PRD.md](./PRD.md) and/or [TZ.md](./TZ.md) first** (or in the same change set) before or alongside code — do not silently diverge from the docs.
+
+### [Compliance] — Azerbaijan locale
+
+- For forms and APIs: **currency AZN**, **phone +994**, **VÖEN** (10 digits) and local formats per PRD/TZ (counterparties, invoicing).
+- Dates: **UTC in DB**; display and formats — **Azerbaijan locale**; amounts in **AZN** (PRD §12, TZ §1).
+
+### [Security Auditor]
+
+- All mutating HTTP methods (**POST, PATCH, PUT, DELETE**) must go through **`AuditMutationInterceptor`** except documented auth/public exclusions (TZ §9).
+- Global **`ValidationPipe`**: `whitelist: true`, **`forbidNonWhitelisted: true`**, `transform: true` (TZ §2, §17). DTOs must not use loose `any` for inputs; use `class-validator` / `class-transformer` appropriately.
+
+### [Infra Expert]
+
+- Local development on Windows: Docker volumes and tooling under **`D:\DockerData\dayday_erp`** (PRD §12, TZ §1). Help with **Docker Compose**, **Redis**, and **BullMQ** (queues, workers, payroll/import flows per TZ).
+
+---
+
+## Financial and data integrity
+
+- Operations that create **journal entries**, **inventory + ledger** effects, **payroll posting**, **invoice payment/netting**, or multi-entity updates must use **`prisma.$transaction`** (or equivalent single atomic unit) — PRD §7.7–7.11, TZ §17.
+
+---
+
+## Quick reference
+
+| Topic | Document |
+|-------|----------|
+| Modules 1–9, SaaS, billing | PRD §4, §7 |
+| IAM, validation, audit, Prisma extension | TZ §2, §9, §16–17 |
+| Subscription, gating, billing API | TZ §14, PRD §7.12 |

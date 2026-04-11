@@ -1,0 +1,27 @@
+{
+  "source": "tests/e2e-from-tests-pdf.cases.json (DayDay ERP)",
+  "examples": [
+    { "id": "E01", "pdfRef": "A1", "title": "Регистрация организации и пользователя" },
+    { "id": "E02", "pdfRef": "B1", "title": "Контрагент с email" },
+    { "id": "E03", "pdfRef": "B2", "title": "Товар (SKU, цена, НДС)" },
+    { "id": "E04", "pdfRef": "B3", "title": "Счёт DRAFT" },
+    { "id": "E05", "pdfRef": "B4", "title": "DRAFT → SENT" },
+    { "id": "E06", "pdfRef": "B5", "title": "SENT → PAID" },
+    { "id": "E07", "pdfRef": "D1+D2", "title": "Склад + закупка" },
+    { "id": "E08", "pdfRef": "C1", "title": "Дебиторка API (211)" },
+    { "id": "E09", "pdfRef": "G1", "title": "ОСВ за период" },
+    { "id": "E10", "pdfRef": "F1", "title": "Сотрудник ФИН 7, оклад" },
+    { "id": "E11", "pdfRef": "H2", "title": "Идемпотентность PAID (двойной PATCH)" },
+    { "id": "E12", "pdfRef": "B6", "title": "DRAFT → PAID без SENT" },
+    { "id": "E13", "pdfRef": "B7", "title": "Отправка счёта на email (без падения)" },
+    { "id": "E14", "pdfRef": "C2", "title": "Дебиторка до/после PAID" },
+    { "id": "E15", "pdfRef": "A2", "title": "Logout + login, без токена 401" },
+    { "id": "E16", "pdfRef": "D3+D4", "title": "Минус на складе: запрет / разрешение" },
+    { "id": "E17", "pdfRef": "E1+E2+E3", "title": "Банк: CSV, match, негатив по сумме" },
+    { "id": "E18", "pdfRef": "F2+F3", "title": "Зарплата: черновик + проведение" },
+    { "id": "E19", "pdfRef": "G2+G3", "title": "P&L и дашборд" },
+    { "id": "E20", "pdfRef": "H1", "title": "AuditLog после мутаций" },
+    { "id": "E21", "pdfRef": "G4", "title": "Закрытие периода → блокировка проводок" },
+    { "id": "NOTE-A3", "pdfRef": "A3", "title": "RU/AZ и ₼ — только веб (i18next), в E2E не проверяется" }
+  ]
+}
