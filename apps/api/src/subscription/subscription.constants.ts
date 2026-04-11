@@ -4,6 +4,18 @@
  */
 export const REQUIRES_MODULE_KEY = "subscription:requiresModule" as const;
 
+/**
+ * Модули, записываемые в `OrganizationSubscription.activeModules` и `Organization.activeModules`
+ * при создании организации (без внешних скриптов).
+ * - `nas` — национальный план счетов (ядро книги NAS);
+ * - `ifrs` / `ifrs_mapping` — Multi-GAAP / маппинг (согласовано с биллингом и `computeEntitlements`).
+ */
+export const DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES: string[] = [
+  "nas",
+  "ifrs",
+  "ifrs_mapping",
+];
+
 export const ModuleEntitlement = {
   MANUFACTURING: "manufacturing",
   FIXED_ASSETS: "fixed_assets",

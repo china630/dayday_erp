@@ -1,7 +1,10 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, SubscriptionTier } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
-import type { ModuleEntitlementKey } from "./subscription.constants";
+import {
+  DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES,
+  type ModuleEntitlementKey,
+} from "./subscription.constants";
 
 /**
  * v8.9 / v12.5: аварийный полный доступ к модулям только вне production (TZ §14.6).
@@ -315,12 +318,16 @@ export class SubscriptionAccessService {
         data: {
           organizationId,
           tier: SubscriptionTier.BUSINESS,
-          activeModules: [],
+          activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
           customConfig: undefined,
           isTrial: true,
           expiresAt: demoExpiresAt,
           isBlocked: false,
         },
+      });
+      await this.prisma.organization.update({
+        where: { id: organizationId },
+        data: { activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES] },
       });
     }
 

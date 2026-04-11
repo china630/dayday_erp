@@ -51,7 +51,7 @@ sudo apt-get install -y git
 sudo mkdir -p /opt/dayday_erp
 sudo chown "$USER":"$USER" /opt/dayday_erp
 cd /opt/dayday_erp
-git clone YOUR_GIT_URL .
+git clone https://github.com/china630/dayday_erp .
 ```
 
 Укажите реальный URL репозитория (HTTPS или SSH).

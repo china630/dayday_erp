@@ -3,9 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, Decimal, LedgerType } from "@dayday/database";
+import { AccountType, Decimal, LedgerType, Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CreateAccountMappingDto } from "./dto/create-account-mapping.dto";
+
+/** Клиент БД для операций счетов внутри `prisma.$transaction`. */
+export type AccountsDb = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class AccountsService {
@@ -29,8 +32,11 @@ export class AccountsService {
   /**
    * Создаёт недостающие счета IFRS с теми же кодами/иерархией, что NAS (для маппинга и теневых проводок).
    */
-  async mirrorNasToIfrs(organizationId: string): Promise<{ created: number }> {
-    const nasAll = await this.prisma.account.findMany({
+  async mirrorNasToIfrs(
+    organizationId: string,
+    db: AccountsDb = this.prisma,
+  ): Promise<{ created: number }> {
+    const nasAll = await db.account.findMany({
       where: { organizationId, ledgerType: LedgerType.NAS },
       orderBy: { code: "asc" },
     });
@@ -38,7 +44,7 @@ export class AccountsService {
       return { created: 0 };
     }
 
-    const existingIfrs = await this.prisma.account.findMany({
+    const existingIfrs = await db.account.findMany({
       where: { organizationId, ledgerType: LedgerType.IFRS },
       select: { id: true, code: true },
     });
@@ -63,7 +69,7 @@ export class AccountsService {
           still.push(n);
           continue;
         }
-        const row = await this.prisma.account.create({
+        const row = await db.account.create({
           data: {
             organizationId,
             code: n.code,
@@ -95,17 +101,18 @@ export class AccountsService {
    */
   async bootstrapMultiGaapForNewOrganization(
     organizationId: string,
+    db: AccountsDb = this.prisma,
   ): Promise<void> {
-    await this.mirrorNasToIfrs(organizationId);
+    await this.mirrorNasToIfrs(organizationId, db);
 
-    const nas211 = await this.prisma.account.findFirst({
+    const nas211 = await db.account.findFirst({
       where: {
         organizationId,
         ledgerType: LedgerType.NAS,
         code: "211",
       },
     });
-    const nas601 = await this.prisma.account.findFirst({
+    const nas601 = await db.account.findFirst({
       where: {
         organizationId,
         ledgerType: LedgerType.NAS,
@@ -116,7 +123,7 @@ export class AccountsService {
       return;
     }
 
-    let ifrs1200 = await this.prisma.account.findFirst({
+    let ifrs1200 = await db.account.findFirst({
       where: {
         organizationId,
         ledgerType: LedgerType.IFRS,
@@ -124,7 +131,7 @@ export class AccountsService {
       },
     });
     if (!ifrs1200) {
-      ifrs1200 = await this.prisma.account.create({
+      ifrs1200 = await db.account.create({
         data: {
           organizationId,
           code: "1200",
@@ -135,7 +142,7 @@ export class AccountsService {
       });
     }
 
-    let ifrs4000 = await this.prisma.account.findFirst({
+    let ifrs4000 = await db.account.findFirst({
       where: {
         organizationId,
         ledgerType: LedgerType.IFRS,
@@ -143,7 +150,7 @@ export class AccountsService {
       },
     });
     if (!ifrs4000) {
-      ifrs4000 = await this.prisma.account.create({
+      ifrs4000 = await db.account.create({
         data: {
           organizationId,
           code: "4000",
@@ -154,7 +161,7 @@ export class AccountsService {
       });
     }
 
-    await this.prisma.accountMapping.upsert({
+    await db.accountMapping.upsert({
       where: {
         organizationId_nasAccountId: {
           organizationId,
@@ -170,7 +177,7 @@ export class AccountsService {
       update: { ifrsAccountId: ifrs1200.id, ratio: 1 },
     });
 
-    await this.prisma.accountMapping.upsert({
+    await db.accountMapping.upsert({
       where: {
         organizationId_nasAccountId: {
           organizationId,

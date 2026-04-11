@@ -22,6 +22,7 @@ import { AccountsService } from "../accounts/accounts.service";
 import { OrgStructureService } from "../hr/org-structure.service";
 import { QuotaService } from "../quota/quota.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES } from "../subscription/subscription.constants";
 import type { AuthUser } from "./types/auth-user";
 import type { CreateOrgDto } from "./dto/create-org.dto";
 import type { LoginDto } from "./dto/login.dto";
@@ -150,6 +151,7 @@ export class AuthService {
           taxId: dto.taxId,
           currency: (dto.currency ?? "AZN").toUpperCase(),
           subscriptionPlan: "mvp",
+          activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
         },
       });
       const demoExpiresAt = new Date();
@@ -159,7 +161,7 @@ export class AuthService {
         data: {
           organizationId: o.id,
           tier: SubscriptionTier.BUSINESS,
-          activeModules: [],
+          activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
           isTrial: true,
           expiresAt: demoExpiresAt,
         },
@@ -180,20 +182,12 @@ export class AuthService {
           role: UserRole.OWNER,
         },
       });
+      await syncAzChartForOrganization(tx, o.id);
+      await this.accounts.bootstrapMultiGaapForNewOrganization(o.id, tx);
       return { org: o, userId: u.id };
     });
 
-    await syncAzChartForOrganization(this.prisma, org.id);
-
     await this.orgStructure.ensureDefaultDepartmentAndPosition(org.id);
-
-    try {
-      await this.accounts.bootstrapMultiGaapForNewOrganization(org.id);
-    } catch (e) {
-      this.logger.warn(
-        `Multi-GAAP bootstrap skipped for org ${org.id}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
 
     const tokens = await this.signTokenPair(userId, org.id);
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -231,6 +225,7 @@ export class AuthService {
           taxId: dto.taxId,
           currency: (dto.currency ?? "AZN").toUpperCase(),
           subscriptionPlan: "mvp",
+          activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
         },
       });
       const demoExpiresAt = new Date();
@@ -240,7 +235,7 @@ export class AuthService {
         data: {
           organizationId: o.id,
           tier: SubscriptionTier.BUSINESS,
-          activeModules: [],
+          activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
           isTrial: true,
           expiresAt: demoExpiresAt,
         },
@@ -252,20 +247,12 @@ export class AuthService {
           role: UserRole.OWNER,
         },
       });
+      await syncAzChartForOrganization(tx, o.id);
+      await this.accounts.bootstrapMultiGaapForNewOrganization(o.id, tx);
       return { org: o };
     });
 
-    await syncAzChartForOrganization(this.prisma, org.id);
-
     await this.orgStructure.ensureDefaultDepartmentAndPosition(org.id);
-
-    try {
-      await this.accounts.bootstrapMultiGaapForNewOrganization(org.id);
-    } catch (e) {
-      this.logger.warn(
-        `Multi-GAAP bootstrap skipped for org ${org.id}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
 
     const tokens = await this.signTokenPair(userId, org.id);
     const user = await this.prisma.user.findUniqueOrThrow({
