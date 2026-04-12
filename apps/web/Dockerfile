@@ -16,6 +16,10 @@ COPY apps/web apps/web
 
 ARG NEXT_PUBLIC_API_URL=http://api:4000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+RUN npm ci
+
+# Sentry / Next: переменные должны быть в ENV на момент `next build` (клиентский DSN, upload source maps).
 ARG NEXT_PUBLIC_SENTRY_DSN=
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 ARG SENTRY_AUTH_TOKEN=
@@ -24,8 +28,6 @@ ARG SENTRY_ORG=
 ENV SENTRY_ORG=${SENTRY_ORG}
 ARG SENTRY_PROJECT_WEB=
 ENV SENTRY_PROJECT_WEB=${SENTRY_PROJECT_WEB}
-
-RUN npm ci
 
 RUN npm run build -w @dayday/web
 
