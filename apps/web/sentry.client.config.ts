@@ -11,7 +11,7 @@ if (!dsn) {
     enabled: true,
     /** Редкий ложный срабатывание в встроенных WebView / расширениях отключает весь SDK. */
     skipBrowserExtensionCheck: true,
-    debug: process.env.NEXT_PUBLIC_SENTRY_DEBUG === "1",
+    debug: false,
     environment:
       process.env.NODE_ENV === "development" ? "development" : "production",
     tracesSampleRate: 0.1,
