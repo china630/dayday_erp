@@ -22,9 +22,14 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT_WEB,
-  silent: !process.env.CI,
+  // При наличии токена показываем логи плагина (upload source maps); без токена — тише.
+  silent: !(
+    process.env.SENTRY_AUTH_TOKEN &&
+    process.env.SENTRY_ORG &&
+    process.env.SENTRY_PROJECT_WEB
+  ),
   widenClientFileUpload: true,
-  tunnelRoute: "/monitoring",
+  // Без tunnel: прямой ingest в Sentry; /monitoring давал 403 у части прокси и пересекался с rewrites.
   sourcemaps: {
     deleteSourcemapsAfterUpload: true,
   },

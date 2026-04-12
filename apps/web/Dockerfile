@@ -14,22 +14,25 @@ COPY packages/database/package.json packages/database/
 COPY packages/database packages/database
 COPY apps/web apps/web
 
-ARG NEXT_PUBLIC_API_URL=http://api:4000
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
 RUN npm ci
 
-# Sentry / Next: переменные должны быть в ENV на момент `next build` (клиентский DSN, upload source maps).
-ARG NEXT_PUBLIC_SENTRY_DSN=
+# Один слой перед `next build`: все ARG → ENV, чтобы Next/Sentry webpack видели переменные
+# в процессе `npm run build -w @dayday/web` (инлайн NEXT_PUBLIC_* в клиентский бандл).
+ARG NEXT_PUBLIC_API_URL=http://api:4000
+ARG NEXT_PUBLIC_SENTRY_DSN
+ARG SENTRY_AUTH_TOKEN
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT_WEB
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
-ARG SENTRY_AUTH_TOKEN=
 ENV SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
-ARG SENTRY_ORG=
 ENV SENTRY_ORG=${SENTRY_ORG}
-ARG SENTRY_PROJECT_WEB=
 ENV SENTRY_PROJECT_WEB=${SENTRY_PROJECT_WEB}
 
-RUN npm run build -w @dayday/web
+RUN set -eux; \
+  if [ -n "${NEXT_PUBLIC_SENTRY_DSN:-}" ]; then echo "web build: NEXT_PUBLIC_SENTRY_DSN is set (client Sentry will init)"; else echo "web build: WARNING — NEXT_PUBLIC_SENTRY_DSN empty, client Sentry will not init"; fi; \
+  if [ -n "${SENTRY_AUTH_TOKEN:-}" ] && [ -n "${SENTRY_ORG:-}" ] && [ -n "${SENTRY_PROJECT_WEB:-}" ]; then echo "web build: Sentry source maps upload env present"; else echo "web build: Sentry source maps upload skipped (set SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT_WEB)"; fi; \
+  npm run build -w @dayday/web
 
 RUN npm prune --omit=dev
 
