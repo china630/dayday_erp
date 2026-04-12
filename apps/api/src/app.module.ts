@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
-import { APP_INTERCEPTOR } from "@nestjs/core";
+import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
+import { SentryGlobalFilter, SentryModule } from "@sentry/nestjs/setup";
 import { apiEnvFilePaths } from "./load-env-paths";
 import { APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
@@ -38,6 +39,7 @@ const apiEnvFiles = apiEnvFilePaths();
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: apiEnvFiles.length ? apiEnvFiles : [".env"],
@@ -71,6 +73,10 @@ const apiEnvFiles = apiEnvFilePaths();
   ],
   controllers: [AppController],
   providers: [
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

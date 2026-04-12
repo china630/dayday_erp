@@ -10,6 +10,7 @@
     "start": "next start -p 3000 -H 0.0.0.0"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.48.0",
     "i18next": "^26.0.3",
     "i18next-browser-languagedetector": "^8.2.1",
     "lucide-react": "^1.7.0",
