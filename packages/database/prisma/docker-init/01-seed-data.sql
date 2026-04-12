@@ -10,7 +10,7 @@
 -- npm run docker-init:export -w @dayday/database (из корня с .env).
 --
 -- Супер-админ платформы: в модели User нет полей role / isVerified / isActive — флаг is_super_admin.
--- password_hash: bcrypt для пароля DayDaySuperAdmin! (смените после первого входа).
+-- password_hash: bcrypt для пароля 12345678 (смените после первого входа).
 -- Чтобы подставить хеш из локальной БД: npm run docker-init:super-admin-hash -w @dayday/database
 -- и замените значение ниже.
 
@@ -32,7 +32,7 @@ INSERT INTO "users" (
 VALUES (
   'c0000001-0000-4000-8000-000000000001'::uuid,
   'shirinov.chingiz@gmail.com',
-  '$2b$10$fV0WfM386QpLID50B9gZDe8M460eM6O1eUfS1p9E/9T9T668fG7H2',
+  '$2b$10$XFrxizlL6EuTP8NZbIGg6ekYdchGXFffxTwRDMl/VdZRR9Md6kESi',
   NULL,
   NULL,
   NULL,
