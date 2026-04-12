@@ -25,6 +25,7 @@
     "db:sync-i18n": "npx dotenv-cli -e .env -- npm run db:sync-i18n -w @dayday/database",
     "db:wipe-tenant": "dotenv -e .env -- npx tsx packages/database/prisma/wipe-tenant-data.ts",
     "db:seed:tivi": "dotenv -e .env -- npm run db:seed:tivi -w @dayday/database",
+    "docker-init:export": "dotenv -e .env -- npm run docker-init:export -w @dayday/database",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "infra:d": "powershell -ExecutionPolicy Bypass -File scripts/ensure-infra-d.ps1",
