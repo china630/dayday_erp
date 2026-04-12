@@ -36,6 +36,34 @@ export function mergeWhere(where: unknown, orgId: string): Record<string, unknow
   return { AND: [{ organizationId: orgId }, w] };
 }
 
+/**
+ * Для findUnique / findUniqueOrThrow / findFirst / update / delete / upsert:
+ * Prisma ожидает один уникальный селектор на верхнем уровне (или extendedWhereUnique:
+ * уникальное поле + organizationId). Обёртка `AND: […]` даёт невалидный WhereUniqueInput
+ * (см. OrganizationSubscription и др.).
+ *
+ * Составные уникальные ключи (`organizationId_…`) дополняем только внутри вложенного
+ * объекта, без второго `organizationId` на верхнем уровне.
+ */
+export function mergeWhereForUnique(where: unknown, orgId: string): Record<string, unknown> {
+  if (where == null || typeof where !== "object") {
+    return { organizationId: orgId };
+  }
+  const w = where as Record<string, unknown>;
+  const keys = Object.keys(w);
+  if (keys.length === 1) {
+    const k = keys[0];
+    const v = w[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const inner = v as Record<string, unknown>;
+      if (Object.prototype.hasOwnProperty.call(inner, "organizationId")) {
+        return { [k]: { ...inner, organizationId: orgId } };
+      }
+    }
+  }
+  return { ...w, organizationId: orgId };
+}
+
 function requireOrgOrSkip(): string | null {
   const ctx = getTenantContext();
   if (!ctx) {
@@ -67,16 +95,20 @@ export const prismaTenantExtension = Prisma.defineExtension({
 
         switch (operation) {
           case "findMany":
-          case "findFirst":
             return q({
               ...a,
               where: mergeWhere(a.where, orgId),
+            });
+          case "findFirst":
+            return q({
+              ...a,
+              where: mergeWhereForUnique(a.where, orgId),
             });
           case "findUnique":
           case "findUniqueOrThrow":
             return q({
               ...a,
-              where: mergeWhere(a.where, orgId),
+              where: mergeWhereForUnique(a.where, orgId),
             });
           case "count":
             return q({
@@ -124,7 +156,7 @@ export const prismaTenantExtension = Prisma.defineExtension({
           case "update":
             return q({
               ...a,
-              where: mergeWhere(a.where, orgId),
+              where: mergeWhereForUnique(a.where, orgId),
             });
           case "updateMany":
             return q({
@@ -134,7 +166,7 @@ export const prismaTenantExtension = Prisma.defineExtension({
           case "delete":
             return q({
               ...a,
-              where: mergeWhere(a.where, orgId),
+              where: mergeWhereForUnique(a.where, orgId),
             });
           case "deleteMany":
             return q({
@@ -149,14 +181,14 @@ export const prismaTenantExtension = Prisma.defineExtension({
             if (explicitOrg) {
               return q({
                 ...a,
-                where: mergeWhere(a.where, orgId),
+                where: mergeWhereForUnique(a.where, orgId),
                 create: a.create,
                 update: a.update,
               });
             }
             return q({
               ...a,
-              where: mergeWhere(a.where, orgId),
+              where: mergeWhereForUnique(a.where, orgId),
               create: {
                 ...create,
                 organizationId: orgId,
