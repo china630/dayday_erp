@@ -34,6 +34,7 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT_WEB,
+  // По умолчанию включён: resolveSentryTunnelRoute() → true (случайный путь), пока SENTRY_TUNNEL_PATH не false/0.
   tunnelRoute: resolveSentryTunnelRoute(),
   // При наличии токена показываем логи плагина (upload source maps); без токена — тише.
   silent: !(

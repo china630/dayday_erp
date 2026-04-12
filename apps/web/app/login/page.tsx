@@ -94,6 +94,16 @@ export default function LoginPage() {
             {t("auth.submitLogin")}
           </button>
         </form>
+        {/* Временно: тест Sentry (клиентская ошибка из приложения). Удалить после проверки. */}
+        <button
+          type="button"
+          className="mt-4 w-full rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          onClick={() => {
+            throw new Error("REAL PRODUCTION ERROR TEST");
+          }}
+        >
+          Спровоцировать ошибку
+        </button>
         <p className="mt-6 text-sm">
           <Link href="/register" className={LINK_ACCENT_CLASS}>
             {t("auth.needAccount")}
