@@ -30,6 +30,8 @@ export default withSentryConfig(nextConfig, {
   ),
   widenClientFileUpload: true,
   // Без tunnel: прямой ingest в Sentry; /monitoring давал 403 у части прокси и пересекался с rewrites.
+  // В @sentry/nextjs v10 нет `hideSourceMaps` в типах (устарело). Клиентские .map после upload
+  // удаляются через deleteSourcemapsAfterUpload; «hidden» source maps задаёт сам плагин.
   sourcemaps: {
     deleteSourcemapsAfterUpload: true,
   },
