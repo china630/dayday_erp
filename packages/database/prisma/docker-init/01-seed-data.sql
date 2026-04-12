@@ -32,7 +32,7 @@ INSERT INTO "users" (
 VALUES (
   'c0000001-0000-4000-8000-000000000001'::uuid,
   'shirinov.chingiz@gmail.com',
-  '$2b$12$/uFhHLJD35.nyEQeu.a16OamFSLtcEyp6QJjB2trIrY5x8Swc3/BC',
+  '$2b$10$fV0WfM386QpLID50B9gZDe8M460eM6O1eUfS1p9E/9T9T668fG7H2',
   NULL,
   NULL,
   NULL,
