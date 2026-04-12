@@ -23,6 +23,7 @@
     "db:ifrs-demo-map": "dotenv -e .env -- npm run db:ifrs-demo-map -w @dayday/database",
     "db:studio": "dotenv -e .env -- npm run db:studio -w @dayday/database",
     "db:sync-i18n": "npx dotenv-cli -e .env -- npm run db:sync-i18n -w @dayday/database",
+    "db:dump-to-prod": "dotenv -e .env -- npm run docker-init:export -w @dayday/database",
     "db:wipe-tenant": "dotenv -e .env -- npx tsx packages/database/prisma/wipe-tenant-data.ts",
     "db:seed:tivi": "dotenv -e .env -- npm run db:seed:tivi -w @dayday/database",
     "docker-init:export": "dotenv -e .env -- npm run docker-init:export -w @dayday/database",

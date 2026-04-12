@@ -1,18 +1,40 @@
 /**
- * Экспорт справочных таблиц в SQL (INSERT ... ON CONFLICT) для обновления 01-seed-data.sql
- * с машины, где уже есть наполненная локальная БД.
+ * Полный слепок справочных таблиц для прода: INSERT ... ON CONFLICT (идемпотентно).
  *
- * Из корня монорепо:
+ * Таблицы: translation_overrides (с фильтром односегментных ключей), system_config,
+ * pricing_modules, pricing, pricing_bundles, users (только is_super_admin).
+ *
+ * Из корня монорепо (пишет packages/database/prisma/docker-init/01-seed-data.sql по умолчанию):
+ *   npm run db:dump-to-prod
  *   dotenv -e .env -- npm run docker-init:export -w @dayday/database
  *
- * Перезапись 01-seed-data.sql (скрипт запускается с cwd = packages/database):
- *   DOCKER_INIT_OUT=prisma/docker-init/01-seed-data.sql dotenv -e ../../.env -- npm run docker-init:export -w @dayday/database
+ * Только в stdout (без записи файла):
+ *   DOCKER_INIT_OUT=- dotenv -e .env -- npm run docker-init:export -w @dayday/database
+ *
+ * Явный путь:
+ *   DOCKER_INIT_OUT=prisma/docker-init/custom.sql dotenv -e .env -- npm run docker-init:export -w @dayday/database
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+/**
+ * Синхронно с apps/web/lib/i18n/apply-db-overrides.ts — единственные допустимые
+ * односегментные ключи в translation_overrides; остальные без точки — ошибочные «ветки».
+ */
+const ALLOWED_SINGLE_SEGMENT_OVERRIDE_KEYS = new Set([
+  "appTitle",
+  "language",
+  "az",
+  "ru",
+]);
+
+function isAllowedTranslationOverrideKey(key: string): boolean {
+  if (key.includes(".")) return true;
+  return ALLOWED_SINGLE_SEGMENT_OVERRIDE_KEYS.has(key);
+}
 
 function escLiteral(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/'/g, "''");
@@ -26,21 +48,41 @@ function ts(d: Date): string {
   return d.toISOString();
 }
 
+function sqlNullableString(v: string | null | undefined): string {
+  if (v == null) return "NULL";
+  return `'${escLiteral(v)}'`;
+}
+
 async function buildSql(): Promise<string> {
   const parts: string[] = [];
   parts.push(`-- DayDay ERP: экспорт справочных данных (export-seed-data.ts), Postgres 16
--- План счетов: шаблон в seeds/chart-of-accounts-az.json (на организацию в коде).
--- Отдельной таблицы TaxConfig в схеме нет.
-
+-- Порядок: translation_overrides, system_config, pricing_modules, pricing, pricing_bundles,
+-- users (is_super_admin). Односегментные ключи i18n вне белого списка не попадают в дамп.
+--
+-- План счетов: шаблон seeds/chart-of-accounts-az.json; TaxConfig в схеме нет.
+--
 BEGIN;
 `);
 
-  parts.push(`\n-- translation_overrides\n`);
-  const tr = await prisma.translationOverride.findMany({
+  parts.push(`\n-- translation_overrides (полный словарь минус опасные односегментные ключи)\n`);
+  const trAll = await prisma.translationOverride.findMany({
     orderBy: [{ locale: "asc" }, { key: "asc" }],
   });
+  const skippedParentKeys: string[] = [];
+  const tr = trAll.filter((r) => {
+    if (isAllowedTranslationOverrideKey(r.key)) return true;
+    skippedParentKeys.push(`${r.locale}:${r.key}`);
+    return false;
+  });
+  if (skippedParentKeys.length > 0) {
+    process.stderr.write(
+      `[export-seed-data] Пропущено ${skippedParentKeys.length} строк translation_overrides (односегментные ключи вне белого списка appTitle|language|az|ru). Примеры: ${skippedParentKeys.slice(0, 8).join("; ")}${skippedParentKeys.length > 8 ? " …" : ""}\n`,
+    );
+  }
   if (tr.length > 0) {
-    parts.push(`INSERT INTO "translation_overrides" ("id", "locale", "key", "value", "updated_at")\nVALUES\n`);
+    parts.push(
+      `INSERT INTO "translation_overrides" ("id", "locale", "key", "value", "updated_at")\nVALUES\n`,
+    );
     parts.push(
       tr
         .map(
@@ -55,10 +97,10 @@ ON CONFLICT ("locale", "key") DO UPDATE SET
   "updated_at" = EXCLUDED."updated_at";
 `);
   } else {
-    parts.push(`-- (нет строк в БД)\n`);
+    parts.push(`-- (нет строк в БД после фильтрации)\n`);
   }
 
-  parts.push(`\n-- system_config\n`);
+  parts.push(`\n-- system_config (кэш i18n, квоты, billing, ЦБА и др.)\n`);
   const sc = await prisma.systemConfig.findMany({ orderBy: { key: "asc" } });
   if (sc.length > 0) {
     parts.push(`INSERT INTO "system_config" ("id", "key", "value", "updated_at")\nVALUES\n`);
@@ -100,6 +142,8 @@ ON CONFLICT ("key") DO UPDATE SET
   "sort_order" = EXCLUDED."sort_order",
   "updated_at" = EXCLUDED."updated_at";
 `);
+  } else {
+    parts.push(`-- (нет строк в БД)\n`);
   }
 
   parts.push(`\n-- pricing\n`);
@@ -125,6 +169,8 @@ ON CONFLICT ("key") DO UPDATE SET
   "sort_order" = EXCLUDED."sort_order",
   "updated_at" = EXCLUDED."updated_at";
 `);
+  } else {
+    parts.push(`-- (нет строк в БД)\n`);
   }
 
   parts.push(`\n-- pricing_bundles\n`);
@@ -152,19 +198,71 @@ ON CONFLICT ("id") DO UPDATE SET
     parts.push(`-- (нет строк в БД)\n`);
   }
 
+  parts.push(`\n-- users (только is_super_admin; ON CONFLICT по email)\n`);
+  const superAdmins = await prisma.user.findMany({
+    where: { isSuperAdmin: true },
+    orderBy: { email: "asc" },
+  });
+  if (superAdmins.length > 0) {
+    parts.push(`INSERT INTO "users" (
+  "id",
+  "email",
+  "password_hash",
+  "first_name",
+  "last_name",
+  "full_name",
+  "avatar_url",
+  "is_super_admin",
+  "created_at",
+  "updated_at"
+)
+VALUES\n`);
+    parts.push(
+      superAdmins
+        .map(
+          (r) =>
+            `  ('${r.id}'::uuid, '${escLiteral(r.email)}', '${escLiteral(r.passwordHash)}', ${sqlNullableString(r.firstName)}, ${sqlNullableString(r.lastName)}, ${sqlNullableString(r.fullName)}, ${sqlNullableString(r.avatarUrl)}, TRUE, '${ts(r.createdAt)}'::timestamptz, '${ts(r.updatedAt)}'::timestamptz)`,
+        )
+        .join(",\n"),
+    );
+    parts.push(`
+ON CONFLICT ("email") DO UPDATE SET
+  "password_hash" = EXCLUDED."password_hash",
+  "first_name" = EXCLUDED."first_name",
+  "last_name" = EXCLUDED."last_name",
+  "full_name" = EXCLUDED."full_name",
+  "avatar_url" = EXCLUDED."avatar_url",
+  "is_super_admin" = EXCLUDED."is_super_admin",
+  "updated_at" = EXCLUDED."updated_at";
+`);
+  } else {
+    parts.push(
+      `-- (нет пользователей с is_super_admin — блок users пропущен)\n`,
+    );
+  }
+
   parts.push(`
 COMMIT;
 `);
   return parts.join("");
 }
 
+function resolveOutputPath(): string | null {
+  const explicit = process.env.DOCKER_INIT_OUT;
+  if (explicit === undefined) {
+    return resolve(process.cwd(), "prisma/docker-init/01-seed-data.sql");
+  }
+  const t = explicit.trim();
+  if (t === "" || t === "-") return null;
+  return resolve(process.cwd(), t);
+}
+
 async function main(): Promise<void> {
   const sql = await buildSql();
-  const out = process.env.DOCKER_INIT_OUT?.trim();
+  const out = resolveOutputPath();
   if (out) {
-    const abs = resolve(process.cwd(), out);
-    writeFileSync(abs, sql, "utf8");
-    process.stdout.write(`Wrote ${abs}\n`);
+    writeFileSync(out, sql, "utf8");
+    process.stdout.write(`Wrote ${out}\n`);
   } else {
     process.stdout.write(sql);
   }
