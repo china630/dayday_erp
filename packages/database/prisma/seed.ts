@@ -104,6 +104,8 @@ async function main() {
   const pmRows = await prisma.pricingModule.count();
   console.info(`[seed] pricing_modules: ${pmRows} row(s) (v12.4, empty → seed from PRICING_MODULE_SEED_DEFAULTS)`);
 
+  // Супер-админ платформы не создаётся здесь: см. prisma/docker-init/01-seed-data.sql (Postgres init).
+
   const accounts = await loadChartJson();
   if (accounts.length === 0) {
     console.info(

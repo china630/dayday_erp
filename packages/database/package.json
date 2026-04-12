@@ -27,7 +27,8 @@
     "db:studio": "prisma studio",
     "db:sync-i18n": "tsx prisma/sync-translation-overrides-from-resources.ts",
     "db:seed:tivi": "tsx prisma/seed-tivi.ts",
-    "docker-init:export": "tsx prisma/docker-init/export-seed-data.ts"
+    "docker-init:export": "tsx prisma/docker-init/export-seed-data.ts",
+    "docker-init:super-admin-hash": "tsx prisma/docker-init/export-super-admin-hash.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

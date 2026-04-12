@@ -8,8 +8,42 @@
 --
 -- translation_overrides: базовые строки также могут приходить из миграций; полный дамп с локальной БД —
 -- npm run docker-init:export -w @dayday/database (из корня с .env).
+--
+-- Супер-админ платформы: в модели User нет полей role / isVerified / isActive — флаг is_super_admin.
+-- password_hash: bcrypt для пароля DayDaySuperAdmin! (смените после первого входа).
+-- Чтобы подставить хеш из локальной БД: npm run docker-init:super-admin-hash -w @dayday/database
+-- и замените значение ниже.
 
 BEGIN;
+
+-- Платформенный супер-админ (JWT isSuperAdmin; /api/admin)
+INSERT INTO "users" (
+  "id",
+  "email",
+  "password_hash",
+  "first_name",
+  "last_name",
+  "full_name",
+  "avatar_url",
+  "is_super_admin",
+  "created_at",
+  "updated_at"
+)
+VALUES (
+  'c0000001-0000-4000-8000-000000000001'::uuid,
+  'shirinov.chingiz@gmail.com',
+  '$2b$12$/uFhHLJD35.nyEQeu.a16OamFSLtcEyp6QJjB2trIrY5x8Swc3/BC',
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  TRUE,
+  NOW(),
+  NOW()
+)
+ON CONFLICT ("email") DO UPDATE SET
+  "is_super_admin" = TRUE,
+  "updated_at" = NOW();
 
 -- Каталог модулей конструктора (как prisma/pricing-module-seed.ts + seed.ts)
 INSERT INTO "pricing_modules" ("id", "key", "name", "price_per_month", "sort_order", "created_at", "updated_at")
