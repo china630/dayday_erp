@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { CbarRateStatus, Decimal } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { CbarFxService, type CbarLatestRate, type ParsedCbarDoc } from "./cbar-fx.service";
+import {
+  DASHBOARD_FX_CODES,
+  type FxDashboardRateRow,
+} from "./fx-dashboard.types";
 
 const CHECK_CODES = ["USD", "EUR"] as const;
 
@@ -50,9 +54,34 @@ export class CbarRateSyncService {
     await this.ingestFromNetworkAnchor(new Date());
   }
 
-  async ingestFromNetworkAnchor(anchorDate: Date): Promise<void> {
+  /**
+   * @param opts.skipCalendarTodayDbGuard — для дашборда: разрешить один запрос, даже если за календарный «сегодня»
+   * в БД уже есть USD (например нужно обновить PRELIMINARY→FINAL); cron/sync использует guard по умолчанию.
+   */
+  async ingestFromNetworkAnchor(
+    anchorDate: Date,
+    opts?: { skipCalendarTodayDbGuard?: boolean },
+  ): Promise<void> {
     if (!this.cbar.isExternalCbarFetchEnabled()) {
       return;
+    }
+    const bakuKey = this.cbar.formatBakuDate(anchorDate);
+    const todayRateDate = bakuDdMmYyyyToRateDate(bakuKey);
+    if (!opts?.skipCalendarTodayDbGuard) {
+      const existingUsd = await this.prisma.cbarOfficialRate.findUnique({
+        where: {
+          rateDate_currencyCode: {
+            rateDate: todayRateDate,
+            currencyCode: "USD",
+          },
+        },
+      });
+      if (existingUsd?.status === CbarRateStatus.FINAL) {
+        this.logger.debug(
+          `CBAR ingest skip: FINAL USD already stored for calendar ${bakuKey} (no HTTP)`,
+        );
+        return;
+      }
     }
     const url = this.cbar.buildCbarUrl(anchorDate);
     const body = await this.cbar.fetchCbarXmlBodyForDate(anchorDate);
@@ -218,6 +247,83 @@ export class CbarRateSyncService {
       return null;
     }
     return { usd, eur };
+  }
+
+  /**
+   * Курсы для дашборда: сначала только БД (последняя дата по каждой валюте), при дырах — один GET XML и upsert.
+   * Не вызывает getLatestRate по валюте (избегает N×(1+5) запросов к ЦБА на один HTTP клиента).
+   */
+  async resolveDashboardRates(now: Date): Promise<{
+    rates: FxDashboardRateRow[];
+    isFallback: boolean;
+  }> {
+    const codes = [...DASHBOARD_FX_CODES] as readonly string[];
+    const todayKey = this.cbar.formatBakuDate(now);
+
+    const rowToFx = (row: {
+      currencyCode: string;
+      rateDate: Date;
+      value: Decimal;
+      nominal: number;
+      rate: Decimal;
+    }): FxDashboardRateRow => {
+      const rateDateBaku = this.cbar.formatBakuDate(row.rateDate);
+      return {
+        currencyCode: row.currencyCode,
+        rate: Number(row.rate),
+        value: Number(row.value),
+        nominal: row.nominal,
+        rateDateBaku,
+        isFallback: rateDateBaku !== todayKey,
+        isUnavailable: false,
+      };
+    };
+
+    const loadLatestPerCode = () =>
+      Promise.all(
+        codes.map((code) =>
+          this.prisma.cbarOfficialRate.findFirst({
+            where: { currencyCode: code },
+            orderBy: { rateDate: "desc" },
+          }),
+        ),
+      );
+
+    let latestRows = await loadLatestPerCode();
+    const missing = codes.filter((_, i) => latestRows[i] == null);
+
+    if (
+      missing.length > 0 &&
+      this.cbar.isExternalCbarFetchEnabled()
+    ) {
+      const doc = await this.cbar.fetchRatesForDateOnce(now);
+      if (doc?.publishedDateBaku && doc.rates.length > 0) {
+        await this.persistParsedDoc(doc);
+        latestRows = await loadLatestPerCode();
+      }
+    }
+
+    let anyFallback = false;
+    const rates: FxDashboardRateRow[] = codes.map((code, i) => {
+      const row = latestRows[i];
+      if (row) {
+        const fx = rowToFx(row);
+        if (fx.isFallback) anyFallback = true;
+        return fx;
+      }
+      anyFallback = true;
+      return {
+        currencyCode: code,
+        rate: null,
+        value: null,
+        nominal: null,
+        rateDateBaku: null,
+        isFallback: true,
+        isUnavailable: true,
+      };
+    });
+
+    return { rates, isFallback: anyFallback };
   }
 
   private async storedMainChangedVsDoc(

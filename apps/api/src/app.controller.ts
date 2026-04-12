@@ -19,6 +19,12 @@ export class AppController {
    */
   @Get("fx/cbar/sample")
   async cbarSample(@Query("poll") poll?: string) {
+    if (!this.cbar.isExternalCbarFetchEnabled()) {
+      return {
+        mock: true,
+        message: "TAX_LOOKUP_MOCK=1 — запросы к cbar.az отключены",
+      };
+    }
     const usd = await this.cbar.getLatestRate("USD", new Date());
     let polled: { count: number; sample: unknown[] } | undefined;
     if (poll === "1" || poll === "true") {

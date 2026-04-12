@@ -15,6 +15,12 @@ const CBAR_HTTP_HEADERS = {
 /** Максимум календарных дней назад при поиске курса (без сотен запросов). */
 const CBAR_MAX_FALLBACK_DAYS = 5;
 
+/** Верхняя граница экспоненциальной задержки после ошибок сети/парсинга (мс). */
+const CBAR_BACKOFF_CAP_MS_DEFAULT = 3_600_000;
+
+/** Лимит HTTP GET к cbar.az за скользящий час (защита от шторма при опросе UI). */
+const CBAR_MAX_FETCHES_PER_HOUR_DEFAULT = 48;
+
 export type CbarCurrencyRate = {
   code: string;
   /** Value из XML ЦБА (сырое значение к номиналу) */
@@ -50,6 +56,15 @@ function envInt(name: string, fallback: number): number {
   if (v == null || v === "") return fallback;
   const n = Number.parseInt(v, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Бросается до любых обращений к cbar.az при TAX_LOOKUP_MOCK=1 (дашборд → только БД). */
+export class CbarExternalFetchDisabledError extends Error {
+  readonly code = "CBAR_EXTERNAL_FETCH_DISABLED" as const;
+  constructor() {
+    super("CBAR external fetch disabled (TAX_LOOKUP_MOCK=1)");
+    this.name = "CbarExternalFetchDisabledError";
+  }
 }
 
 /** DD.MM.YYYY → UTC noon для сравнения календарных дней */
@@ -136,6 +151,13 @@ export class CbarFxService {
     attributeNamePrefix: "@_",
   });
 
+  /** Экспоненциальная пауза после ошибок парсинга/сети (кроме 404). */
+  private consecutiveFailures = 0;
+  private blockNetworkUntil = 0;
+  /** Скользящее окно 1 ч для лимита запросов. */
+  private hourWindowStart = 0;
+  private fetchesInHour = 0;
+
   constructor(private readonly config: ConfigService) {}
 
   /**
@@ -144,6 +166,40 @@ export class CbarFxService {
    */
   isExternalCbarFetchEnabled(): boolean {
     return this.config.get<string>("TAX_LOOKUP_MOCK") !== "1";
+  }
+
+  private resetFetchHealth(): void {
+    this.consecutiveFailures = 0;
+    this.blockNetworkUntil = 0;
+  }
+
+  private scheduleBackoffAfterFailure(kind: "network" | "parse"): void {
+    this.consecutiveFailures = Math.min(this.consecutiveFailures + 1, 12);
+    const cap = envInt("CBAR_BACKOFF_CAP_MS", CBAR_BACKOFF_CAP_MS_DEFAULT);
+    const base = kind === "parse" ? 8_000 : 4_000;
+    const ms = Math.min(cap, base * 2 ** (this.consecutiveFailures - 1));
+    this.blockNetworkUntil = Date.now() + ms;
+    this.logger.warn(
+      `CBAR ${kind} failure #${this.consecutiveFailures}: pausing HTTP to cbar.az for ${ms}ms`,
+    );
+  }
+
+  /** true — можно потратить одну попытку GET в текущем часовом окне. */
+  private tryTakeHourlyFetchSlot(): boolean {
+    const cap = envInt("CBAR_MAX_FETCHES_PER_HOUR", CBAR_MAX_FETCHES_PER_HOUR_DEFAULT);
+    const now = Date.now();
+    if (now - this.hourWindowStart >= 3_600_000) {
+      this.hourWindowStart = now;
+      this.fetchesInHour = 0;
+    }
+    if (this.fetchesInHour >= cap) {
+      this.logger.warn(
+        `CBAR: hourly fetch cap reached (${cap} GET / rolling hour); skipping request`,
+      );
+      return false;
+    }
+    this.fetchesInHour += 1;
+    return true;
   }
 
   /** Дата в календаре Азербайджана (Asia/Baku) → DD.MM.YYYY для URL ЦБА */
@@ -181,6 +237,16 @@ export class CbarFxService {
     if (!this.isExternalCbarFetchEnabled()) {
       return null;
     }
+    const now = Date.now();
+    if (now < this.blockNetworkUntil) {
+      this.logger.debug(
+        `CBAR: backoff active until ${new Date(this.blockNetworkUntil).toISOString()}, skip GET`,
+      );
+      return null;
+    }
+    if (!this.tryTakeHourlyFetchSlot()) {
+      return null;
+    }
     const url = this.buildCbarUrl(d);
     this.logger.debug(`CBAR GET ${url}`);
     try {
@@ -190,10 +256,13 @@ export class CbarFxService {
         validateStatus: (s) => s === 200 || s === 404,
         headers: { ...CBAR_HTTP_HEADERS },
       });
-      if (res.status === 404) return null;
+      if (res.status === 404) {
+        return null;
+      }
       const body = new TextDecoder("utf-8").decode(new Uint8Array(res.data));
       return body;
     } catch (e) {
+      this.scheduleBackoffAfterFailure("network");
       this.logger.warn(`CBAR request failed ${url}: ${e instanceof Error ? e.message : String(e)}`);
       return null;
     }
@@ -223,7 +292,13 @@ export class CbarFxService {
     const url = this.buildCbarUrl(d);
     const data = await this.fetchCbarXmlBodyForDate(d);
     if (data == null) return null;
-    return this.parseCbarXmlLogged(data, url);
+    const doc = this.parseCbarXmlLogged(data, url);
+    if (doc?.rates.length) {
+      this.resetFetchHealth();
+    } else if (data.trim().length > 0 && doc == null) {
+      this.scheduleBackoffAfterFailure("parse");
+    }
+    return doc;
   }
 
   /**
@@ -275,6 +350,10 @@ export class CbarFxService {
         rateDateBaku: s,
         isFallback: false,
       };
+    }
+
+    if (!this.isExternalCbarFetchEnabled()) {
+      throw new CbarExternalFetchDisabledError();
     }
 
     const targetStr = this.formatBakuDate(date);
