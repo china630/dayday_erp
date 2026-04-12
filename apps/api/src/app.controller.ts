@@ -17,6 +17,7 @@ export class AppController {
    * getLatestRate — при отсутствии курса на «сегодня» вернёт вчера.
    * ?poll=1 — дополнительно ждать обновления XML (до CBAR_POLL_MAX_MS, не для прода в HTTP).
    */
+  @Public()
   @Get("fx/cbar/sample")
   async cbarSample(@Query("poll") poll?: string) {
     if (!this.cbar.isExternalCbarFetchEnabled()) {

@@ -6,10 +6,17 @@ import axios from "axios";
 /** Официальный каталог XML (на сайте ЦБА используется www). */
 const CBAR_BASE = "https://www.cbar.az/currencies";
 
-/** Заголовки для всех HTTP-запросов к cbar.az */
-const CBAR_HTTP_HEADERS = {
-  "User-Agent": "DayDayERP/0.1 (+https://dayday.local)",
-  Accept: "application/xml, text/xml;q=0.9, */*;q=0.8",
+/**
+ * ЦБА / WAF часто отвечает 403 на нестандартный или «пустой» User-Agent (в т.ч. wget в Docker).
+ * Браузероподобная строка + Referer — как при открытии страницы курсов на cbar.az.
+ * Переопределение: CBAR_HTTP_USER_AGENT в .env (например, если провайдер всё же режет IP ДЦ).
+ */
+const CBAR_HTTP_HEADERS_DEFAULT = {
+  "User-Agent":
+    "Mozilla/5.0 (compatible; DayDayERP/1.0; +https://github.com/china630/dayday_erp) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "application/xml, text/xml, application/xhtml+xml;q=0.9, */*;q=0.8",
+  "Accept-Language": "az-AZ,az;q=0.9,en;q=0.8",
+  Referer: "https://www.cbar.az/currencies/",
 } as const;
 
 /** Максимум календарных дней назад при поиске курса (без сотен запросов). */
@@ -160,6 +167,14 @@ export class CbarFxService {
 
   constructor(private readonly config: ConfigService) {}
 
+  private cbarHttpHeaders(): Record<string, string> {
+    const ua = this.config.get<string>("CBAR_HTTP_USER_AGENT")?.trim();
+    if (ua) {
+      return { ...CBAR_HTTP_HEADERS_DEFAULT, "User-Agent": ua };
+    }
+    return { ...CBAR_HTTP_HEADERS_DEFAULT };
+  }
+
   /**
    * С TAX_LOOKUP_MOCK=1 (как в TaxService) внешние запросы к cbar.az отключены —
    * без таймаутов и шума в логах при локальной разработке.
@@ -253,10 +268,17 @@ export class CbarFxService {
       const res = await axios.get<ArrayBuffer>(url, {
         timeout: 15_000,
         responseType: "arraybuffer",
-        validateStatus: (s) => s === 200 || s === 404,
-        headers: { ...CBAR_HTTP_HEADERS },
+        validateStatus: (s) => s === 200 || s === 404 || s === 403,
+        headers: this.cbarHttpHeaders(),
       });
       if (res.status === 404) {
+        return null;
+      }
+      if (res.status === 403) {
+        this.scheduleBackoffAfterFailure("network");
+        this.logger.warn(
+          `CBAR GET ${url}: 403 Forbidden — часто блокировка IP дата-центра или WAF; попробуйте CBAR_HTTP_USER_AGENT или прокси/VPN для исходящего трафика API`,
+        );
         return null;
       }
       const body = new TextDecoder("utf-8").decode(new Uint8Array(res.data));
