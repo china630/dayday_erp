@@ -23,17 +23,16 @@ export function dropFlatKeysShadowedByLongerKeys(
 }
 
 /**
- * В БД иногда сохраняют один корневой ключ (`hrTimesheet`, `timesheet` и т.д.) как строку —
- * при merge он затирает весь объект из resources.ts, и `t("hrTimesheet.title")` показывает ключ.
- * Корректные оверрайды идут как `hrTimesheet.title`, `timesheet.loadErr`, …
+ * В `resources.ts` у namespace `translation` почти все ключи вложенные (`nav.home`, …).
+ * Единственные односегментные строки на верхнем уровне — appTitle, language, az, ru.
+ * Любой другой плоский ключ без точки из БД (`nav`, `dashboard`, …) при merge превращается
+ * в строку и затирает целый объект из бандла → на экране снова сырой ключ `nav.sectionPurchases`.
  */
-const NESTED_TRANSLATION_ROOTS = new Set([
-  "banking",
-  "BANKING",
-  "headerStrip",
-  "hrTimesheet",
-  "superAdmin",
-  "timesheet",
+const ALLOWED_SINGLE_SEGMENT_OVERRIDE_KEYS = new Set([
+  "appTitle",
+  "language",
+  "az",
+  "ru",
 ]);
 
 /**
@@ -63,7 +62,7 @@ export function dropFlatRootStringNamespaceKeys(
   return Object.fromEntries(
     Object.entries(flat).filter(([k]) => {
       if (k.includes(".")) return true;
-      return !NESTED_TRANSLATION_ROOTS.has(k);
+      return ALLOWED_SINGLE_SEGMENT_OVERRIDE_KEYS.has(k);
     }),
   );
 }
