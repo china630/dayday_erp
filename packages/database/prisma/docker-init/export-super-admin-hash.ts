@@ -1,5 +1,5 @@
 /**
- * Печатает password_hash пользователя для подстановки в 01-seed-data.sql.
+ * Печатает password_hash пользователя для подстановки в 02-super-admin-seed.sql.
  *
  * Из корня: dotenv -e .env -- npm run docker-init:super-admin-hash -w @dayday/database
  *

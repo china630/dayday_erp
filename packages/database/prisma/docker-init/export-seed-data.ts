@@ -2,7 +2,12 @@
  * Полный слепок справочных таблиц для прода: INSERT ... ON CONFLICT (идемпотентно).
  *
  * Таблицы: translation_overrides (с фильтром односегментных ключей), system_config,
- * pricing_modules, pricing, pricing_bundles, users (только is_super_admin).
+ * pricing_modules, pricing, pricing_bundles.
+ *
+ * Пользователей (users) в дамп по умолчанию НЕ включаем — иначе при каждом экспорте в репозиторий
+ * попадает password_hash из локальной БД и ломается предсказуемый сид. Супер-админа держите
+ * вручную в 01-seed-data.sql или подставляйте хеш: npm run docker-init:super-admin-hash.
+ * Принудительно выгрузить users из БД (осознанно): DOCKER_INIT_EXPORT_USERS=1
  *
  * Из корня монорепо (пишет packages/database/prisma/docker-init/01-seed-data.sql по умолчанию):
  *   npm run db:dump-to-prod
@@ -56,8 +61,9 @@ function sqlNullableString(v: string | null | undefined): string {
 async function buildSql(): Promise<string> {
   const parts: string[] = [];
   parts.push(`-- DayDay ERP: экспорт справочных данных (export-seed-data.ts), Postgres 16
--- Порядок: translation_overrides, system_config, pricing_modules, pricing, pricing_bundles,
--- users (is_super_admin). Односегментные ключи i18n вне белого списка не попадают в дамп.
+-- Порядок: translation_overrides, system_config, pricing_modules, pricing, pricing_bundles.
+-- users не экспортируются (см. комментарий в export-seed-data.ts), кроме DOCKER_INIT_EXPORT_USERS=1.
+-- Односегментные ключи i18n вне белого списка не попадают в дамп.
 --
 -- План счетов: шаблон seeds/chart-of-accounts-az.json; TaxConfig в схеме нет.
 --
@@ -198,13 +204,18 @@ ON CONFLICT ("id") DO UPDATE SET
     parts.push(`-- (нет строк в БД)\n`);
   }
 
-  parts.push(`\n-- users (только is_super_admin; ON CONFLICT по email)\n`);
-  const superAdmins = await prisma.user.findMany({
-    where: { isSuperAdmin: true },
-    orderBy: { email: "asc" },
-  });
-  if (superAdmins.length > 0) {
-    parts.push(`INSERT INTO "users" (
+  const exportUsers = process.env.DOCKER_INIT_EXPORT_USERS === "1";
+  if (exportUsers) {
+    process.stderr.write(
+      "[export-seed-data] DOCKER_INIT_EXPORT_USERS=1: в дамп попадёт password_hash из БД — проверьте файл перед коммитом.\n",
+    );
+    parts.push(`\n-- users (is_super_admin; из БД — только при DOCKER_INIT_EXPORT_USERS=1)\n`);
+    const superAdmins = await prisma.user.findMany({
+      where: { isSuperAdmin: true },
+      orderBy: { email: "asc" },
+    });
+    if (superAdmins.length > 0) {
+      parts.push(`INSERT INTO "users" (
   "id",
   "email",
   "password_hash",
@@ -217,15 +228,15 @@ ON CONFLICT ("id") DO UPDATE SET
   "updated_at"
 )
 VALUES\n`);
-    parts.push(
-      superAdmins
-        .map(
-          (r) =>
-            `  ('${r.id}'::uuid, '${escLiteral(r.email)}', '${escLiteral(r.passwordHash)}', ${sqlNullableString(r.firstName)}, ${sqlNullableString(r.lastName)}, ${sqlNullableString(r.fullName)}, ${sqlNullableString(r.avatarUrl)}, TRUE, '${ts(r.createdAt)}'::timestamptz, '${ts(r.updatedAt)}'::timestamptz)`,
-        )
-        .join(",\n"),
-    );
-    parts.push(`
+      parts.push(
+        superAdmins
+          .map(
+            (r) =>
+              `  ('${r.id}'::uuid, '${escLiteral(r.email)}', '${escLiteral(r.passwordHash)}', ${sqlNullableString(r.firstName)}, ${sqlNullableString(r.lastName)}, ${sqlNullableString(r.fullName)}, ${sqlNullableString(r.avatarUrl)}, TRUE, '${ts(r.createdAt)}'::timestamptz, '${ts(r.updatedAt)}'::timestamptz)`,
+          )
+          .join(",\n"),
+      );
+      parts.push(`
 ON CONFLICT ("email") DO UPDATE SET
   "password_hash" = EXCLUDED."password_hash",
   "first_name" = EXCLUDED."first_name",
@@ -235,9 +246,12 @@ ON CONFLICT ("email") DO UPDATE SET
   "is_super_admin" = EXCLUDED."is_super_admin",
   "updated_at" = EXCLUDED."updated_at";
 `);
+    } else {
+      parts.push(`-- (нет пользователей с is_super_admin)\n`);
+    }
   } else {
     parts.push(
-      `-- (нет пользователей с is_super_admin — блок users пропущен)\n`,
+      `\n-- users: не выгружаются (фиксированный сид — prisma/docker-init/02-super-admin-seed.sql)\n`,
     );
   }
 

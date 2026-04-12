@@ -28,6 +28,8 @@ services:
     image: redis:7-alpine
     restart: always
     command: redis-server --appendonly yes
+    volumes:
+      - ./redis-data:/data
     ports:
       - "${REDIS_PUBLISH_PORT:-6379}:6379"
     healthcheck:

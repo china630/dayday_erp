@@ -1,6 +1,7 @@
 -- DayDay ERP: экспорт справочных данных (export-seed-data.ts), Postgres 16
--- Порядок: translation_overrides, system_config, pricing_modules, pricing, pricing_bundles,
--- users (is_super_admin). Односегментные ключи i18n вне белого списка не попадают в дамп.
+-- Порядок: translation_overrides, system_config, pricing_modules, pricing, pricing_bundles.
+-- users не экспортируются (см. комментарий в export-seed-data.ts), кроме DOCKER_INIT_EXPORT_USERS=1.
+-- Односегментные ключи i18n вне белого списка не попадают в дамп.
 --
 -- План счетов: шаблон seeds/chart-of-accounts-az.json; TaxConfig в схеме нет.
 --
@@ -2463,28 +2464,6 @@ ON CONFLICT ("key") DO UPDATE SET
 -- pricing_bundles
 -- (нет строк в БД)
 
--- users (только is_super_admin; ON CONFLICT по email)
-INSERT INTO "users" (
-  "id",
-  "email",
-  "password_hash",
-  "first_name",
-  "last_name",
-  "full_name",
-  "avatar_url",
-  "is_super_admin",
-  "created_at",
-  "updated_at"
-)
-VALUES
-  ('4e8ddb3d-54d3-4632-bf96-f64f310dd5f1'::uuid, 'shirinov.chingiz@gmail.com', '$2b$10$ovWn2ZKlZyZNb.BvNf54eeLzM.WK1b1iEfX1sF7qCZkiBWOTWGXRK', NULL, NULL, NULL, NULL, TRUE, '2026-04-03T08:06:26.762Z'::timestamptz, '2026-04-03T08:06:26.762Z'::timestamptz)
-ON CONFLICT ("email") DO UPDATE SET
-  "password_hash" = EXCLUDED."password_hash",
-  "first_name" = EXCLUDED."first_name",
-  "last_name" = EXCLUDED."last_name",
-  "full_name" = EXCLUDED."full_name",
-  "avatar_url" = EXCLUDED."avatar_url",
-  "is_super_admin" = EXCLUDED."is_super_admin",
-  "updated_at" = EXCLUDED."updated_at";
+-- users: не выгружаются (фиксированный сид — prisma/docker-init/02-super-admin-seed.sql)
 
 COMMIT;
