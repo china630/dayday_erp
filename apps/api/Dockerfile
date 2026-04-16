@@ -14,6 +14,8 @@ COPY packages/database/package.json packages/database/
 
 COPY packages/database packages/database
 COPY apps/api apps/api
+# Used by `npm run db:sync-i18n` / `db:prod-init` (packages/database → apps/web path).
+COPY apps/web/lib/i18n/resources.ts apps/web/lib/i18n/resources.ts
 
 RUN npm ci
 
