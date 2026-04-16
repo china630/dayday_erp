@@ -39,7 +39,6 @@ const intentionalSame = new Set([
   "ru",
   "language",
   "seo.title",
-  "BANKING.CASH.COLORDERNO",
 ]);
 const sameSuspect = sameLong
   .filter((k) => !intentionalSame.has(k) && !k.endsWith(".payButtonAz"))

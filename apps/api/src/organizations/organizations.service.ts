@@ -71,4 +71,78 @@ export class OrganizationsService {
 
     return { organizationId, ownerId: newOwnerUserId };
   }
+
+  async getOrganizationsTreeForUser(userId: string) {
+    const memberships = await this.prisma.organizationMembership.findMany({
+      where: { userId },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            taxId: true,
+            currency: true,
+            holdingId: true,
+            holding: { select: { id: true, name: true, baseCurrency: true } },
+          },
+        },
+      },
+      orderBy: { joinedAt: "asc" },
+    });
+
+    const free: Array<{
+      id: string;
+      name: string;
+      taxId: string;
+      currency: string;
+    }> = [];
+
+    const byHolding = new Map<
+      string,
+      {
+        holdingId: string;
+        holdingName: string;
+        baseCurrency: string;
+        organizations: typeof free;
+      }
+    >();
+
+    for (const m of memberships) {
+      const o = m.organization;
+      if (!o.holdingId || !o.holding) {
+        free.push({
+          id: o.id,
+          name: o.name,
+          taxId: o.taxId,
+          currency: o.currency,
+        });
+        continue;
+      }
+      const h = o.holding;
+      const key = h.id;
+      const cur =
+        byHolding.get(key) ??
+        {
+          holdingId: h.id,
+          holdingName: h.name,
+          baseCurrency: (h.baseCurrency ?? "AZN").toUpperCase(),
+          organizations: [],
+        };
+      cur.organizations.push({
+        id: o.id,
+        name: o.name,
+        taxId: o.taxId,
+        currency: o.currency,
+      });
+      byHolding.set(key, cur);
+    }
+
+    const holdings = [...byHolding.values()].sort((a, b) =>
+      a.holdingName.localeCompare(b.holdingName),
+    );
+
+    free.sort((a, b) => a.name.localeCompare(b.name));
+
+    return { holdings, freeOrganizations: free };
+  }
 }

@@ -87,6 +87,7 @@ export class EmployeesService {
               : (dto.voen?.trim() ?? null),
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
+          patronymic: dto.patronymic.trim(),
           positionId: dto.positionId,
           startDate: new Date(dto.startDate),
           salary: new Decimal(dto.salary),
@@ -143,6 +144,10 @@ export class EmployeesService {
     if (dto.finCode != null) data.finCode = dto.finCode.trim();
     if (dto.firstName != null) data.firstName = dto.firstName.trim();
     if (dto.lastName != null) data.lastName = dto.lastName.trim();
+    if (dto.patronymic !== undefined) {
+      const p = dto.patronymic.trim();
+      data.patronymic = p.length ? p : null;
+    }
     if (dto.positionId != null) data.positionId = dto.positionId;
     if (dto.startDate != null) data.startDate = new Date(dto.startDate);
     if (dto.salary != null) data.salary = new Decimal(dto.salary);

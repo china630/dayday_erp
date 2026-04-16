@@ -22,7 +22,10 @@ export class CreateRkoDraftDto {
 
   @ApiProperty({ example: 50 })
   @Type(() => Number)
-  @IsNumber()
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 4 },
+    { message: "amount must be a finite number" },
+  )
   @Min(0.01)
   amount!: number;
 
@@ -59,4 +62,26 @@ export class CreateRkoDraftDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ description: "Статья ДДС (обязательна)" })
+  @IsUUID()
+  cashFlowItemId!: string;
+
+  @ApiPropertyOptional({ description: "Физическая касса" })
+  @IsOptional()
+  @IsUUID()
+  cashDeskId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Налог у источника (удержанная сумма); сумма ордера — выданная из кассы (нетто)",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 4 },
+    { message: "withholdingTaxAmount must be a finite number" },
+  )
+  @Min(0)
+  withholdingTaxAmount?: number;
 }

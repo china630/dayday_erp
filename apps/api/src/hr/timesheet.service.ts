@@ -6,13 +6,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
-  AbsenceType,
+  AbsencePayFormula,
   Decimal,
   TimesheetEntryType,
   TimesheetStatus,
 } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { isAzWorkingDay } from "./calendar/az-2026";
+import { countAzWorkingDaysInMonth } from "./payroll-month-calendar";
 import type { TimesheetBatchItemDto } from "./dto/timesheet-batch.dto";
 
 function monthBoundsUtc(year: number, month: number): { start: Date; end: Date; lastDay: number } {
@@ -28,6 +29,20 @@ function dayDateUtc(year: number, month: number, day: number): Date {
 
 function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function timesheetEntryTypeForAbsenceFormula(
+  formula: AbsencePayFormula,
+): TimesheetEntryType {
+  switch (formula) {
+    case AbsencePayFormula.SICK_LEAVE_STAJ:
+      return TimesheetEntryType.SICK;
+    case AbsencePayFormula.UNPAID_RECORD:
+      return TimesheetEntryType.OFF;
+    case AbsencePayFormula.LABOR_LEAVE_304:
+    default:
+      return TimesheetEntryType.VACATION;
+  }
 }
 
 function defaultHoursForType(t: TimesheetEntryType): Decimal {
@@ -175,6 +190,7 @@ export class TimesheetService {
         startDate: { lte: monthEnd },
         endDate: { gte: monthStart },
       },
+      include: { absenceType: true },
     });
 
     const startIso = isoDay(monthStart);
@@ -182,10 +198,7 @@ export class TimesheetService {
 
     await this.prisma.$transaction(async (tx) => {
       for (const a of absences) {
-        const t =
-          a.type === AbsenceType.VACATION
-            ? TimesheetEntryType.VACATION
-            : TimesheetEntryType.SICK;
+        const t = timesheetEntryTypeForAbsenceFormula(a.absenceType.formula);
         const hours = defaultHoursForType(t);
         const absFrom = isoDay(a.startDate);
         const absTo = isoDay(a.endDate);
@@ -307,7 +320,7 @@ export class TimesheetService {
     return this.getFull(organizationId, timesheetId);
   }
 
-  /** Агрегаты по сотруднику для импорта в ведомость. */
+  /** Агрегаты по сотруднику для импорта в ведомость + mix для brüt ə/h (TK AР). */
   async summarizeForPayroll(timesheetId: string, organizationId: string) {
     const ts = await this.prisma.timesheet.findFirst({
       where: { id: timesheetId, organizationId, status: TimesheetStatus.APPROVED },
@@ -318,10 +331,18 @@ export class TimesheetService {
     const entries = await this.prisma.timesheetEntry.findMany({
       where: { timesheetId },
     });
+    const { year, month } = ts;
+    const normWorkingDays = countAzWorkingDaysInMonth(year, month);
+
     const byEmp = new Map<
       string,
       { work: number; vacation: number; sick: number; businessTrip: number }
     >();
+    const mixEmp = new Map<
+      string,
+      { workBizWorkingDays: number; vacationCalendarDays: number }
+    >();
+
     for (const e of entries) {
       let row = byEmp.get(e.employeeId);
       if (!row) {
@@ -344,7 +365,49 @@ export class TimesheetService {
         default:
           break;
       }
+
+      const d = e.dayDate.getUTCDate();
+      const wd = isAzWorkingDay(year, month - 1, d);
+      let mx = mixEmp.get(e.employeeId);
+      if (!mx) {
+        mx = { workBizWorkingDays: 0, vacationCalendarDays: 0 };
+        mixEmp.set(e.employeeId, mx);
+      }
+      switch (e.type) {
+        case TimesheetEntryType.WORK:
+        case TimesheetEntryType.BUSINESS_TRIP:
+          if (wd) mx.workBizWorkingDays += 1;
+          break;
+        case TimesheetEntryType.VACATION:
+          mx.vacationCalendarDays += 1;
+          break;
+        default:
+          break;
+      }
     }
-    return { year: ts.year, month: ts.month, byEmployeeId: Object.fromEntries(byEmp) };
+
+    const mixByEmployeeId: Record<
+      string,
+      {
+        normWorkingDays: number;
+        workBizWorkingDays: number;
+        vacationCalendarDays: number;
+      }
+    > = {};
+    for (const [id, v] of mixEmp) {
+      mixByEmployeeId[id] = {
+        normWorkingDays,
+        workBizWorkingDays: v.workBizWorkingDays,
+        vacationCalendarDays: v.vacationCalendarDays,
+      };
+    }
+
+    return {
+      year: ts.year,
+      month: ts.month,
+      normWorkingDays,
+      byEmployeeId: Object.fromEntries(byEmp),
+      mixByEmployeeId,
+    };
   }
 }

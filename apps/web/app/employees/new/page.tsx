@@ -1,11 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { inputFieldClass } from "../../../lib/form-classes";
+import {
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+} from "../../../lib/design-system";
 import { isValidFinCode } from "../../../lib/fin-code";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { useSubscription } from "../../../lib/subscription-context";
@@ -25,6 +30,7 @@ export default function NewEmployeePage() {
   const [finCode, setFinCode] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [patronymic, setPatronymic] = useState("");
   const [positions, setPositions] = useState<
     { id: string; name: string; department: { id: string; name: string } }[]
   >([]);
@@ -57,7 +63,14 @@ export default function NewEmployeePage() {
   async function submitCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
-    if (!firstName.trim() || !lastName.trim() || !startDate || salary === "" || !positionId) {
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !patronymic.trim() ||
+      !startDate ||
+      salary === "" ||
+      !positionId
+    ) {
       alert(t("employees.fillRequired"));
       return;
     }
@@ -74,6 +87,7 @@ export default function NewEmployeePage() {
       finCode: finCode.trim(),
       firstName,
       lastName,
+      patronymic: patronymic.trim(),
       positionId,
       startDate,
       salary: Number(salary),
@@ -92,9 +106,18 @@ export default function NewEmployeePage() {
     if (!res.ok) {
       const raw = await res.text();
       try {
-        const j = JSON.parse(raw) as { code?: string; message?: string };
+        const j = JSON.parse(raw) as { code?: string; message?: unknown };
         if (j.code === "QUOTA_EXCEEDED") {
-          alert(j.message ?? t("employees.quotaExceeded"));
+          if (res.status === 402) return;
+          const msg =
+            typeof j.message === "string"
+              ? j.message
+              : j.message &&
+                  typeof j.message === "object" &&
+                  "ru" in (j.message as object)
+                ? String((j.message as { ru?: string }).ru)
+                : t("employees.quotaExceeded");
+          alert(msg);
           return;
         }
       } catch {
@@ -125,10 +148,7 @@ export default function NewEmployeePage() {
         ]}
       />
       <div>
-        <Link href="/employees" className="text-sm text-action hover:text-primary">
-          ← {t("employees.backList")}
-        </Link>
-        <h1 className="text-2xl font-semibold text-gray-900 mt-4">{t("employees.newTitle")}</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 mt-1">{t("employees.newTitle")}</h1>
       </div>
 
       <form
@@ -188,6 +208,17 @@ export default function NewEmployeePage() {
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputFieldClass} />
         </div>
         <div>
+          <span className={lbl}>
+            {t("employees.patronymic", { defaultValue: "Ata adı (отчество)" })}
+          </span>
+          <input
+            value={patronymic}
+            onChange={(e) => setPatronymic(e.target.value)}
+            className={inputFieldClass}
+            required
+          />
+        </div>
+        <div>
           <span className={lbl}>{t("employees.jobPositionSelect")}</span>
           <select
             value={positionId}
@@ -220,16 +251,28 @@ export default function NewEmployeePage() {
             className={inputFieldClass}
           />
         </div>
-        <button
-          type="submit"
-          disabled={busy || (subReady && Boolean(snapshot?.quotas.employees.atLimit))}
-          title={
-            subReady && snapshot?.quotas.employees.atLimit ? t("subscription.employeesLimitTooltip") : undefined
-          }
-          className="bg-action text-white px-4 py-2 rounded-lg hover:bg-action-hover text-sm font-medium w-fit disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {busy ? "…" : t("employees.save")}
-        </button>
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <Link
+            href="/employees"
+            className={`${SECONDARY_BUTTON_CLASS} no-underline`}
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+            {t("common.back")}
+          </Link>
+          <button
+            type="submit"
+            disabled={busy || (subReady && Boolean(snapshot?.quotas.employees.atLimit))}
+            title={
+              subReady && snapshot?.quotas.employees.atLimit
+                ? t("subscription.employeesLimitTooltip")
+                : undefined
+            }
+            className={PRIMARY_BUTTON_CLASS}
+          >
+            <Save className="h-4 w-4 shrink-0" aria-hidden />
+            {busy ? "…" : t("employees.save")}
+          </button>
+        </div>
       </form>
     </div>
   );

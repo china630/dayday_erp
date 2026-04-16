@@ -12,6 +12,7 @@ import {
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
+import { DepartmentModal } from "../../../components/hr/department-modal";
 
 type TreeNode = {
   id: string;
@@ -110,10 +111,8 @@ export default function HrStructurePage() {
   const [employees, setEmployees] = useState<EmployeeOpt[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [newName, setNewName] = useState("");
-  const [newParentId, setNewParentId] = useState("");
-  const [newManagerId, setNewManagerId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -142,30 +141,6 @@ export default function HrStructurePage() {
     if (!ready || !token) return;
     void load();
   }, [load, ready, token]);
-
-  async function createDept(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token || !newName.trim()) return;
-    setBusy(true);
-    const res = await apiFetch("/api/hr/departments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newName.trim(),
-        parentId: newParentId || null,
-        managerId: newManagerId || null,
-      }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      alert(await res.text());
-      return;
-    }
-    setNewName("");
-    setNewParentId("");
-    setNewManagerId("");
-    await load();
-  }
 
   async function onManagerChange(deptId: string, managerId: string) {
     if (!token) return;
@@ -203,9 +178,9 @@ export default function HrStructurePage() {
           <h1 className="text-2xl font-semibold text-gray-900">{t("hrStructure.title")}</h1>
           <p className="text-sm text-slate-500 mt-1">{t("hrStructure.subtitle")}</p>
         </div>
-        <a href="#yeni-bolme" className={PRIMARY_BUTTON_CLASS}>
+        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
           {t("hrStructure.newDeptButton")}
-        </a>
+        </button>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
@@ -229,55 +204,13 @@ export default function HrStructurePage() {
         )}
       </section>
 
-      <section
-        id="yeni-bolme"
-        className={`${CARD_CONTAINER_CLASS} p-6 border-[#2980B9]/25 scroll-mt-24`}
-      >
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("hrStructure.newDeptButton")}</h2>
-        <form noValidate onSubmit={(e) => void createDept(e)} className="grid gap-4 max-w-lg">
-          <div>
-            <span className={lbl}>{t("hrStructure.deptName")}</span>
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className={inputFieldClass}
-            />
-          </div>
-          <div>
-            <span className={lbl}>{t("hrStructure.parent")}</span>
-            <select
-              value={newParentId}
-              onChange={(e) => setNewParentId(e.target.value)}
-              className={inputFieldClass}
-            >
-              <option value="">{t("hrStructure.parentRoot")}</option>
-              {flat.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <span className={lbl}>{t("hrStructure.managerOptional")}</span>
-            <select
-              value={newManagerId}
-              onChange={(e) => setNewManagerId(e.target.value)}
-              className={inputFieldClass}
-            >
-              <option value="">{t("hrStructure.noManager")}</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.lastName} {e.firstName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} w-fit`}>
-            {t("hrStructure.create")}
-          </button>
-        </form>
-      </section>
+      <DepartmentModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        departments={flat}
+        employees={employees}
+        onCreated={() => void load()}
+      />
     </div>
   );
 }

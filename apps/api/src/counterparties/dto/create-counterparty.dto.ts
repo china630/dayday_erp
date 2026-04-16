@@ -5,17 +5,23 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
 } from "class-validator";
 
 export class CreateCounterpartyDto {
   @ApiProperty()
   @IsString()
+  @IsNotEmpty({ message: "name is required" })
+  @MaxLength(255)
   name!: string;
 
   @ApiProperty({ description: "VÖEN, 10 цифр" })
   @IsString()
+  @Matches(/^\d{10}$/, { message: "taxId must be 10 digits (VÖEN)" })
   taxId!: string;
 
   @ApiProperty({ enum: CounterpartyKind })

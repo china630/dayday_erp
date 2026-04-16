@@ -1327,7 +1327,7 @@ exports.resources = {
                 auditOkDraft: "Təsvir qaralaması saxlanıldı.",
                 auditOkApproved: "Təsvir keçirildi, düzəlişlər yaradıldı.",
                 auditHistoryTitle: "İnventarizasiya tarixçəsi",
-                auditHistoryLead: "Keçirilmiş təsvirlər («Keçirilib» statusu).",
+                auditHistoryLead: "Keçirilmiş təsvirlər («Təsdiqləndi» statusu).",
                 auditHistoryEmpty: "Hələ keçirilmiş inventarizasiya yoxdur.",
                 auditHistoryEmptyHint: "«İnventarizasiya» bölməsində təsvir yaradın və keçirin.",
                 auditHistoryNav: "Tarixçə",
@@ -1341,7 +1341,7 @@ exports.resources = {
                 auditThProductId: "Məhsul (id)",
                 auditHistoryBack: "Tarixçəyə",
                 auditStatusDraft: "Qaralama",
-                auditStatusApproved: "Keçirilib",
+                auditStatusApproved: "Təsdiqləndi",
             },
             fixedAssets: {
                 title: "Əsas vəsaitlər",

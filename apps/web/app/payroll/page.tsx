@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { ModulePageLinks } from "../../components/module-page-links";
@@ -9,6 +7,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -19,12 +18,21 @@ import { parseHrEmployeesResponse } from "../../lib/hr-employees-list";
 import { formatMoneyAzn } from "../../lib/format-money";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { EmptyState } from "../../components/empty-state";
+import { DepartmentSelect } from "../../components/payroll/department-select";
 import {
   CARD_CONTAINER_CLASS,
-  INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
+import { VacationCalcModal } from "../../components/payroll/vacation-calc-modal";
+import { SickCalcModal } from "../../components/payroll/sick-calc-modal";
+import { PayrollRunModal } from "../../components/payroll/payroll-run-modal";
+import { AbsenceModal } from "../../components/payroll/absence-modal";
+import {
+  EmployeeAbsencesModal,
+  type EmployeeAbsenceRow,
+} from "../../components/payroll/employee-absences-modal";
+import { Filter, Users } from "lucide-react";
 
 type RunRow = {
   id: string;
@@ -36,13 +44,15 @@ type RunRow = {
 
 type EmpOpt = { id: string; firstName: string; lastName: string };
 
+type AbsenceTypeOpt = { id: string; nameAz: string; code: string; formula: string };
+
 type AbsenceRow = {
   id: string;
-  type: string;
   startDate: string;
   endDate: string;
   note: string;
   employee: EmpOpt;
+  absenceType?: { id: string; nameAz: string; code: string; formula: string };
 };
 
 function decPositive(v: unknown): boolean {
@@ -50,32 +60,57 @@ function decPositive(v: unknown): boolean {
   return Number.isFinite(n) && n > 0;
 }
 
-function utcDayKey(y: number, m0: number, d: number): number {
-  return Date.UTC(y, m0, d);
+function parseIsoDateValueUtc(s: string): number | null {
+  const x = s.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(x)) return null;
+  const y = Number(x.slice(0, 4));
+  const m = Number(x.slice(5, 7)) - 1;
+  const d = Number(x.slice(8, 10));
+  const t = Date.UTC(y, m, d, 12, 0, 0, 0);
+  return Number.isFinite(t) ? t : null;
 }
 
-function parseIsoDayUtc(s: string): number {
+function parseMonthValue(v: string): { year: number; month: number } | null {
+  const s = v.trim();
+  if (!/^\d{4}-\d{2}$/.test(s)) return null;
+  const y = Number(s.slice(0, 4));
+  const m = Number(s.slice(5, 7));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return null;
+  return { year: y, month: m };
+}
+
+function monthValueFromYm(year: number, month: number): string {
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
+}
+
+function monthBoundsUtc(year: number, month: number): { startT: number; endT: number } {
+  const startT = Date.UTC(year, month - 1, 1, 12, 0, 0, 0);
+  const endT = Date.UTC(year, month, 0, 12, 0, 0, 0);
+  return { startT, endT };
+}
+
+function parseIsoDayUtcT(s: string): number {
   const x = s.slice(0, 10);
-  return Date.UTC(Number(x.slice(0, 4)), Number(x.slice(5, 7)) - 1, Number(x.slice(8, 10)));
+  return Date.UTC(
+    Number(x.slice(0, 4)),
+    Number(x.slice(5, 7)) - 1,
+    Number(x.slice(8, 10)),
+    12,
+    0,
+    0,
+    0,
+  );
 }
 
-function absenceCellKinds(
-  absences: AbsenceRow[],
-  y: number,
-  m0: number,
-  d: number,
-): { vacation: boolean; sick: boolean } {
-  const day = utcDayKey(y, m0, d);
-  let vacation = false;
-  let sick = false;
-  for (const a of absences) {
-    const a0 = parseIsoDayUtc(a.startDate);
-    const a1 = parseIsoDayUtc(a.endDate);
-    if (day < a0 || day > a1) continue;
-    if (a.type === "VACATION") vacation = true;
-    if (a.type === "SICK_LEAVE") sick = true;
-  }
-  return { vacation, sick };
+function overlapsMonth(a: AbsenceRow, year: number, month: number): boolean {
+  const { startT, endT } = monthBoundsUtc(year, month);
+  const a0 = parseIsoDayUtcT(a.startDate);
+  const a1 = parseIsoDayUtcT(a.endDate);
+  return a1 >= startT && a0 <= endT;
+}
+
+function formatMoneyNoSymbol(v: unknown): string {
+  return formatMoneyAzn(v).replace("₼", "").trim();
 }
 
 function PayrollPageInner() {
@@ -83,8 +118,6 @@ function PayrollPageInner() {
   const { token, ready } = useRequireAuth();
   const { user } = useAuth();
   const hideDestructive = isRestrictedUserRole(user?.role ?? undefined);
-  const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"runs" | "absences">("runs");
 
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -100,9 +133,19 @@ function PayrollPageInner() {
   const [absErr, setAbsErr] = useState<string | null>(null);
 
   const [calcEmp, setCalcEmp] = useState("");
-  const [calcFrom, setCalcFrom] = useState("");
-  const [calcTo, setCalcTo] = useState("");
-  const [calcOut, setCalcOut] = useState<Record<string, string> | null>(null);
+  const [absenceTypes, setAbsenceTypes] = useState<AbsenceTypeOpt[]>([]);
+  const [vacModalOpen, setVacModalOpen] = useState(false);
+  const [sickModalOpen, setSickModalOpen] = useState(false);
+  const [runModalOpen, setRunModalOpen] = useState(false);
+  const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
+
+  const [monthValue, setMonthValue] = useState(() =>
+    monthValueFromYm(new Date().getFullYear(), new Date().getMonth() + 1),
+  );
+  const [departmentId, setDepartmentId] = useState("");
+
+  const [employeeAbsencesOpen, setEmployeeAbsencesOpen] = useState(false);
+  const [employeeAbsencesEmp, setEmployeeAbsencesEmp] = useState<EmpOpt | null>(null);
 
   const [payrollJob, setPayrollJob] = useState<{
     jobId: string;
@@ -114,15 +157,17 @@ function PayrollPageInner() {
   const [approvedTimesheetId, setApprovedTimesheetId] = useState<string | null>(null);
   const [postingRunId, setPostingRunId] = useState<string | null>(null);
   const [deletingAbsenceId, setDeletingAbsenceId] = useState<string | null>(null);
-  const [calcSubmitting, setCalcSubmitting] = useState(false);
   const payrollBusy = payrollJob !== null;
 
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
+  useEffect(() => {
+    const parsed = parseMonthValue(monthValue);
+    if (!parsed) return;
+    setYear(parsed.year);
+    setMonth(parsed.month);
+  }, [monthValue]);
 
   useEffect(() => {
-    if (!token || tab !== "runs") return;
+    if (!token) return;
     void (async () => {
       const r = await apiFetch(
         `/api/hr/timesheets?year=${year}&month=${month}&create=false`,
@@ -142,7 +187,7 @@ function PayrollPageInner() {
         setImportTimesheet(false);
       }
     })();
-  }, [token, tab, year, month]);
+  }, [token, year, month]);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -170,9 +215,10 @@ function PayrollPageInner() {
     }
     setAbsLoading(true);
     setAbsErr(null);
-    const [er, ea] = await Promise.all([
+    const [er, ea, et] = await Promise.all([
       apiFetch("/api/hr/employees?page=1&pageSize=500"),
       apiFetch("/api/hr/absences"),
+      apiFetch("/api/hr/absence-types"),
     ]);
     if (!er.ok) setAbsErr(`${t("employees.loadErr")}: ${er.status}`);
     else {
@@ -181,6 +227,10 @@ function PayrollPageInner() {
     }
     if (!ea.ok) setAbsErr(`${t("payroll.loadErr")}: ${ea.status}`);
     else setAbsences(await ea.json());
+    if (et.ok) {
+      const types = (await et.json()) as AbsenceTypeOpt[];
+      setAbsenceTypes(types);
+    }
     setAbsLoading(false);
   }, [token, t]);
 
@@ -195,16 +245,11 @@ function PayrollPageInner() {
   }, [loadAbsencesBlock, ready, token]);
 
   useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "absences") setTab("absences");
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (tab !== "absences" || employees.length === 0) return;
+    if (employees.length === 0) return;
     setCalcEmp((prev) =>
       prev && employees.some((e) => e.id === prev) ? prev : employees[0].id,
     );
-  }, [tab, employees]);
+  }, [employees]);
 
   useEffect(() => {
     return () => {
@@ -255,11 +300,18 @@ function PayrollPageInner() {
     [load, t],
   );
 
-  async function createRun() {
+  async function createRun(override?: {
+    year?: number;
+    month?: number;
+    importTimesheet?: boolean;
+  }) {
     if (!token || createRunLoading || payrollBusy) return;
     setCreateRunLoading(true);
-    const body: Record<string, unknown> = { year, month };
-    if (importTimesheet && approvedTimesheetId) {
+    const y = override?.year ?? year;
+    const m = override?.month ?? month;
+    const imp = override?.importTimesheet ?? importTimesheet;
+    const body: Record<string, unknown> = { year: y, month: m };
+    if (imp && approvedTimesheetId) {
       body.timesheetId = approvedTimesheetId;
     }
     const res = await apiFetch("/api/hr/payroll/runs", {
@@ -363,32 +415,9 @@ function PayrollPageInner() {
     setDeletingAbsenceId(null);
   }
 
-  async function runVacationCalc(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token || !calcEmp || !calcFrom || !calcTo || calcSubmitting) return;
-    setCalcOut(null);
-    setCalcSubmitting(true);
-    const res = await apiFetch("/api/hr/absences/vacation-pay/calculate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        employeeId: calcEmp,
-        vacationStart: calcFrom,
-        vacationEnd: calcTo,
-      }),
-    });
-    if (!res.ok) {
-      alert(await res.text());
-      setCalcSubmitting(false);
-      return;
-    }
-    setCalcOut(await res.json());
-    setCalcSubmitting(false);
-  }
-
   type Slip = {
     id: string;
-    employee: EmpOpt & { kind?: string };
+    employee: EmpOpt & { kind?: string; departmentId?: string | null };
     gross: unknown;
     incomeTax: unknown;
     dsmfWorker: unknown;
@@ -413,6 +442,11 @@ function PayrollPageInner() {
       ? (detail as { slips: Slip[] }).slips
       : [];
 
+  const slipsFiltered = useMemo(() => {
+    if (!departmentId) return slips;
+    return slips.filter((s) => String(s.employee.departmentId ?? "") === departmentId);
+  }, [slips, departmentId]);
+
   const showContractorCol = slips.some(
     (s) =>
       s.employee.kind === "CONTRACTOR" || decPositive(s.contractorSocialWithheld),
@@ -426,11 +460,24 @@ function PayrollPageInner() {
       s.timesheetBusinessTripDays != null,
   );
 
-  const tabBtn =
-    "inline-flex h-8 min-h-8 items-center justify-center rounded-[2px] border px-4 text-[13px] font-semibold transition-colors";
-  const tabActive = "border-[#2980B9] bg-[#2980B9] text-white shadow-sm hover:bg-[#2471A3]";
-  const tabIdle =
-    "border-[#D5DADF] bg-white text-[#34495E] hover:bg-[#F4F5F7] hover:border-[#B8C0C8]";
+  const currentRun = useMemo(() => {
+    return runs.find((r) => r.year === year && r.month === month) ?? null;
+  }, [runs, year, month]);
+
+  useEffect(() => {
+    if (!currentRun) {
+      setDetailId(null);
+      setDetail(null);
+      return;
+    }
+    if (detailId === currentRun.id) return;
+    void openDetail(currentRun.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRun]);
+
+  const absencesInMonth = useMemo(() => {
+    return absences.filter((a) => overlapsMonth(a, year, month));
+  }, [absences, year, month]);
 
   if (!ready) {
     return (
@@ -449,28 +496,45 @@ function PayrollPageInner() {
           { href: "/employees", labelKey: "nav.employees" },
         ]}
       />
-      <div>
-        <h1 className="text-xl font-semibold text-[#34495E]">{t("payroll.title")}</h1>
-        <div className="flex flex-wrap items-center gap-2 mt-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
-            className={`${tabBtn} ${tab === "runs" ? tabActive : tabIdle}`}
-            onClick={() => setTab("runs")}
+            className={SECONDARY_BUTTON_CLASS}
+            onClick={() => setAbsenceModalOpen(true)}
+            disabled={employees.length === 0 || absenceTypes.length === 0}
           >
-            {t("payroll.tabRuns")}
+            Yeni qeyd
           </button>
           <button
             type="button"
-            className={`${tabBtn} ${tab === "absences" ? tabActive : tabIdle}`}
-            onClick={() => setTab("absences")}
+            className={SECONDARY_BUTTON_CLASS}
+            onClick={() => setVacModalOpen(true)}
+            disabled={employees.length === 0}
           >
-            {t("payroll.tabAbsences")}
+            {t("payroll.vacationCalc")}
           </button>
-          {tab === "absences" && (
-            <Link href="/payroll/absences/new" className={`${PRIMARY_BUTTON_CLASS} ml-auto`}>
-              + {t("payroll.newAbsenceBtn")}
-            </Link>
-          )}
+          <button
+            type="button"
+            className={SECONDARY_BUTTON_CLASS}
+            onClick={() => setSickModalOpen(true)}
+            disabled={employees.length === 0}
+          >
+            {t("payroll.sickCalcTitle")}
+          </button>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            onClick={() => setRunModalOpen(true)}
+            disabled={payrollBusy}
+          >
+            Yeni hesab
+          </button>
+        </div>
+        <div className="flex items-start gap-4">
+          <h1 className="text-xl font-semibold text-[#34495E]">
+            Məzuniyyət və Əmək haqqı
+          </h1>
         </div>
       </div>
 
@@ -493,263 +557,57 @@ function PayrollPageInner() {
         </div>
       )}
 
-      <section className={`${CARD_CONTAINER_CLASS} p-4`}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-[#34495E]">{t("payroll.calendarTitle")}</h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className={SECONDARY_BUTTON_CLASS}
-              onClick={() => {
-                if (calMonth <= 1) {
-                  setCalMonth(12);
-                  setCalYear((y) => y - 1);
-                } else setCalMonth((m) => m - 1);
-              }}
-            >
-              {t("payroll.calendarPrev")}
-            </button>
-            <span className="min-w-[8rem] text-center text-[13px] font-medium tabular-nums text-[#34495E]">
-              {calMonth}.{calYear}
-            </span>
-            <button
-              type="button"
-              className={SECONDARY_BUTTON_CLASS}
-              onClick={() => {
-                if (calMonth >= 12) {
-                  setCalMonth(1);
-                  setCalYear((y) => y + 1);
-                } else setCalMonth((m) => m + 1);
-              }}
-            >
-              {t("payroll.calendarNext")}
-            </button>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-900 inline-flex items-center gap-2">
+            <Users className="h-5 w-5 text-[#7F8C8D]" aria-hidden />
+            {t("payroll.slipsTitle")}
+          </h2>
+          <div className="flex flex-wrap items-end justify-end gap-4">
+            <Filter className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+            <label className="block text-[13px] font-medium text-[#34495E]">
+              Ay
+              <input
+                type="month"
+                value={monthValue}
+                onChange={(e) => setMonthValue(e.target.value)}
+                className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
+              />
+            </label>
+            <DepartmentSelect
+              value={departmentId}
+              onChange={setDepartmentId}
+              className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px] min-w-[220px]"
+            />
           </div>
+          {currentRun ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#34495E] bg-[#EBEDF0] px-2 py-1 rounded-[2px] border border-[#D5DADF]">
+                {currentRun.status}
+              </span>
+              {currentRun.status === "DRAFT" ? (
+                <button
+                  type="button"
+                  className={PRIMARY_BUTTON_CLASS}
+                  disabled={payrollBusy || postingRunId === currentRun.id}
+                  onClick={() => void postRun(currentRun.id)}
+                >
+                  {postingRunId === currentRun.id ? "…" : t("payroll.post")}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        <p className="mb-3 text-xs text-[#7F8C8D]">{t("payroll.calendarHint")}</p>
-        {absLoading && absences.length === 0 ? (
-          <p className="text-sm text-slate-500">{t("common.loading")}</p>
+        {!detailId ? (
+          <EmptyState title={t("payroll.emptyRuns")} description={t("payroll.emptyRunsHint")} />
+        ) : slipsFiltered.length === 0 ? (
+          <div className={`${CARD_CONTAINER_CLASS} p-4 text-sm text-slate-600`}>
+            {departmentId ? "No employees in this department." : t("payroll.emptyRunsHint")}
+          </div>
         ) : (
           <>
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-500 mb-1">
-              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
-                <div key={w}>{w}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {(() => {
-                const m0 = calMonth - 1;
-                const first = new Date(Date.UTC(calYear, m0, 1));
-                const dow = first.getUTCDay();
-                const mondayStart = (dow + 6) % 7;
-                const daysInMonth = new Date(Date.UTC(calYear, calMonth, 0)).getUTCDate();
-                const cells: ReactElement[] = [];
-                for (let i = 0; i < mondayStart; i++) {
-                  cells.push(<div key={`e-${i}`} className="aspect-square" />);
-                }
-                for (let d = 1; d <= daysInMonth; d++) {
-                  const { vacation, sick } = absenceCellKinds(absences, calYear, m0, d);
-                  let bg = "bg-slate-50";
-                  if (vacation && sick) bg = "bg-gradient-to-br from-blue-200 to-yellow-200";
-                  else if (vacation) bg = "bg-blue-200";
-                  else if (sick) bg = "bg-yellow-200";
-                  const labels = absences
-                    .filter((a) => {
-                      const day = utcDayKey(calYear, m0, d);
-                      const a0 = parseIsoDayUtc(a.startDate);
-                      const a1 = parseIsoDayUtc(a.endDate);
-                      return day >= a0 && day <= a1;
-                    })
-                    .map((a) => `${a.employee.lastName} ${a.employee.firstName?.[0] ?? ""}.`);
-                  cells.push(
-                    <div
-                      key={d}
-                      title={labels.length ? labels.join(", ") : undefined}
-                      className={`aspect-square rounded-md flex flex-col items-center justify-center text-xs font-medium text-slate-800 border border-slate-100 ${bg}`}
-                    >
-                      {d}
-                    </div>,
-                  );
-                }
-                return cells;
-              })()}
-            </div>
-            <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-600">
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded bg-blue-200 border border-slate-200" />
-                {t("payroll.calendarLegendVacation")}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded bg-yellow-200 border border-slate-200" />
-                {t("payroll.calendarLegendSick")}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded bg-gradient-to-br from-blue-200 to-yellow-200 border border-slate-200" />
-                {t("payroll.calendarLegendVacation")} + {t("payroll.calendarLegendSick")}
-              </span>
-            </div>
-          </>
-        )}
-      </section>
-
-      {tab === "runs" && (
-        <>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-
-          <section className={`${CARD_CONTAINER_CLASS} p-6`}>
-            <h2 className="mb-4 text-base font-semibold text-[#34495E]">{t("payroll.newRun")}</h2>
-            <div className="flex flex-wrap items-end gap-4">
-              <label className="block text-[13px] font-medium text-[#34495E]">
-                {t("payroll.year")}
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  className={`mt-1 block w-28 ${INPUT_BORDERED_CLASS} py-1.5`}
-                />
-              </label>
-              <label className="block text-[13px] font-medium text-[#34495E]">
-                {t("payroll.month")}
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                  className={`mt-1 block w-24 ${INPUT_BORDERED_CLASS} py-1.5`}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void createRun()}
-                disabled={createRunLoading || payrollBusy}
-                className={PRIMARY_BUTTON_CLASS}
-              >
-                {createRunLoading ? "…" : t("payroll.createDraft")}
-              </button>
-            </div>
-            {approvedTimesheetId && (
-              <label className="mt-4 flex items-start gap-2 text-sm text-slate-700 cursor-pointer max-w-xl">
-                <input
-                  type="checkbox"
-                  checked={importTimesheet}
-                  onChange={(e) => setImportTimesheet(e.target.checked)}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="font-medium">{t("payroll.importTimesheet")}</span>
-                  <span className="block text-slate-500 text-xs mt-0.5">
-                    {t("payroll.importTimesheetHint")}
-                  </span>
-                </span>
-              </label>
-            )}
-          </section>
-
-          {loading && <p className="text-gray-600">{t("common.loading")}</p>}
-          {!loading && !error && runs.length === 0 && (
-            <EmptyState
-              title={t("payroll.emptyRuns")}
-              description={t("payroll.emptyRunsHint")}
-            />
-          )}
-          {!loading && runs.length > 0 && (
-            <>
               <div className="md:hidden space-y-3">
-                {runs.map((r) => (
-                  <div
-                    key={r.id}
-                    className={`${CARD_CONTAINER_CLASS} space-y-2 p-4 text-sm`}
-                  >
-                    <div className="font-semibold text-gray-900">
-                      {t("payroll.thPeriod")}: {r.month}.{r.year}
-                    </div>
-                    <div>
-                      {t("payroll.thStatus")}: {r.status}
-                    </div>
-                    <div>
-                      {t("payroll.thSlips")}: {r._count.slips}
-                    </div>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <button
-                        type="button"
-                        className="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10"
-                        onClick={() => void openDetail(r.id)}
-                      >
-                        {t("payroll.details")}
-                      </button>
-                      {r.status === "DRAFT" && (
-                        <button
-                          type="button"
-                          className="text-sm px-3 py-1.5 rounded-md bg-action text-white hover:bg-action-hover disabled:opacity-60"
-                          disabled={payrollBusy || postingRunId === r.id}
-                          onClick={() => void postRun(r.id)}
-                        >
-                          {postingRunId === r.id ? "…" : t("payroll.post")}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className={`hidden md:block overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-                <table className="text-sm min-w-full">
-                  <thead>
-                    <tr className="border-b border-[#D5DADF]">
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                        {t("payroll.thPeriod")}
-                      </th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                        {t("payroll.thStatus")}
-                      </th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                        {t("payroll.thSlips")}
-                      </th>
-                      <th className="p-2 text-[13px] font-semibold text-[#34495E]" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {runs.map((r) => (
-                      <tr key={r.id} className="border-t border-[#EBEDF0]">
-                        <td className="p-2">
-                          {r.month}.{r.year}
-                        </td>
-                        <td className="p-2">{r.status}</td>
-                        <td className="p-2">{r._count.slips}</td>
-                        <td className="p-2">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10"
-                              onClick={() => void openDetail(r.id)}
-                            >
-                              {t("payroll.details")}
-                            </button>
-                            {r.status === "DRAFT" && (
-                              <button
-                                type="button"
-                                className="text-sm px-2 py-1 rounded-md bg-action text-white hover:bg-action-hover disabled:opacity-60"
-                                disabled={payrollBusy || postingRunId === r.id}
-                                onClick={() => void postRun(r.id)}
-                              >
-                                {postingRunId === r.id ? "…" : t("payroll.post")}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-
-          {detailId && slips.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-gray-900">{t("payroll.slipsTitle")}</h2>
-              <div className="md:hidden space-y-3">
-                {slips.map((s) => (
+                {slipsFiltered.map((s) => (
                   <div
                     key={s.id}
                     className={`${CARD_CONTAINER_CLASS} space-y-1.5 p-4 text-sm`}
@@ -764,28 +622,28 @@ function PayrollPageInner() {
                         : t("employees.kindEmployee")}
                     </div>
                     <div>
-                      {t("employees.thGross")}: {formatMoneyAzn(s.gross)}
+                      {t("employees.thGross")}: {formatMoneyNoSymbol(s.gross)}
                     </div>
                     <div>
-                      {t("payroll.thPit")}: {formatMoneyAzn(s.incomeTax)}
+                      {t("payroll.thPit")}: {formatMoneyNoSymbol(s.incomeTax)}
                     </div>
                     {showContractorCol && (
                       <div>
                         {t("payroll.thContractorSoc")}:{" "}
-                        {formatMoneyAzn(s.contractorSocialWithheld ?? 0)}
+                        {formatMoneyNoSymbol(s.contractorSocialWithheld ?? 0)}
                       </div>
                     )}
                     <div>
                       {t("payroll.thDsmfW")} / {t("payroll.thDsmfE")}:{" "}
-                      {formatMoneyAzn(s.dsmfWorker)} / {formatMoneyAzn(s.dsmfEmployer)}
+                      {formatMoneyNoSymbol(s.dsmfWorker)} / {formatMoneyNoSymbol(s.dsmfEmployer)}
                     </div>
                     <div>
                       {t("payroll.thItsW")} / {t("payroll.thItsE")}:{" "}
-                      {formatMoneyAzn(s.itsWorker)} / {formatMoneyAzn(s.itsEmployer)}
+                      {formatMoneyNoSymbol(s.itsWorker)} / {formatMoneyNoSymbol(s.itsEmployer)}
                     </div>
                     <div>
                       {t("payroll.thUnempW")} / {t("payroll.thUnempE")}:{" "}
-                      {formatMoneyAzn(s.unemploymentWorker)} / {formatMoneyAzn(s.unemploymentEmployer)}
+                      {formatMoneyNoSymbol(s.unemploymentWorker)} / {formatMoneyNoSymbol(s.unemploymentEmployer)}
                     </div>
                     {showTimesheetCols && (
                       <div className="text-xs text-slate-600 pt-1 border-t border-dashed border-slate-200">
@@ -795,7 +653,7 @@ function PayrollPageInner() {
                       </div>
                     )}
                     <div className="font-medium text-primary pt-1 border-t border-slate-100">
-                      {t("payroll.thNet")}: {formatMoneyAzn(s.net)}
+                      {t("payroll.thNet")}: {formatMoneyNoSymbol(s.net)}
                     </div>
                   </div>
                 ))}
@@ -804,35 +662,102 @@ function PayrollPageInner() {
                 <table className="text-sm min-w-full">
                   <thead>
                     <tr className="border-b border-[#D5DADF]">
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">{t("payroll.thEmployee")}</th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">{t("employees.thKind")}</th>
-                      {showTimesheetCols && (
-                        <>
-                          <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thTsWork")}</th>
-                          <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thTsVac")}</th>
-                          <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thTsSick")}</th>
-                          <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thTsTrip")}</th>
-                        </>
-                      )}
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("employees.thGross")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thPit")}</th>
+                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                        {t("payroll.thEmployee")}
+                      </th>
+                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                        {t("employees.thKind")}
+                      </th>
+                      {showTimesheetCols ? (
+                        <th
+                          className="p-2 text-center text-[12px] font-semibold text-[#34495E] border-l border-[#D5DADF]"
+                          colSpan={4}
+                        >
+                          Tabel (gün)
+                        </th>
+                      ) : null}
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                        {t("employees.thGross")} (₼)
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                        {t("payroll.thPit")} (₼)
+                      </th>
                       {showContractorCol && (
-                        <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thContractorSoc")}</th>
+                        <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                          {t("payroll.thContractorSoc")} (₼)
+                        </th>
                       )}
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thDsmfW")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thDsmfE")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thItsW")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thItsE")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thUnempW")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thUnempE")}</th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">{t("payroll.thNet")}</th>
+                      <th
+                        className="p-2 text-center text-[12px] font-semibold text-[#34495E] border-l border-[#D5DADF]"
+                        colSpan={3}
+                      >
+                        İşçi (₼)
+                      </th>
+                      <th
+                        className="p-2 text-center text-[12px] font-semibold text-[#34495E] border-l border-[#D5DADF]"
+                        colSpan={3}
+                      >
+                        İşəgötürən (₼)
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-l border-[#D5DADF]" rowSpan={3}>
+                        {t("payroll.thNet")} (₼)
+                      </th>
+                    </tr>
+                    <tr className="border-b border-[#D5DADF]">
+                      {showTimesheetCols ? (
+                        <>
+                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10 border-l border-[#D5DADF]">
+                            W
+                          </th>
+                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10">
+                            M
+                          </th>
+                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10">
+                            X
+                          </th>
+                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10 border-r border-[#D5DADF]">
+                            E
+                          </th>
+                        </>
+                      ) : null}
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-l border-[#D5DADF]">
+                        DSMF
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                        İTS
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-r border-[#D5DADF]">
+                        İŞS
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-l border-[#D5DADF]">
+                        DSMF
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                        İTS
+                      </th>
+                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-r border-[#D5DADF]">
+                        İŞS
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {slips.map((s) => (
+                    {slipsFiltered.map((s) => (
                       <tr key={s.id} className="border-t border-[#EBEDF0]">
                         <td className="p-2">
-                          {s.employee.lastName} {s.employee.firstName}
+                          <button
+                            type="button"
+                            className="text-action hover:text-primary hover:underline text-left"
+                            onClick={() => {
+                              setEmployeeAbsencesEmp({
+                                id: s.employee.id,
+                                firstName: s.employee.firstName,
+                                lastName: s.employee.lastName,
+                              });
+                              setEmployeeAbsencesOpen(true);
+                            }}
+                          >
+                            {s.employee.lastName} {s.employee.firstName}
+                          </button>
                         </td>
                         <td className="p-2">
                           {s.employee.kind === "CONTRACTOR"
@@ -841,184 +766,175 @@ function PayrollPageInner() {
                         </td>
                         {showTimesheetCols && (
                           <>
-                            <td className="p-2 text-right tabular-nums">{s.timesheetWorkDays ?? "—"}</td>
-                            <td className="p-2 text-right tabular-nums">{s.timesheetVacationDays ?? "—"}</td>
-                            <td className="p-2 text-right tabular-nums">{s.timesheetSickDays ?? "—"}</td>
-                            <td className="p-2 text-right tabular-nums">{s.timesheetBusinessTripDays ?? "—"}</td>
+                            <td className="p-1 text-center tabular-nums w-10 min-w-10">{s.timesheetWorkDays ?? "—"}</td>
+                            <td className="p-1 text-center tabular-nums w-10 min-w-10">{s.timesheetVacationDays ?? "—"}</td>
+                            <td className="p-1 text-center tabular-nums w-10 min-w-10">{s.timesheetSickDays ?? "—"}</td>
+                            <td className="p-1 text-center tabular-nums w-10 min-w-10 border-r border-[#D5DADF]">{s.timesheetBusinessTripDays ?? "—"}</td>
                           </>
                         )}
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.gross)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.incomeTax)}</td>
+                        <td className="p-2 text-right font-mono">{formatMoneyNoSymbol(s.gross)}</td>
+                        <td className="p-2 text-right font-mono">{formatMoneyNoSymbol(s.incomeTax)}</td>
                         {showContractorCol && (
                           <td className="p-2 text-right font-mono">
-                            {formatMoneyAzn(s.contractorSocialWithheld ?? 0)}
+                            {formatMoneyNoSymbol(s.contractorSocialWithheld ?? 0)}
                           </td>
                         )}
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.dsmfWorker)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.dsmfEmployer)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.itsWorker)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.itsEmployer)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.unemploymentWorker)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyAzn(s.unemploymentEmployer)}</td>
-                        <td className="p-2 text-right font-mono font-medium">{formatMoneyAzn(s.net)}</td>
+                        <td className="p-2 text-right font-mono border-l border-[#D5DADF]">
+                          {formatMoneyNoSymbol(s.dsmfWorker)}
+                        </td>
+                        <td className="p-2 text-right font-mono">
+                          {formatMoneyNoSymbol(s.itsWorker)}
+                        </td>
+                        <td className="p-2 text-right font-mono border-r border-[#D5DADF]">
+                          {formatMoneyNoSymbol(s.unemploymentWorker)}
+                        </td>
+                        <td className="p-2 text-right font-mono border-l border-[#D5DADF]">
+                          {formatMoneyNoSymbol(s.dsmfEmployer)}
+                        </td>
+                        <td className="p-2 text-right font-mono">
+                          {formatMoneyNoSymbol(s.itsEmployer)}
+                        </td>
+                        <td className="p-2 text-right font-mono border-r border-[#D5DADF]">
+                          {formatMoneyNoSymbol(s.unemploymentEmployer)}
+                        </td>
+                        <td className="p-2 text-right font-mono font-medium border-l border-[#D5DADF]">
+                          {formatMoneyNoSymbol(s.net)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </section>
-          )}
-        </>
-      )}
+          </>
+        )}
+      </section>
 
-      {tab === "absences" && (
-        <div className="space-y-8">
-          {absErr && <p className="text-red-600 text-sm">{absErr}</p>}
-          {absLoading && <p className="text-gray-600">{t("common.loading")}</p>}
+      <section className="space-y-3">
+        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {loading && <p className="text-gray-600">{t("common.loading")}</p>}
+        {!loading && !error && !currentRun && (
+          <EmptyState title={t("payroll.emptyRuns")} description={t("payroll.emptyRunsHint")} />
+        )}
+      </section>
 
-          <section className={`${CARD_CONTAINER_CLASS} p-6`}>
-            <h2 className="mb-2 text-base font-semibold text-[#34495E]">{t("payroll.vacationCalc")}</h2>
-            <p className="mb-4 text-[13px] text-[#7F8C8D]">{t("payroll.vacationCalcHint")}</p>
-            <form onSubmit={(e) => void runVacationCalc(e)} className="grid gap-3 max-w-md">
-              <label className="block text-sm font-medium text-gray-700">
-                {t("payroll.pickEmployee")}
-                <select
-                  className="block w-full mt-1 rounded-md border border-slate-200 px-2 py-1.5"
-                  value={calcEmp}
-                  onChange={(e) => setCalcEmp(e.target.value)}
-                >
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.lastName} {e.firstName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-medium text-gray-700">
-                {t("payroll.absenceFrom")}
-                <input
-                  type="date"
-                  className="block w-full mt-1 rounded-md border border-slate-200 px-2 py-1.5"
-                  value={calcFrom}
-                  onChange={(e) => setCalcFrom(e.target.value)}
-                />
-              </label>
-              <label className="block text-sm font-medium text-gray-700">
-                {t("payroll.absenceTo")}
-                <input
-                  type="date"
-                  className="block w-full mt-1 rounded-md border border-slate-200 px-2 py-1.5"
-                  value={calcTo}
-                  onChange={(e) => setCalcTo(e.target.value)}
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={calcSubmitting}
-                className="bg-action text-white px-4 py-2 rounded-lg hover:bg-action-hover text-sm font-medium w-fit disabled:opacity-60"
-              >
-                {calcSubmitting ? "…" : t("payroll.calcBtn")}
-              </button>
-            </form>
-            {calcOut && (
-              <div className="mt-4 p-4 rounded-lg bg-slate-50 text-sm space-y-1">
-                <div className="font-semibold text-gray-900">{t("payroll.calcResult")}</div>
-                <div>
-                  {formatMoneyAzn(calcOut.vacationPayAmount)} AZN ({calcOut.calendarDays}{" "}
-                  {t("payroll.absenceThPeriod").toLowerCase()})
-                </div>
-                <div className="text-slate-600 text-xs">
-                  Ø мес.: {calcOut.averageMonthlyGross} · Ø день: {calcOut.averageDailyGross} · мес. в
-                  базе: {calcOut.monthsInAverage}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {!absLoading && absences.length > 0 && (
-            <>
-              <div className="md:hidden space-y-3">
-                {absences.map((a) => (
-                  <div
-                    key={a.id}
-                    className={`${CARD_CONTAINER_CLASS} space-y-1 p-4 text-sm`}
-                  >
-                    <div className="font-medium text-gray-900">
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-[#34495E]">{t("payroll.tabAbsences")}</h2>
+        {absErr && <p className="text-red-600 text-sm">{absErr}</p>}
+        {absLoading && <p className="text-gray-600">{t("common.loading")}</p>}
+        {!absLoading && absencesInMonth.length === 0 ? (
+          <div className={`${CARD_CONTAINER_CLASS} p-4 text-sm text-slate-600`}>
+            —
+          </div>
+        ) : (
+          <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
+            <table className="text-sm min-w-full">
+              <thead>
+                <tr className="border-b border-[#D5DADF]">
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("payroll.absenceThEmployee")}
+                  </th>
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("payroll.absenceThType")}
+                  </th>
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("payroll.absenceThPeriod")}
+                  </th>
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("payroll.absenceNote")}
+                  </th>
+                  {!hideDestructive ? (
+                    <th className="p-2 text-[13px] font-semibold text-[#34495E]" />
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {absencesInMonth.map((a) => (
+                  <tr key={a.id} className="border-t border-[#EBEDF0]">
+                    <td className="p-2">
                       {a.employee.lastName} {a.employee.firstName}
-                    </div>
-                    <div>
-                      {t("payroll.absenceThType")}:{" "}
-                      {a.type === "VACATION"
-                        ? t("payroll.absenceVacation")
-                        : t("payroll.absenceSick")}
-                    </div>
-                    <div>
-                      {t("payroll.absenceThPeriod")}: {String(a.startDate).slice(0, 10)} —{" "}
+                    </td>
+                    <td className="p-2">
+                      {a.absenceType?.nameAz ?? t("payroll.absenceTypeUnknown")}
+                    </td>
+                    <td className="p-2 whitespace-nowrap">
+                      {String(a.startDate).slice(0, 10)} —{" "}
                       {String(a.endDate).slice(0, 10)}
-                    </div>
-                    <div>
-                      {t("payroll.absenceNote")}: {a.note || "—"}
-                    </div>
-                    {!hideDestructive && (
-                      <button
-                        type="button"
-                        className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md hover:bg-red-50 mt-2 disabled:opacity-60"
-                        disabled={deletingAbsenceId !== null}
-                        onClick={() => void removeAbsence(a.id)}
-                      >
-                        {deletingAbsenceId === a.id ? "…" : t("payroll.absenceDelete")}
-                      </button>
-                    )}
-                  </div>
+                    </td>
+                    <td className="p-2">{a.note || "—"}</td>
+                    {!hideDestructive ? (
+                      <td className="p-2">
+                        <button
+                          type="button"
+                          className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md hover:bg-red-50 disabled:opacity-60"
+                          disabled={deletingAbsenceId !== null}
+                          onClick={() => void removeAbsence(a.id)}
+                        >
+                          {deletingAbsenceId === a.id ? "…" : t("payroll.absenceDelete")}
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
                 ))}
-              </div>
-              <div className={`hidden md:block overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-                <table className="text-sm min-w-full">
-                  <thead>
-                    <tr className="border-b border-[#D5DADF]">
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">{t("payroll.absenceThEmployee")}</th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">{t("payroll.absenceThType")}</th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">{t("payroll.absenceThPeriod")}</th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">{t("payroll.absenceNote")}</th>
-                      {!hideDestructive && <th className="p-2 text-[13px] font-semibold text-[#34495E]" />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {absences.map((a) => (
-                      <tr key={a.id} className="border-t border-[#EBEDF0]">
-                        <td className="p-2">
-                          {a.employee.lastName} {a.employee.firstName}
-                        </td>
-                        <td className="p-2">
-                          {a.type === "VACATION"
-                            ? t("payroll.absenceVacation")
-                            : t("payroll.absenceSick")}
-                        </td>
-                        <td className="p-2 whitespace-nowrap">
-                          {String(a.startDate).slice(0, 10)} — {String(a.endDate).slice(0, 10)}
-                        </td>
-                        <td className="p-2">{a.note || "—"}</td>
-                        {!hideDestructive && (
-                          <td className="p-2">
-                            <button
-                              type="button"
-                              className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md hover:bg-red-50 disabled:opacity-60"
-                              disabled={deletingAbsenceId !== null}
-                              onClick={() => void removeAbsence(a.id)}
-                            >
-                              {deletingAbsenceId === a.id ? "…" : t("payroll.absenceDelete")}
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <VacationCalcModal
+        open={vacModalOpen}
+        onClose={() => setVacModalOpen(false)}
+        employees={employees}
+        absenceTypes={absenceTypes}
+        defaultEmployeeId={calcEmp}
+      />
+      <SickCalcModal
+        open={sickModalOpen}
+        onClose={() => setSickModalOpen(false)}
+        employees={employees}
+        defaultEmployeeId={calcEmp}
+      />
+      <PayrollRunModal
+        open={runModalOpen}
+        onClose={() => setRunModalOpen(false)}
+        busy={createRunLoading || payrollBusy}
+        defaultYear={year}
+        defaultMonth={month}
+        timesheetApprovedAvailable={Boolean(approvedTimesheetId)}
+        onCreate={({ year: y, month: m, importTimesheet: it }) => {
+          setYear(y);
+          setMonth(m);
+          setImportTimesheet(Boolean(it));
+          void createRun({
+            year: y,
+            month: m,
+            importTimesheet: Boolean(it),
+          }).then(() => setRunModalOpen(false));
+        }}
+      />
+      <AbsenceModal
+        open={absenceModalOpen}
+        onClose={() => setAbsenceModalOpen(false)}
+        employees={employees}
+        types={absenceTypes}
+        defaultEmployeeId={calcEmp}
+        onSaved={() => {
+          void loadAbsencesBlock();
+        }}
+      />
+
+      <EmployeeAbsencesModal
+        open={employeeAbsencesOpen}
+        onClose={() => setEmployeeAbsencesOpen(false)}
+        employeeId={employeeAbsencesEmp?.id ?? null}
+        employeeLabel={
+          employeeAbsencesEmp
+            ? `${employeeAbsencesEmp.lastName} ${employeeAbsencesEmp.firstName}`
+            : undefined
+        }
+        year={year}
+        month={month}
+      />
     </div>
   );
 }

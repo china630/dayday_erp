@@ -3,6 +3,7 @@ import { HttpException, HttpStatus } from "@nestjs/common";
 export type QuotaKind = "maxEmployees" | "maxInvoicesPerMonth" | "maxOrganizations";
 
 export type QuotaExceededBody = {
+  /** HTTP 402 — см. PRD §7.12.3.1 / TZ §14.8.7 */
   statusCode: number;
   code: "QUOTA_EXCEEDED";
   quota: QuotaKind;
@@ -47,13 +48,13 @@ export class QuotaExceededException extends HttpException {
     current: number,
   ) {
     const body: QuotaExceededBody = {
-      statusCode: HttpStatus.FORBIDDEN,
+      statusCode: HttpStatus.PAYMENT_REQUIRED,
       code: "QUOTA_EXCEEDED",
       quota,
       limit,
       current,
       message: messages(quota, limit, current),
     };
-    super(body, HttpStatus.FORBIDDEN);
+    super(body, HttpStatus.PAYMENT_REQUIRED);
   }
 }

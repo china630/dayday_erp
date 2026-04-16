@@ -12,11 +12,11 @@ export const DESIGN = {
 
 /** Toolbar / form primary actions — 32px height, 2px radius per DESIGN.md (v8.9.2: явный контраст) */
 export const PRIMARY_BUTTON_CLASS =
-  "inline-flex h-8 min-h-8 shrink-0 items-center justify-center rounded-[2px] px-4 text-[13px] font-semibold text-white bg-[#2980B9] shadow-sm transition hover:bg-[#2471A3] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9] disabled:opacity-50 disabled:pointer-events-none";
+  "inline-flex h-8 min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-[2px] px-4 text-[13px] font-semibold text-white bg-[#2980B9] shadow-sm transition hover:bg-[#2471A3] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9] disabled:opacity-50 disabled:pointer-events-none";
 
 /** Secondary outline button (same height) */
 export const SECONDARY_BUTTON_CLASS =
-  "inline-flex h-8 shrink-0 items-center justify-center rounded-[2px] border border-[#D5DADF] bg-white px-4 text-[13px] font-medium text-[#34495E] shadow-sm transition hover:bg-[#F4F5F7] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9]/40";
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[2px] border border-[#D5DADF] bg-white px-4 text-[13px] font-medium text-[#34495E] shadow-sm transition hover:bg-[#F4F5F7] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9]/40";
 
 /** Cards / panels — 2px radius, neutral border */
 export const CARD_CONTAINER_CLASS =

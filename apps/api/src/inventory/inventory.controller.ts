@@ -12,7 +12,9 @@ import { CreateWarehouseDto } from "./dto/create-warehouse.dto";
 import { PatchInventorySettingsDto } from "./dto/patch-inventory-settings.dto";
 import { AdjustStockDto } from "./dto/adjust-stock.dto";
 import { PurchaseStockDto } from "./dto/purchase-stock.dto";
+import { SurplusStockDocumentDto } from "./dto/surplus-stock-document.dto";
 import { TransferStockDto } from "./dto/transfer-stock.dto";
+import { WriteOffStockDocumentDto } from "./dto/write-off-stock-document.dto";
 import { InventoryService } from "./inventory.service";
 
 @ApiTags("inventory")
@@ -105,5 +107,46 @@ export class InventoryController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.inventory.adjustStock(organizationId, dto, requireOrgRole(user));
+  }
+
+  @Post("documents/surplus")
+  @ApiOperation({ summary: "Документ: оприходование излишков" })
+  surplusDocument(
+    @OrganizationId() organizationId: string,
+    @Body() dto: SurplusStockDocumentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.inventory.adjustStock(
+      organizationId,
+      {
+        warehouseId: dto.warehouseId,
+        productId: dto.productId,
+        quantity: dto.quantity,
+        type: "IN",
+        inventoryAccountCode: dto.inventoryAccountCode,
+        unitPrice: dto.unitPrice,
+      },
+      requireOrgRole(user),
+    );
+  }
+
+  @Post("documents/write-off")
+  @ApiOperation({ summary: "Документ: списание товаров" })
+  writeOffDocument(
+    @OrganizationId() organizationId: string,
+    @Body() dto: WriteOffStockDocumentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.inventory.adjustStock(
+      organizationId,
+      {
+        warehouseId: dto.warehouseId,
+        productId: dto.productId,
+        quantity: dto.quantity,
+        type: "OUT",
+        inventoryAccountCode: dto.inventoryAccountCode,
+      },
+      requireOrgRole(user),
+    );
   }
 }

@@ -1,6 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsNumber, IsString } from "class-validator";
+import { IsBoolean, IsNumber, IsOptional, IsString } from "class-validator";
 
 export class CreateProductDto {
   @ApiProperty()
@@ -20,4 +20,9 @@ export class CreateProductDto {
   @Type(() => Number)
   @IsNumber()
   vatRate!: number;
+
+  @ApiPropertyOptional({ description: "Услуга (без складского учёта в UI / печать)" })
+  @IsOptional()
+  @IsBoolean()
+  isService?: boolean;
 }

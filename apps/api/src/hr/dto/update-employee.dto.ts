@@ -44,6 +44,11 @@ export class UpdateEmployeeDto {
   @IsString()
   lastName?: string;
 
+  @ApiPropertyOptional({ description: "Ata adı (отчество)" })
+  @IsOptional()
+  @IsString()
+  patronymic?: string;
+
   @ApiPropertyOptional({ description: "Штатная должность" })
   @IsOptional()
   @IsUUID()
@@ -69,7 +74,7 @@ export class UpdateEmployeeDto {
   contractorMonthlySocialAzn?: number | null;
 
   @ApiPropertyOptional({
-    description: "Субсчёт подотчётного лица (244.xx) для кассы RKO",
+    description: "Субсчёт подотчётного лица (244.xx) для кассы MXO",
     example: "244.01",
   })
   @IsOptional()

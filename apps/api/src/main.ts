@@ -7,6 +7,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
 import cookieParser from "cookie-parser";
 import { HEALTH_CHECK_PAYLOAD } from "./common/health-payload";
+import { HttpApiExceptionFilter } from "./common/http-api-exception.filter";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
@@ -74,6 +75,7 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+  app.useGlobalFilters(new HttpApiExceptionFilter());
   app.setGlobalPrefix("api");
 
   const swaggerConfig = new DocumentBuilder()

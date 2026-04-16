@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth-context";
+import { useOrgPermissions } from "../lib/use-org-permissions";
 import type { OrgSummary } from "../lib/auth-context";
 import { useSubscription } from "../lib/subscription-context";
+import { apiFetch } from "../lib/api-client";
 import { HeaderSubscriptionStrip } from "../components/header-subscription-strip";
 import { TrialBanner } from "../components/trial-banner";
 import { useLedger } from "../lib/ledger-context";
@@ -25,6 +27,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  Coins,
   Contact2,
   CreditCard,
   Factory,
@@ -75,9 +78,11 @@ function LockGlyph({ className }: { className?: string }) {
 function QuickActionsMenuItems({
   onNavigate,
   manufacturingLocked,
+  canPostAccounting,
 }: {
   onNavigate: () => void;
   manufacturingLocked: boolean;
+  canPostAccounting: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -90,14 +95,16 @@ function QuickActionsMenuItems({
       >
         {t("quickActions.invoice")}
       </Link>
-      <Link
-        href="/expenses/quick"
-        className={quickActionItemClass}
-        role="menuitem"
-        onClick={onNavigate}
-      >
-        {t("quickActions.expense")}
-      </Link>
+      {canPostAccounting ? (
+        <Link
+          href="/expenses/quick"
+          className={quickActionItemClass}
+          role="menuitem"
+          onClick={onNavigate}
+        >
+          {t("quickActions.expense")}
+        </Link>
+      ) : null}
       <Link
         href="/employees/new"
         className={quickActionItemClass}
@@ -115,7 +122,7 @@ function QuickActionsMenuItems({
           <LockGlyph className="h-4 w-4 shrink-0 text-amber-600" />
           {t("quickActions.release")}
         </span>
-      ) : (
+      ) : canPostAccounting ? (
         <Link
           href="/manufacturing/release"
           className={quickActionItemClass}
@@ -124,15 +131,17 @@ function QuickActionsMenuItems({
         >
           {t("quickActions.release")}
         </Link>
-      )}
+      ) : null}
     </>
   );
 }
 
 function QuickActionsDropdown({
   manufacturingLocked,
+  canPostAccounting,
 }: {
   manufacturingLocked: boolean;
+  canPostAccounting: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -168,6 +177,7 @@ function QuickActionsDropdown({
           <QuickActionsMenuItems
             onNavigate={() => setOpen(false)}
             manufacturingLocked={manufacturingLocked}
+            canPostAccounting={canPostAccounting}
           />
         </div>
       )}
@@ -178,8 +188,10 @@ function QuickActionsDropdown({
 /** Плавающая кнопка быстрых действий на экранах &lt;768px (см. ТЗ). */
 function QuickActionsMobileFab({
   manufacturingLocked,
+  canPostAccounting,
 }: {
   manufacturingLocked: boolean;
+  canPostAccounting: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -205,6 +217,7 @@ function QuickActionsMobileFab({
           <QuickActionsMenuItems
             onNavigate={() => setOpen(false)}
             manufacturingLocked={manufacturingLocked}
+            canPostAccounting={canPostAccounting}
           />
         </div>
       )}
@@ -411,6 +424,26 @@ function OrgSwitcher() {
   const { user, organizations, switchOrganization, ready, token } = useAuth();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const [tree, setTree] = useState<{
+    holdings: Array<{
+      holdingId: string;
+      holdingName: string;
+      baseCurrency: string;
+      organizations: Array<{
+        id: string;
+        name: string;
+        taxId: string;
+        currency: string;
+      }>;
+    }>;
+    freeOrganizations: Array<{
+      id: string;
+      name: string;
+      taxId: string;
+      currency: string;
+    }>;
+  } | null>(null);
+  const [treeErr, setTreeErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -421,6 +454,26 @@ function OrgSwitcher() {
     document.addEventListener("click", onDoc);
     return () => document.removeEventListener("click", onDoc);
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !token) return;
+    let cancelled = false;
+    setTreeErr(null);
+    void apiFetch("/api/organizations/tree")
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setTreeErr(`${res.status}`);
+          return;
+        }
+        setTree((await res.json()) as typeof tree);
+      })
+      .catch(() => setTreeErr("load"))
+      .finally(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, token]);
 
   if (!ready || !token || !user) return null;
 
@@ -457,30 +510,90 @@ function OrgSwitcher() {
           className="absolute left-0 mt-1 w-72 max-h-72 overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg py-1 z-50"
           role="listbox"
         >
-          {organizations.map((o: OrgSummary) => (
-            <li key={o.id} role="option" aria-selected={o.id === user.organizationId}>
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-action/10 flex flex-col gap-0.5"
-                onClick={() => {
-                  if (o.id === user.organizationId) {
-                    setOpen(false);
-                    return;
-                  }
-                  void switchOrganization(o.id)
-                    .then(() => setOpen(false))
-                    .catch(() => {
-                      /* toast optional */
-                    });
-                }}
+          {treeErr ? (
+            <li className="px-3 py-2 text-xs text-slate-500">
+              {t("common.loadErr")}: {treeErr}
+            </li>
+          ) : null}
+
+          {tree?.holdings?.length ? (
+            <li className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {t("orgSwitcher.holdingSection")}
+            </li>
+          ) : null}
+
+          {(tree?.holdings ?? []).map((h) => (
+            <li key={h.holdingId} className="pt-1">
+              <Link
+                href={`/holding?id=${encodeURIComponent(h.holdingId)}`}
+                className="block px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-action/10"
+                onClick={() => setOpen(false)}
               >
-                <span className="font-medium text-gray-900 truncate">{o.name}</span>
-                <span className="text-xs text-gray-500">
-                  VÖEN {o.taxId} · {o.role}
+                {h.holdingName}
+                <span className="ml-2 text-xs font-medium text-slate-500">
+                  {h.baseCurrency}
                 </span>
-              </button>
+              </Link>
+              <ul className="pb-1">
+                {h.organizations.map((o) => (
+                  <li key={o.id} role="option" aria-selected={o.id === user.organizationId}>
+                    <button
+                      type="button"
+                      className="w-full text-left pl-6 pr-3 py-2 text-sm hover:bg-action/10 flex flex-col gap-0.5"
+                      onClick={() => {
+                        if (o.id === user.organizationId) {
+                          setOpen(false);
+                          return;
+                        }
+                        void switchOrganization(o.id)
+                          .then(() => setOpen(false))
+                          .catch(() => {
+                            /* toast optional */
+                          });
+                      }}
+                    >
+                      <span className="font-medium text-gray-900 truncate">{o.name}</span>
+                      <span className="text-xs text-gray-500">
+                        VÖEN {o.taxId}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </li>
           ))}
+
+          {tree?.freeOrganizations?.length ? (
+            <>
+              <li className="border-t border-gray-100 mt-1" />
+              <li className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {t("orgSwitcher.freeCompanies")}
+              </li>
+              {tree.freeOrganizations.map((o) => (
+                <li key={o.id} role="option" aria-selected={o.id === user.organizationId}>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-action/10 flex flex-col gap-0.5"
+                    onClick={() => {
+                      if (o.id === user.organizationId) {
+                        setOpen(false);
+                        return;
+                      }
+                      void switchOrganization(o.id)
+                        .then(() => setOpen(false))
+                        .catch(() => {
+                          /* toast optional */
+                        });
+                    }}
+                  >
+                    <span className="font-medium text-gray-900 truncate">{o.name}</span>
+                    <span className="text-xs text-gray-500">VÖEN {o.taxId}</span>
+                  </button>
+                </li>
+              ))}
+            </>
+          ) : null}
+
           <li className="border-t border-gray-100 mt-1 pt-1">
             <Link
               href="/companies"
@@ -545,6 +658,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user, ready, logout } = useAuth();
+  const { canPostAccounting, canViewHoldingReports } = useOrgPermissions();
   const { ready: subReady, effectiveSnapshot: snapshot } = useSubscription();
 
   /** Без организации доступны только «Мои компании» (и Super-Admin для супер-админа). */
@@ -613,7 +727,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         !pathname.startsWith("/reporting/receivables") &&
         !pathname.startsWith("/reporting/reconciliation") &&
         !pathname.startsWith("/reporting/aging") &&
-        !pathname.startsWith("/reporting/tax-export"));
+        !pathname.startsWith("/reporting/tax-export") &&
+        !pathname.startsWith("/reporting/holding"));
     /** Только хаб остатков `/inventory`, без вложенных экранов (köçürmə, inventar və s.) */
     const inventoryMainActive = pathname === "/inventory";
     return {
@@ -691,27 +806,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               sectionActive={navSections.bankCashActive}
             >
               <SideNavItem
-                href="/banking"
-                label={t("nav.banking")}
-                isActive={pathname === "/banking"}
-                locked={lockedBankingPro}
-                icon={Landmark}
+                href="/banking/money"
+                label={t("treasury.moneyTitle")}
+                isActive={pathname.startsWith("/banking/money")}
+                icon={Coins}
                 nested
               />
-              <SideNavItem
-                href="/banking/cash"
-                label={t("nav.kassa", { defaultValue: "Kassa" })}
-                isActive={pathname.startsWith("/banking/cash")}
-                icon={Wallet}
-                nested
-              />
-              <SideNavItem
-                href="/expenses/quick"
-                label={t("nav.expensesQuick")}
-                isActive={pathname.startsWith("/expenses")}
-                icon={Zap}
-                nested
-              />
+              {canPostAccounting ? (
+                <>
+                  <SideNavItem
+                    href="/banking"
+                    label={t("nav.banking")}
+                    isActive={pathname === "/banking"}
+                    locked={lockedBankingPro}
+                    icon={Landmark}
+                    nested
+                  />
+                  <SideNavItem
+                    href="/banking/cash"
+                    label={t("nav.kassa")}
+                    isActive={pathname.startsWith("/banking/cash")}
+                    icon={Wallet}
+                    nested
+                  />
+                </>
+              ) : null}
             </CollapsibleNavSection>
 
             <CollapsibleNavSection
@@ -827,6 +946,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 icon={Banknote}
                 nested
               />
+              <SideNavItem
+                href="/hr/analytics"
+                label={t("nav.hrInfographics")}
+                isActive={pathname.startsWith("/hr/analytics")}
+                icon={PieChart}
+                nested
+              />
             </CollapsibleNavSection>
 
             <CollapsibleNavSection
@@ -865,6 +991,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 isActive={pathname.startsWith("/reporting/tax-export")}
                 icon={Gavel}
               />
+              {canViewHoldingReports ? (
+                <SideNavSubItem
+                  href="/reporting/holding"
+                  label={t("nav.holdingConsolidated")}
+                  isActive={pathname.startsWith("/reporting/holding")}
+                  icon={Building2}
+                />
+              ) : null}
             </CollapsibleNavSection>
 
             <SideNavItem
@@ -965,6 +1099,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {ready && token ? (
                 <QuickActionsDropdown
                   manufacturingLocked={lockedManufacturing}
+                  canPostAccounting={canPostAccounting}
                 />
               ) : null}
               <LanguageSwitcher />
@@ -1016,7 +1151,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {ready && token ? (
-        <QuickActionsMobileFab manufacturingLocked={lockedManufacturing} />
+        <QuickActionsMobileFab
+          manufacturingLocked={lockedManufacturing}
+          canPostAccounting={canPostAccounting}
+        />
       ) : null}
     </div>
   );

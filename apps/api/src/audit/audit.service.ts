@@ -31,18 +31,24 @@ type RequestLike = {
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
+  private readonly auditHashSecret: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    const explicit = this.config.get<string>("AUDIT_HASH_SECRET") ?? null;
+    const jwtFallback = this.config.get<string>("JWT_SECRET") ?? null;
+    this.auditHashSecret = explicit ?? jwtFallback ?? "audit-hash-dev-only";
+    if (!explicit && process.env.NODE_ENV === "production") {
+      this.logger.warn(
+        "AUDIT_HASH_SECRET is not set; falling back to JWT_SECRET. Set AUDIT_HASH_SECRET in production to harden audit log integrity.",
+      );
+    }
+  }
 
   private get hashSecret(): string {
-    return (
-      this.config.get<string>("AUDIT_HASH_SECRET") ??
-      this.config.get<string>("JWT_SECRET") ??
-      "audit-hash-dev-only"
-    );
+    return this.auditHashSecret;
   }
 
   normalizeApiPath(path: string): string {

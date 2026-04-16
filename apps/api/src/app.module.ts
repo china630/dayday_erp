@@ -34,6 +34,7 @@ import { BillingModule } from "./billing/billing.module";
 import { AdminModule } from "./admin/admin.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
 import { TenantContextInterceptor } from "./prisma/tenant-context.interceptor";
+import { TreasuryModule } from "./treasury/treasury.module";
 
 const apiEnvFiles = apiEnvFilePaths();
 
@@ -70,6 +71,7 @@ const apiEnvFiles = apiEnvFilePaths();
     AuditModule,
     AdminModule,
     OrganizationsModule,
+    TreasuryModule,
   ],
   controllers: [AppController],
   providers: [

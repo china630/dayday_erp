@@ -47,27 +47,53 @@ export class CashDeskController {
   }
 
   @Get("orders")
-  @ApiOperation({ summary: "Журнал кассовых ордеров PKO/RKO" })
+  @ApiOperation({
+    summary: "Журнал кассовых ордеров (MKO/MXO — Mədaxil/Məxaric Kassa Orderi)",
+  })
   orders(@OrganizationId() organizationId: string) {
     return this.cash.listOrders(organizationId);
   }
 
-  @Post("orders/pko")
+  @Post("orders/mko")
   @UseGuards(RolesGuard)
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
-  @ApiOperation({ summary: "Создать черновик PKO" })
-  createPko(
+  @ApiOperation({ summary: "Создать черновик MKO (приход, CashOrderKind.MKO)" })
+  createMko(
     @OrganizationId() organizationId: string,
     @Body() dto: CreatePkoDraftDto,
   ) {
     return this.cash.createDraftPko(organizationId, dto);
   }
 
+  @Post("orders/mxo")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Создать черновик MXO (расход, CashOrderKind.MXO)" })
+  createMxo(
+    @OrganizationId() organizationId: string,
+    @Body() dto: CreateRkoDraftDto,
+  ) {
+    return this.cash.createDraftRko(organizationId, dto);
+  }
+
+  /** Backward-compatible aliases (will be removed later). */
+  @Post("orders/pko")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "[DEPRECATED] Alias for /orders/mko" })
+  createPkoAlias(
+    @OrganizationId() organizationId: string,
+    @Body() dto: CreatePkoDraftDto,
+  ) {
+    return this.cash.createDraftPko(organizationId, dto);
+  }
+
+  /** Backward-compatible aliases (will be removed later). */
   @Post("orders/rko")
   @UseGuards(RolesGuard)
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
-  @ApiOperation({ summary: "Создать черновик RKO" })
-  createRko(
+  @ApiOperation({ summary: "[DEPRECATED] Alias for /orders/mxo" })
+  createRkoAlias(
     @OrganizationId() organizationId: string,
     @Body() dto: CreateRkoDraftDto,
   ) {

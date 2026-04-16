@@ -1,6 +1,7 @@
 import { PrismaClient, PricingKind } from "@prisma/client";
 import {
   loadChartJson,
+  seedChartOfAccountsCatalogEntries,
   seedChartOfAccountsForOrganization,
 } from "./chart-seed";
 import {
@@ -113,6 +114,11 @@ async function main() {
     );
     return;
   }
+
+  await seedChartOfAccountsCatalogEntries(prisma, accounts);
+  console.info(
+    `[seed] chart_of_accounts_entries upserted (${accounts.length} codes from JSON)`,
+  );
 
   if (process.env.SEED_SYNC_CHART_ALL === "1") {
     const orgs = await prisma.organization.findMany({

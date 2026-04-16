@@ -10,7 +10,14 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import { ModulePageLinks } from "../../../components/module-page-links";
 
 type Counterparty = { id: string; name: string; taxId: string };
-type Product = { id: string; name: string; sku: string; price: unknown; vatRate: unknown };
+type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  price: unknown;
+  vatRate: unknown;
+  isService?: boolean;
+};
 
 export default function NewInvoicePage() {
   const { t } = useTranslation();
@@ -24,7 +31,9 @@ export default function NewInvoicePage() {
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState(0);
-  const [vatRate, setVatRate] = useState(18);
+  const [vatRate, setVatRate] = useState<0 | 18>(18);
+  const [currency, setCurrency] = useState<"AZN" | "USD" | "EUR">("AZN");
+  const [vatInclusive, setVatInclusive] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -42,7 +51,8 @@ export default function NewInvoicePage() {
         if (list[0]) {
           setProductId(list[0].id);
           setUnitPrice(Number(list[0].price));
-          setVatRate(Number(list[0].vatRate));
+          const vr0 = Number(list[0].vatRate);
+          setVatRate(vr0 === 0 ? 0 : 18);
         }
       })
       .catch(() => setProducts([]));
@@ -52,9 +62,12 @@ export default function NewInvoicePage() {
     const p = products.find((x) => x.id === productId);
     if (p) {
       setUnitPrice(Number(p.price));
-      setVatRate(Number(p.vatRate));
+      const vr = Number(p.vatRate);
+      setVatRate(vr === 0 ? 0 : 18);
     }
   }, [productId, products]);
+
+  const selectedProduct = products.find((x) => x.id === productId);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -75,6 +88,8 @@ export default function NewInvoicePage() {
         counterpartyId,
         dueDate,
         debitAccountCode,
+        currency,
+        vatInclusive,
         items: [
           {
             productId,
@@ -179,6 +194,26 @@ export default function NewInvoicePage() {
             <option value="221">{t("invoiceNew.bank221")}</option>
           </select>
         </label>
+        <label className="block text-sm font-medium text-gray-700">
+          {t("invoiceNew.currency")}
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value as "AZN" | "USD" | "EUR")}
+            className={fieldClass}
+          >
+            <option value="AZN">AZN</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={vatInclusive}
+            onChange={(e) => setVatInclusive(e.target.checked)}
+          />
+          {t("invoiceNew.vatInclusive")}
+        </label>
         <div>
           <label className="block text-sm font-medium text-gray-700">
             {t("invoiceNew.product")}
@@ -220,7 +255,7 @@ export default function NewInvoicePage() {
           />
         </label>
         <label className="block text-sm font-medium text-gray-700">
-          {t("invoiceNew.price")}
+          {vatInclusive ? t("invoiceNew.priceHintGross") : t("invoiceNew.priceHintNet")}
           <input
             type="number"
             min={0}
@@ -232,18 +267,19 @@ export default function NewInvoicePage() {
           />
         </label>
         <label className="block text-sm font-medium text-gray-700">
-          {t("invoiceNew.vat")}
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step="0.01"
-            required
+          {t("invoiceNew.vatRateLabel")}
+          <select
             value={vatRate}
-            onChange={(e) => setVatRate(Number(e.target.value))}
+            onChange={(e) => setVatRate(Number(e.target.value) as 0 | 18)}
             className={fieldClass}
-          />
+          >
+            <option value={0}>0%</option>
+            <option value={18}>18%</option>
+          </select>
         </label>
+        {selectedProduct?.isService ? (
+          <p className="text-sm text-slate-600 m-0">{t("invoiceNew.serviceNote")}</p>
+        ) : null}
         {msg && <p className="text-red-600 text-sm">{msg}</p>}
         <button
           type="submit"

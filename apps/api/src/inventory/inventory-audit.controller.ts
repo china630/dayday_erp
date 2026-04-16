@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -21,6 +21,29 @@ export class InventoryAuditController {
   @ApiOperation({ summary: "Список инвентаризационных описей" })
   findAll(@OrganizationId() organizationId: string) {
     return this.audits.findAll(organizationId);
+  }
+
+  @Patch("lines/:lineId")
+  @ApiOperation({
+    summary:
+      "Обновить строку описи (DRAFT): factQty и costPrice (запрещено в APPROVED/закрытом периоде)",
+  })
+  patchLine(
+    @OrganizationId() organizationId: string,
+    @Param("lineId") lineId: string,
+    @Body()
+    dto: {
+      factQty?: number;
+      costPrice?: number;
+    },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.audits.patchLine(
+      organizationId,
+      lineId,
+      dto,
+      requireOrgRole(user),
+    );
   }
 
   @Post(":id/approve")

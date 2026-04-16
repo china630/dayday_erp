@@ -95,6 +95,25 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
         /* ignore */
       }
     }
+    if (res.status === 402 && typeof window !== "undefined") {
+      const clone = res.clone();
+      try {
+        const data: unknown = await clone.json();
+        if (
+          data &&
+          typeof data === "object" &&
+          "code" in data &&
+          (data as { code?: string }).code === "QUOTA_EXCEEDED"
+        ) {
+          skipApiErrorToast = true;
+          window.dispatchEvent(
+            new CustomEvent("dayday:quota-upgrade", { detail: data }),
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     const method = (init.method ?? "GET").toUpperCase();
     const isRead = method === "GET" || method === "HEAD";
     if (

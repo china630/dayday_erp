@@ -1,10 +1,18 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsDateString, IsUUID } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsDateString, IsOptional, IsUUID } from "class-validator";
 
 export class VacationPayCalcDto {
   @ApiProperty()
   @IsUUID()
   employeeId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Məzuniyyət növü (formula LABOR_LEAVE_304 olmalıdır); boşdursa yalnız hesablama aparılır",
+  })
+  @IsOptional()
+  @IsUUID()
+  absenceTypeId?: string;
 
   @ApiProperty({ example: "2026-06-01", description: "Первый день отпуска" })
   @IsDateString()

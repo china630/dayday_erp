@@ -31,6 +31,7 @@ import { BankIntegrationService } from "./bank-integration.service";
 import { BankMatchService } from "./bank-match.service";
 import { BankingService } from "./banking.service";
 import { CashOutDto } from "./dto/cash-out.dto";
+import { ManualBankEntryDto } from "./dto/manual-bank-entry.dto";
 import { MatchBankLineDto } from "./dto/match-line.dto";
 import { RequiresModule } from "../subscription/requires-module.decorator";
 import { SubscriptionGuard } from "../subscription/subscription.guard";
@@ -113,6 +114,22 @@ export class BankingController {
     return this.banking.manualCashOut(organizationId, dto, requireOrgRole(user));
   }
 
+  @Post("manual-entry")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary:
+      "Ручная банковская операция: проводка (Дт/Кт банк + второй счёт) + строка реестра",
+  })
+  manualBankEntry(
+    @OrganizationId() organizationId: string,
+    @Body() dto: ManualBankEntryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    requireOrgRole(user);
+    return this.banking.manualBankEntry(organizationId, dto);
+  }
+
   private parseStatementChannel(raw: string | undefined): BankStatementChannel {
     const u = (raw ?? "").trim().toUpperCase();
     if (u === "" || u === "BANK") return BankStatementChannel.BANK;
@@ -151,6 +168,7 @@ export class BankingController {
     @Query("unmatchedOnly") unmatchedOnly?: string,
     @Query("needsAttention") needsAttention?: string,
     @Query("channel") channel?: string,
+    @Query("bankOnly") bankOnly?: string,
   ) {
     const ch = channel?.trim().toUpperCase();
     const channelFilter =
@@ -160,6 +178,7 @@ export class BankingController {
       unmatchedOnly: unmatchedOnly === "1" || unmatchedOnly === "true",
       needsAttention: needsAttention === "1" || needsAttention === "true",
       channel: channelFilter,
+      bankOnly: bankOnly === "1" || bankOnly === "true",
     });
   }
 

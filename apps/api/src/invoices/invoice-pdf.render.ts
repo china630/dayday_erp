@@ -14,7 +14,7 @@ export type InvoicePdfModel = {
     unitPrice: { toString(): string };
     vatRate: { toString(): string };
     lineTotal: { toString(): string };
-    product: { name: string } | null;
+    product: { name: string; isService?: boolean } | null;
   }>;
   /** Печать + QR на публичную верификацию */
   signature?: {
@@ -55,7 +55,9 @@ export async function renderInvoicePdf(
     doc.moveDown();
     doc.text("Lines:");
     invoice.items.forEach((line, i) => {
-      const title = line.product?.name ?? line.description ?? `Line ${i + 1}`;
+      const baseTitle = line.product?.name ?? line.description ?? `Line ${i + 1}`;
+      const kind = line.product?.isService ? "Xidmət" : "Məhsul";
+      const title = `${kind}: ${baseTitle}`;
       doc.text(
         `${title} | qty ${line.quantity.toString()} x ${line.unitPrice.toString()} | VAT ${line.vatRate.toString()}% | ${line.lineTotal.toString()} ${invoice.currency}`,
       );

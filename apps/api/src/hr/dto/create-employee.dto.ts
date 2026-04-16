@@ -50,6 +50,11 @@ export class CreateEmployeeDto {
   @IsNotEmpty()
   lastName!: string;
 
+  @ApiProperty({ description: "Ata adı (отчество)" })
+  @IsString()
+  @IsNotEmpty()
+  patronymic!: string;
+
   @ApiProperty({ description: "Штатная должность (справочник JobPosition)" })
   @IsUUID()
   positionId!: string;

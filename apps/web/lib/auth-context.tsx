@@ -9,7 +9,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ACCESS_TOKEN_KEY, ORGS_KEY, USER_KEY } from "./session-keys";
+import {
+  ACCESS_FLAGS_KEY,
+  ACCESS_TOKEN_KEY,
+  ACCESS_TOKEN_COOKIE_KEY,
+  ORGS_KEY,
+  USER_KEY,
+} from "./session-keys";
 import { apiFetch } from "./api-client";
 
 export type OrgSummary = {
@@ -34,12 +40,25 @@ export type AuthUser = {
   isSuperAdmin?: boolean;
 };
 
+/** Сводные флаги доступа (сервер: GET /auth/me). */
+export type SessionAccessFlags = {
+  canPostAccounting: boolean;
+  canViewHoldingReports: boolean;
+};
+
+const DEFAULT_ACCESS_FLAGS: SessionAccessFlags = {
+  canPostAccounting: false,
+  canViewHoldingReports: false,
+};
+
 type AuthContextValue = {
   ready: boolean;
   token: string | null;
   user: AuthUser | null;
   organizations: OrgSummary[];
   organizationId: string | null;
+  /** Права для UI (касса/банк/проводки, отчёты холдинга). */
+  access: SessionAccessFlags;
   login: (accessToken: string, user: AuthUser, organizations: OrgSummary[]) => void;
   logout: () => Promise<void>;
   switchOrganization: (organizationId: string) => Promise<void>;
@@ -50,11 +69,25 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function setAccessTokenCookie(token: string) {
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const secure = isHttps ? "; Secure" : "";
+  document.cookie = `${ACCESS_TOKEN_COOKIE_KEY}=${encodeURIComponent(token)}; Path=/; SameSite=Lax${secure}`;
+}
+
+function clearAccessTokenCookie() {
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const secure = isHttps ? "; Secure" : "";
+  document.cookie = `${ACCESS_TOKEN_COOKIE_KEY}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${secure}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [organizations, setOrganizations] = useState<OrgSummary[]>([]);
+  const [access, setAccess] =
+    useState<SessionAccessFlags>(DEFAULT_ACCESS_FLAGS);
 
   /** Гидратация из sessionStorage — мгновенный UI; полный список орг подтягивается ниже с сервера. */
   useEffect(() => {
@@ -62,7 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const t = sessionStorage.getItem(ACCESS_TOKEN_KEY);
       const u = sessionStorage.getItem(USER_KEY);
       const o = sessionStorage.getItem(ORGS_KEY);
+      const a = sessionStorage.getItem(ACCESS_FLAGS_KEY);
       setToken(t);
+      if (t) {
+        setAccessTokenCookie(t);
+      }
       if (u) {
         setUser(JSON.parse(u) as AuthUser);
       }
@@ -71,6 +108,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setOrganizations(JSON.parse(o) as OrgSummary[]);
         } catch {
           setOrganizations([]);
+        }
+      }
+      if (a) {
+        try {
+          setAccess({ ...DEFAULT_ACCESS_FLAGS, ...JSON.parse(a) });
+        } catch {
+          setAccess(DEFAULT_ACCESS_FLAGS);
         }
       }
     } finally {
@@ -92,11 +136,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = (await res.json()) as {
         user: AuthUser;
         organizations: OrgSummary[];
+        access?: SessionAccessFlags;
       };
+      const flags = data.access ?? DEFAULT_ACCESS_FLAGS;
       sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
       sessionStorage.setItem(ORGS_KEY, JSON.stringify(data.organizations));
+      sessionStorage.setItem(ACCESS_FLAGS_KEY, JSON.stringify(flags));
       setUser(data.user);
       setOrganizations(data.organizations);
+      setAccess(flags);
     })();
     return () => {
       cancelled = true;
@@ -108,9 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
       sessionStorage.setItem(USER_KEY, JSON.stringify(u));
       sessionStorage.setItem(ORGS_KEY, JSON.stringify(orgs));
+      sessionStorage.removeItem(ACCESS_FLAGS_KEY);
       setToken(accessToken);
+      setAccessTokenCookie(accessToken);
       setUser(u);
       setOrganizations(orgs);
+      setAccess(DEFAULT_ACCESS_FLAGS);
     },
     [],
   );
@@ -124,9 +175,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
     sessionStorage.removeItem(ORGS_KEY);
+    sessionStorage.removeItem(ACCESS_FLAGS_KEY);
     setToken(null);
     setUser(null);
     setOrganizations([]);
+    setAccess(DEFAULT_ACCESS_FLAGS);
+    clearAccessTokenCookie();
+    try {
+      window.location.replace("/login");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const switchOrganization = useCallback(async (organizationId: string) => {
@@ -142,13 +201,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken: string;
       user: AuthUser;
       organizations: OrgSummary[];
+      access?: SessionAccessFlags;
     };
+    const flags = data.access ?? DEFAULT_ACCESS_FLAGS;
     sessionStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
     sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
     sessionStorage.setItem(ORGS_KEY, JSON.stringify(data.organizations));
+    sessionStorage.setItem(ACCESS_FLAGS_KEY, JSON.stringify(flags));
     setToken(data.accessToken);
+    setAccessTokenCookie(data.accessToken);
     setUser(data.user);
     setOrganizations(data.organizations);
+    setAccess(flags);
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -157,11 +221,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = (await res.json()) as {
       user: AuthUser;
       organizations: OrgSummary[];
+      access?: SessionAccessFlags;
     };
+    const flags = data.access ?? DEFAULT_ACCESS_FLAGS;
     sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
     sessionStorage.setItem(ORGS_KEY, JSON.stringify(data.organizations));
+    sessionStorage.setItem(ACCESS_FLAGS_KEY, JSON.stringify(flags));
     setUser(data.user);
     setOrganizations(data.organizations);
+    setAccess(flags);
   }, []);
 
   const impersonateAsUser = useCallback(async (targetUserId: string) => {
@@ -175,13 +243,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken: string;
       user: AuthUser;
       organizations: OrgSummary[];
+      access?: SessionAccessFlags;
     };
+    const flags = data.access ?? DEFAULT_ACCESS_FLAGS;
     sessionStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
     sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
     sessionStorage.setItem(ORGS_KEY, JSON.stringify(data.organizations));
+    sessionStorage.setItem(ACCESS_FLAGS_KEY, JSON.stringify(flags));
     setToken(data.accessToken);
+    setAccessTokenCookie(data.accessToken);
     setUser(data.user);
     setOrganizations(data.organizations);
+    setAccess(flags);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -191,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       organizations,
       organizationId: user?.organizationId ?? null,
+      access,
       login,
       logout,
       switchOrganization,
@@ -202,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       user,
       organizations,
+      access,
       login,
       logout,
       switchOrganization,

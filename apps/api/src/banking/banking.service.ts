@@ -17,6 +17,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { ReportingService } from "../reporting/reporting.service";
 import { parseIsoDateOnly } from "../reporting/reporting-period.util";
+import { TreasuryService } from "../treasury/treasury.service";
 import { parseBankStatementCsv } from "./csv/bank-csv.parser";
 
 function matchesPrefix(accountCode: string, prefix: string): boolean {
@@ -41,6 +42,15 @@ function maskAccountCode(code: string): string {
   return "••••";
 }
 
+function isBankLedgerAccountCode(code: string): boolean {
+  const c = code.trim();
+  if (c === "221" || c.startsWith("221.")) return true;
+  for (const r of ["222", "223", "224"] as const) {
+    if (c === r || c.startsWith(`${r}.`)) return true;
+  }
+  return false;
+}
+
 function segmentForAccountCode(
   code: string,
 ): "CASH" | "BANK" | null {
@@ -60,6 +70,7 @@ export class BankingService {
     private readonly prisma: PrismaService,
     private readonly reporting: ReportingService,
     private readonly accounting: AccountingService,
+    private readonly treasury: TreasuryService,
   ) {}
 
   async importCsv(
@@ -240,6 +251,94 @@ export class BankingService {
     });
   }
 
+  /**
+   * Ручная банковская операция: проводка + строка реестра (для отчётности и сверки).
+   */
+  async manualBankEntry(
+    organizationId: string,
+    dto: {
+      type: BankStatementLineType;
+      amount: number;
+      bankAccountCode: string;
+      offsetAccountCode: string;
+      date: string;
+      cashFlowItemId: string;
+      description?: string;
+    },
+  ) {
+    const bank = dto.bankAccountCode.trim();
+    const offset = dto.offsetAccountCode.trim();
+    if (!isBankLedgerAccountCode(bank)) {
+      throw new BadRequestException(
+        "bankAccountCode must be a bank account (221*, 222*, 223*, 224*)",
+      );
+    }
+    if (!offset) {
+      throw new BadRequestException("offsetAccountCode required");
+    }
+    await this.treasury.assertCashFlowItem(organizationId, dto.cashFlowItemId);
+
+    const amt = new Decimal(dto.amount);
+    if (amt.lte(0)) {
+      throw new BadRequestException("amount must be positive");
+    }
+    let date: Date;
+    try {
+      date = parseIsoDateOnly(dto.date.trim());
+    } catch {
+      throw new BadRequestException("Invalid date (expected YYYY-MM-DD)");
+    }
+    const desc = dto.description?.trim() || "Manual bank entry";
+
+    return this.prisma.$transaction(async (tx) => {
+      const lines =
+        dto.type === BankStatementLineType.INFLOW
+          ? [
+              { accountCode: bank, debit: amt.toString(), credit: "0" },
+              { accountCode: offset, debit: "0", credit: amt.toString() },
+            ]
+          : [
+              { accountCode: offset, debit: amt.toString(), credit: "0" },
+              { accountCode: bank, debit: "0", credit: amt.toString() },
+            ];
+
+      await this.accounting.postJournalInTransaction(tx, {
+        organizationId,
+        date,
+        reference: "BANK-MANUAL",
+        description: desc,
+        isFinal: true,
+        lines,
+      });
+
+      const stmt = await tx.bankStatement.create({
+        data: {
+          organizationId,
+          date,
+          totalAmount: amt,
+          bankName: "MANUAL_BANK",
+          channel: BankStatementChannel.BANK,
+        },
+      });
+
+      await tx.bankStatementLine.create({
+        data: {
+          organizationId,
+          bankStatementId: stmt.id,
+          description: desc,
+          amount: amt,
+          type: dto.type,
+          origin: BankStatementLineOrigin.MANUAL_BANK_ENTRY,
+          valueDate: date,
+          isMatched: true,
+          cashFlowItemId: dto.cashFlowItemId,
+        },
+      });
+
+      return { ok: true as const, bankStatementId: stmt.id };
+    });
+  }
+
   listStatements(organizationId: string) {
     return this.prisma.bankStatement.findMany({
       where: { organizationId },
@@ -256,6 +355,11 @@ export class BankingService {
       needsAttention?: boolean;
       /** BANK | CASH — фильтр по каналу выписки */
       channel?: "BANK" | "CASH";
+      /**
+       * Жёсткий серверный фильтр только по банковским origins:
+       * MANUAL_BANK_ENTRY, FILE_IMPORT, DIRECT_SYNC
+       */
+      bankOnly?: boolean;
     },
   ) {
     const channelFilter =
@@ -265,10 +369,23 @@ export class BankingService {
           ? { bankStatement: { channel: BankStatementChannel.CASH } }
           : {};
 
+    const originFilter = filters?.bankOnly
+      ? {
+          origin: {
+            in: [
+              BankStatementLineOrigin.MANUAL_BANK_ENTRY,
+              BankStatementLineOrigin.FILE_IMPORT,
+              BankStatementLineOrigin.DIRECT_SYNC,
+            ],
+          },
+        }
+      : {};
+
     return this.prisma.bankStatementLine.findMany({
       where: {
         organizationId,
         ...channelFilter,
+        ...originFilter,
         ...(filters?.bankStatementId
           ? { bankStatementId: filters.bankStatementId }
           : {}),

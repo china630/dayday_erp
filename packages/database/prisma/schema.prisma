@@ -1,5 +1,3 @@
-// DayDay ERP Core — multitenancy: почти все бизнес-таблицы с organizationId (см. PRD / TZ)
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,6 +5,1346 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                           String                        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                         String
+  taxId                        String                        @map("tax_id")
+  currency                     String                        @default("AZN")
+  settings                     Json                          @default("{}")
+  subscriptionPlan             String?                       @map("subscription_plan")
+  createdAt                    DateTime                      @default(now()) @map("created_at")
+  updatedAt                    DateTime                      @updatedAt @map("updated_at")
+  /// *
+  ///    * Секрет URL вебхука Direct Banking: POST /api/public/banking/webhook/:secret
+  bankWebhookSecret            String?                       @unique @map("bank_webhook_secret")
+  /// *
+  ///    * Владелец организации для биллинга (v10.2).
+  ownerId                      String?                       @map("owner_id") @db.Uuid
+  /// *
+  ///    * Включённые модули (slug) на уровне организации — денормализация для биллинга v10.2;
+  ///    * источник правды для гейтинга остаётся OrganizationSubscription.customConfig / activeModules.
+  activeModules                String[]                      @default([]) @map("active_modules")
+  deletedAt                    DateTime?                     @map("deleted_at") @db.Timestamptz(6)
+  holdingId                    String?                       @map("holding_id") @db.Uuid
+  isDeleted                    Boolean                       @default(false) @map("is_deleted")
+  absenceTypes                 AbsenceType[]
+  absences                     Absence[]
+  accessRequests               AccessRequest[]
+  accountMappings              AccountMapping[]
+  accounts                     Account[]
+  advanceReports               AdvanceReport[]
+  auditLogs                    AuditLog[]
+  bankStatementLines           BankStatementLine[]
+  bankStatements               BankStatement[]
+  billingInvoiceItems          BillingInvoiceItem[]
+  cashDesks                    CashDesk[]
+  cashFlowItems                CashFlowItem[]
+  cashOrders                   CashOrder[]
+  counterparties               Counterparty[]
+  departments                  Department[]
+  digitalSignatureLogs         DigitalSignatureLog[]
+  employees                    Employee[]
+  fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
+  fixedAssets                  FixedAsset[]
+  inventoryAuditLines          InventoryAuditLine[]
+  inventoryAudits              InventoryAudit[]
+  invoiceItems                 InvoiceItem[]
+  invoicePayments              InvoicePayment[]
+  invoices                     Invoice[]
+  journalEntries               JournalEntry[]
+  invites                      OrganizationInvite[]
+  memberships                  OrganizationMembership[]
+  organizationModules          OrganizationModule[]
+  subscription                 OrganizationSubscription?
+  holding                      Holding?                      @relation(fields: [holdingId], references: [id])
+  owner                        User?                         @relation("OrganizationOwner", fields: [ownerId], references: [id])
+  paymentOrders                PaymentOrder[]
+  payrollRuns                  PayrollRun[]
+  payrollSlips                 PayrollSlip[]
+  productRecipes               ProductRecipe[]
+  products                     Product[]
+  stockItems                   StockItem[]
+  stockMovements               StockMovement[]
+  timesheets                   Timesheet[]
+  transactions                 Transaction[]
+  warehouses                   Warehouse[]
+
+  @@index([ownerId])
+  @@index([holdingId, id])
+  @@index([holdingId])
+  @@map("organizations")
+}
+
+/// *
+///  * Подключённые модули по организации: цена на момент включения и политика отмены (pro-rata / конец периода).
+model OrganizationModule {
+  organizationId String       @map("organization_id") @db.Uuid
+  moduleKey      String       @map("module_key")
+  priceSnapshot  Decimal      @map("price_snapshot") @db.Decimal(12, 2)
+  activatedAt    DateTime     @default(now()) @map("activated_at")
+  /// *
+  ///    * Заполнено при отключении: автопродление снято, доступ до accessUntil.
+  cancelledAt    DateTime?    @map("cancelled_at")
+  /// *
+  ///    * Конец текущего оплаченного периода (UTC), после — модуль снимается с activeModules.
+  accessUntil    DateTime?    @map("access_until") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, moduleKey])
+  @@map("organization_modules")
+}
+
+/// *
+///  * Актуальные цены конструктора: база, модули, квоты (v10.2). Сидируется по умолчанию.
+model Pricing {
+  id        String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key       String      @unique
+  kind      PricingKind
+  name      String
+  amountAzn Decimal     @map("amount_azn") @db.Decimal(12, 2)
+  /// *
+  ///    * Для квот: размер блока (напр. 10 сотрудников, 5 GB, 500 инвойсов); для Foundation/модуля — null.
+  unitSize  Int?        @map("unit_size")
+  sortOrder Int         @default(0) @map("sort_order")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  @@map("pricing")
+}
+
+/// *
+///  * Единый счёт платформы на Owner-аккаунт (TZ §14.8 / v12.3). Не путать с Invoice (продажи).
+model SubscriptionInvoice {
+  id             String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// *
+  ///    * Плательщик / владелец портфеля (owner user).
+  userId         String                    @map("user_id") @db.Uuid
+  /// *
+  ///    * Итог по счёту (AZN).
+  amount         Decimal                   @db.Decimal(12, 2)
+  status         SubscriptionInvoiceStatus
+  /// *
+  ///    * Дата выставления / учёта.
+  date           DateTime                  @db.Date
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  /// *
+  ///    * Расчётный период (месяц и т.п.).
+  periodStart    DateTime?                 @map("period_start") @db.Timestamptz(6)
+  periodEnd      DateTime?                 @map("period_end") @db.Timestamptz(6)
+  /// *
+  ///    * Готовый PDF в объектном хранилище (опционально).
+  pdfLink        String?                   @map("pdf_link")
+  /// *
+  ///    * Связь с заказом оплаты (шлюз); счёт выставляется на owner, услуга — по organization в строках.
+  paymentOrderId String?                   @unique @map("payment_order_id") @db.Uuid
+  items          BillingInvoiceItem[]
+  paymentOrder   PaymentOrder?             @relation(fields: [paymentOrderId], references: [id])
+  user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, date])
+  @@map("subscription_invoices")
+}
+
+/// *
+///  * Строки платформенного счёта: разбивка по организациям (VÖEN) — TZ §14.8.4.
+model BillingInvoiceItem {
+  id                    String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  subscriptionInvoiceId String              @map("subscription_invoice_id") @db.Uuid
+  organizationId        String              @map("organization_id") @db.Uuid
+  description           String
+  amount                Decimal             @db.Decimal(12, 2)
+  organization          Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionInvoice   SubscriptionInvoice @relation(fields: [subscriptionInvoiceId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionInvoiceId])
+  @@index([organizationId])
+  @@map("billing_invoice_items")
+}
+
+/// *
+///  * Связь пользователь ↔ организация (роль в рамках организации).
+model OrganizationMembership {
+  userId         String       @map("user_id") @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  role           UserRole
+  joinedAt       DateTime     @default(now()) @map("joined_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_memberships")
+}
+
+/// *
+///  * Запрос на вступление в организацию (поиск по VÖEN).
+model AccessRequest {
+  id              String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String              @map("organization_id") @db.Uuid
+  requesterId     String              @map("requester_id") @db.Uuid
+  status          AccessRequestStatus @default(PENDING)
+  message         String?
+  createdAt       DateTime            @default(now()) @map("created_at")
+  decidedAt       DateTime?           @map("decided_at")
+  decidedByUserId String?             @map("decided_by_user_id") @db.Uuid
+  decidedBy       User?               @relation("AccessRequestDecider", fields: [decidedByUserId], references: [id])
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requester       User                @relation("AccessRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([requesterId])
+  @@map("access_requests")
+}
+
+/// *
+///  * Приглашение по email в организацию.
+model OrganizationInvite {
+  id              String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  email           String
+  role            UserRole
+  status          InviteStatus @default(PENDING)
+  invitedByUserId String?      @map("invited_by_user_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at")
+  decidedAt       DateTime?    @map("decided_at")
+  invitedBy       User?        @relation("InviteInviter", fields: [invitedByUserId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, email])
+  @@map("organization_invites")
+}
+
+/// *
+///  * Подразделение (иерархия: parentId).
+model Department {
+  id             String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  name           String
+  parentId       String?       @map("parent_id") @db.Uuid
+  managerId      String?       @map("manager_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  manager        Employee?     @relation("DepartmentManager", fields: [managerId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children       Department[]  @relation("DepartmentHierarchy")
+  jobPositions   JobPosition[]
+
+  @@index([organizationId])
+  @@index([parentId])
+  @@map("departments")
+}
+
+/// *
+///  * Штатная единица (должность) в подразделении.
+model JobPosition {
+  id           String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  departmentId String     @map("department_id") @db.Uuid
+  name         String
+  totalSlots   Int        @map("total_slots")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  /// *
+  ///    * Нижняя граница вилки оклада по штатке (AZN), справочно.
+  minSalary    Decimal    @map("min_salary") @db.Decimal(19, 4)
+  /// *
+  ///    * Верхняя граница вилки оклада по штатке (AZN), справочно.
+  maxSalary    Decimal    @map("max_salary") @db.Decimal(19, 4)
+  employees    Employee[]
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([departmentId])
+  @@map("job_positions")
+}
+
+/// *
+///  * Заказ на оплату подписки (шлюз Pasha Bank / mock).
+model PaymentOrder {
+  id                  String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId      String               @map("organization_id") @db.Uuid
+  amountAzn           Decimal              @map("amount_azn") @db.Decimal(12, 2)
+  currency            String               @default("AZN")
+  status              PaymentOrderStatus   @default(PENDING)
+  /// *
+  ///    * pasha_bank | mock
+  provider            String               @default("pasha_bank")
+  providerTxnId       String?              @map("provider_txn_id")
+  monthsApplied       Int                  @default(1) @map("months_applied")
+  description         String               @default("")
+  idempotencyKey      String?              @unique @map("idempotency_key")
+  metadata            Json                 @default("{}")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  paidAt              DateTime?            @map("paid_at")
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionInvoice SubscriptionInvoice?
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("payment_orders")
+}
+
+/// *
+///  * Подписка организации (1:1). Slugs модулей: production, ifrs, banking_pro и др.; v8.1 — customConfig.modules (конструктор).
+model OrganizationSubscription {
+  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String           @unique @map("organization_id") @db.Uuid
+  tier           SubscriptionTier
+  expiresAt      DateTime?        @map("expires_at")
+  activeModules  String[]         @default([]) @map("active_modules")
+  isTrial        Boolean          @default(false) @map("is_trial")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  /// *
+  ///    * Принудительная блокировка доступа (супер-админ).
+  isBlocked      Boolean          @default(false) @map("is_blocked")
+  /// *
+  ///    * Конструктор тарифа (v8.1): JSON с полями `modules` (массив slug), опционально `preset`, `quotas`.
+  ///    * При непустом `modules` гейтинг модулей в первую очередь по этому массиву (см. TZ §14).
+  customConfig   Json?            @map("custom_config")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_subscriptions")
+}
+
+/// *
+///  * Ключ-значение: тарифы, лимиты, системные сообщения (Super-Admin).
+model SystemConfig {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
+}
+
+/// *
+///  * Каталог платных модулей: месячная цена (поле pricePerMonth = «priceMonthly» в API-описаниях).
+model PricingModule {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key           String   @unique
+  name          String
+  pricePerMonth Decimal  @map("price_per_month") @db.Decimal(12, 2)
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("pricing_modules")
+}
+
+/// *
+///  * Именованный пакет модулей со скидкой (Paket Yaradıcısı).
+model PricingBundle {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name            String
+  discountPercent Decimal  @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  moduleKeys      Json     @map("module_keys")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("pricing_bundles")
+}
+
+/// *
+///  * Переопределение строк i18n поверх статических файлов фронта.
+model TranslationOverride {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  locale    String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([locale, key])
+  @@index([locale])
+  @@map("translation_overrides")
+}
+
+/// *
+///  * Инвентаризационная опись: строки в `items` (JSON) — warehouseId, productId, factQty, inventoryAccountCode и др.
+model InventoryAudit {
+  id                    String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId        String                  @map("organization_id") @db.Uuid
+  date                  DateTime                @db.Date
+  status                InventoryAuditStatus
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  warehouseId           String                  @map("warehouse_id") @db.Uuid
+  lines                 InventoryAuditLine[]
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse             Warehouse               @relation(fields: [warehouseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([organizationId])
+  @@index([organizationId, warehouseId, date], map: "inventory_audits_org_wh_date_idx")
+  @@map("inventory_audits")
+}
+
+model Warehouse {
+  id                     String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId         String           @map("organization_id") @db.Uuid
+  name                   String
+  location               String           @default("")
+  createdAt              DateTime         @default(now()) @map("created_at")
+  updatedAt              DateTime         @updatedAt @map("updated_at")
+  inventoryAccountCode   String           @default("201") @map("inventory_account_code")
+  inventory_audits       InventoryAudit[]
+  invoices               Invoice[]
+  stockItems             StockItem[]
+  stockMovements         StockMovement[]
+  users                  User[]
+  organization           Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("warehouses")
+}
+
+model StockItem {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  warehouseId    String       @map("warehouse_id") @db.Uuid
+  productId      String       @map("product_id") @db.Uuid
+  quantity       Decimal      @default(0) @db.Decimal(19, 4)
+  averageCost    Decimal      @default(0) @map("average_cost") @db.Decimal(19, 4)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse      Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, warehouseId, productId])
+  @@index([organizationId, warehouseId])
+  @@map("stock_items")
+}
+
+model StockMovement {
+  id              String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String              @map("organization_id") @db.Uuid
+  warehouseId     String              @map("warehouse_id") @db.Uuid
+  productId       String              @map("product_id") @db.Uuid
+  type            StockMovementType
+  reason          StockMovementReason
+  /// *
+  ///    * Количество > 0; направление задаёт type
+  quantity        Decimal             @db.Decimal(19, 4)
+  /// *
+  ///    * Цена закупки (IN) или учётная / средняя на момент операции (OUT)
+  price           Decimal             @db.Decimal(19, 4)
+  note            String?
+  invoiceId       String?             @map("invoice_id") @db.Uuid
+  transferBatchId String?             @map("transfer_batch_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at")
+  invoice         Invoice?            @relation(fields: [invoiceId], references: [id])
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product         Product             @relation(fields: [productId], references: [id])
+  warehouse       Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, warehouseId, createdAt])
+  @@index([organizationId, productId, createdAt])
+  @@map("stock_movements")
+}
+
+/// *
+///  * Официальные курсы ЦБА (общие для всех организаций).
+model CbarOfficialRate {
+  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  /// *
+  ///    * Календарный день курса (по дате из XML ValCurs).
+  rateDate     DateTime       @map("rate_date") @db.Date
+  currencyCode String         @map("currency_code")
+  /// *
+  ///    * Value из XML (для сравнения с предыдущим днём).
+  value        Decimal        @db.Decimal(19, 4)
+  nominal      Int
+  /// *
+  ///    * Value / Nominal
+  rate         Decimal        @db.Decimal(19, 8)
+  status       CbarRateStatus @default(PRELIMINARY)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@unique([rateDate, currencyCode])
+  @@index([rateDate, status])
+  @@map("cbar_official_rates")
+}
+
+model Employee {
+  id                         String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId             String           @map("organization_id") @db.Uuid
+  /// *
+  ///    * ФИН, ровно 7 символов (валидация в API)
+  finCode                    String           @map("fin_code")
+  firstName                  String           @map("first_name")
+  lastName                   String           @map("last_name")
+  startDate                  DateTime         @map("start_date") @db.Date
+  /// *
+  ///    * Оклад gross (AZN), частный ненефтяной сектор
+  salary                     Decimal          @map("salary") @db.Decimal(19, 4)
+  createdAt                  DateTime         @default(now()) @map("created_at")
+  updatedAt                  DateTime         @updatedAt @map("updated_at")
+  kind                       EmployeeKind     @default(EMPLOYEE) @map("kind")
+  /// *
+  ///    * VÖEN (10 цифр) — обязателен для CONTRACTOR в API
+  voen                       String?          @map("voen")
+  /// *
+  ///    * Фиксированные соц. удержания с выплаты подрядчику в месяц (AZN), опционально.
+  ///    * Учитываются при расчёте net вместе с 5% подоходного налога.
+  contractorMonthlySocialAzn Decimal?         @map("contractor_monthly_social_azn") @db.Decimal(19, 4)
+  positionId                 String           @map("position_id") @db.Uuid
+  /// *
+  ///    * Субсчёт 244.x для подотчёта (если задан).
+  accountableAccountCode244  String?          @map("accountable_account_code_244")
+  patronymic                 String?
+  absences                   Absence[]
+  advanceReports             AdvanceReport[]
+  cashDesks                 CashDesk[]
+  cashOrders                 CashOrder[]      @relation("CashOrderEmployee")
+  managedDepartments         Department[]     @relation("DepartmentManager")
+  organization               Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobPosition                JobPosition      @relation(fields: [positionId], references: [id])
+  payrollSlips               PayrollSlip[]
+  timesheetEntries           TimesheetEntry[]
+
+  @@unique([organizationId, finCode])
+  @@index([positionId])
+  @@index([organizationId, createdAt])
+  @@map("employees")
+}
+
+model PayrollRun {
+  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  year           Int
+  month          Int
+  status         PayrollRunStatus @default(DRAFT)
+  transactionId  String?          @map("transaction_id") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  /// *
+  ///    * Утверждённый табель месяца (импорт учёта рабочего времени при создании ведомости).
+  timesheetId    String?          @map("timesheet_id") @db.Uuid
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  timesheet      Timesheet?       @relation(fields: [timesheetId], references: [id])
+  transaction    Transaction?     @relation(fields: [transactionId], references: [id])
+  slips          PayrollSlip[]
+
+  @@unique([organizationId, year, month])
+  @@index([organizationId, status])
+  @@map("payroll_runs")
+}
+
+model PayrollSlip {
+  id                        String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId            String       @map("organization_id") @db.Uuid
+  payrollRunId              String       @map("payroll_run_id") @db.Uuid
+  employeeId                String       @map("employee_id") @db.Uuid
+  gross                     Decimal      @db.Decimal(19, 4)
+  incomeTax                 Decimal      @map("income_tax") @db.Decimal(19, 4)
+  dsmfWorker                Decimal      @map("dsmf_worker") @db.Decimal(19, 4)
+  dsmfEmployer              Decimal      @map("dsmf_employer") @db.Decimal(19, 4)
+  itsWorker                 Decimal      @map("its_worker") @db.Decimal(19, 4)
+  itsEmployer               Decimal      @map("its_employer") @db.Decimal(19, 4)
+  unemploymentWorker        Decimal      @map("unemployment_worker") @db.Decimal(19, 4)
+  unemploymentEmployer      Decimal      @map("unemployment_employer") @db.Decimal(19, 4)
+  net                       Decimal      @map("net") @db.Decimal(19, 4)
+  createdAt                 DateTime     @default(now()) @map("created_at")
+  updatedAt                 DateTime     @updatedAt @map("updated_at")
+  /// *
+  ///    * Удержание фикс. соц. с подрядчика (AZN); для штатных — 0
+  contractorSocialWithheld  Decimal      @default(0) @map("contractor_social_withheld") @db.Decimal(19, 4)
+  /// *
+  ///    * Дни из утверждённого табеля (при импорте при создании ведомости).
+  timesheetWorkDays         Int?         @map("timesheet_work_days")
+  timesheetVacationDays     Int?         @map("timesheet_vacation_days")
+  timesheetSickDays         Int?         @map("timesheet_sick_days")
+  timesheetBusinessTripDays Int?         @map("timesheet_business_trip_days")
+  employee                  Employee     @relation(fields: [employeeId], references: [id])
+  organization              Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRun                PayrollRun   @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+
+  @@unique([payrollRunId, employeeId])
+  @@index([organizationId, payrollRunId])
+  @@map("payroll_slips")
+}
+
+/// *
+///  * Отпуск / больничный (справочник периодов отсутствия).
+model Absence {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String        @map("organization_id") @db.Uuid
+  employeeId      String        @map("employee_id") @db.Uuid
+  startDate       DateTime      @map("start_date") @db.Date
+  endDate         DateTime      @map("end_date") @db.Date
+  note            String        @default("")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  /// *
+  ///    * Учитывается в табеле (синхронизация M/X).
+  approved        Boolean       @default(true) @map("approved")
+  absenceTypeId   String        @map("absence_type_id") @db.Uuid
+  absenceType     AbsenceType   @relation(fields: [absenceTypeId], references: [id])
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, startDate])
+  @@index([absenceTypeId])
+  @@map("absences")
+}
+
+/// *
+///  * Табель учёта рабочего времени (месяц).
+model Timesheet {
+  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  year           Int
+  month          Int
+  status         TimesheetStatus  @default(DRAFT)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  payrollRuns    PayrollRun[]
+  entries        TimesheetEntry[]
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, year, month])
+  @@index([organizationId, year, month])
+  @@map("timesheets")
+}
+
+/// *
+///  * Строка табеля: сотрудник × календарный день.
+model TimesheetEntry {
+  id                String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  timesheetId       String             @map("timesheet_id") @db.Uuid
+  employeeId        String             @map("employee_id") @db.Uuid
+  dayDate           DateTime           @map("day_date") @db.Date
+  type              TimesheetEntryType @map("type")
+  hours             Decimal            @default(8) @db.Decimal(8, 2)
+  /// *
+  ///    * Заполнено из Absence — ручное редактирование запрещено.
+  lockedFromAbsence Boolean            @default(false) @map("locked_from_absence")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  timesheet         Timesheet          @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@unique([timesheetId, employeeId, dayDate])
+  @@index([timesheetId, employeeId])
+  @@map("timesheet_entries")
+}
+
+model User {
+  id                        String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                     String                   @unique
+  passwordHash              String                   @map("password_hash")
+  createdAt                 DateTime                 @default(now()) @map("created_at")
+  updatedAt                 DateTime                 @updatedAt @map("updated_at")
+  /// *
+  ///    * Глобальный супер-админ платформы (без привязки к org в JWT).
+  isSuperAdmin              Boolean                  @default(false) @map("is_super_admin")
+  /// *
+  ///    * Совместимость / отображение: можно дублировать «Имя Фамилия» или старые данные.
+  fullName                  String?                  @map("full_name")
+  avatarUrl                 String?                  @map("avatar_url")
+  firstName                 String?                  @map("first_name")
+  lastName                  String?                  @map("last_name")
+  defaultWarehouseId        String?                  @map("default_warehouse_id") @db.Uuid
+  accessRequestsDecidedBy   AccessRequest[]          @relation("AccessRequestDecider")
+  accessRequestsAsRequester AccessRequest[]          @relation("AccessRequestRequester")
+  auditLogs                 AuditLog[]
+  holdingMemberships        HoldingMembership[]
+  holdings                  Holding[]
+  invitesSent               OrganizationInvite[]     @relation("InviteInviter")
+  memberships               OrganizationMembership[]
+  ownedOrganizations        Organization[]           @relation("OrganizationOwner")
+  subscriptionInvoices      SubscriptionInvoice[]
+  warehouses                Warehouse?               @relation(fields: [defaultWarehouseId], references: [id])
+
+  @@index([defaultWarehouseId])
+  @@map("users")
+}
+
+model Account {
+  id                        String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId            String                     @map("organization_id") @db.Uuid
+  code                      String
+  name                      String
+  type                      AccountType
+  parentId                  String?                    @map("parent_id") @db.Uuid
+  createdAt                 DateTime                   @default(now()) @map("created_at")
+  updatedAt                 DateTime                   @updatedAt @map("updated_at")
+  /// *
+  ///    * Валюта учёта остатка по счёту (AZN, USD, EUR). Для переоценки — не-AZN.
+  currency                  String                     @default("AZN")
+  /// *
+  ///    * Книга: NAS (основной план) или IFRS (параллельный учёт).
+  ledgerType                LedgerType                 @default(NAS) @map("ledger_type")
+  chartEntryId              String?                    @map("chart_entry_id") @db.Uuid
+  mappingsAsIfrs            AccountMapping[]           @relation("AccountMappingIfrs")
+  mappingsAsNas             AccountMapping[]           @relation("AccountMappingNas")
+  chartEntry                ChartOfAccountsEntry?      @relation(fields: [chartEntryId], references: [id])
+  organization              Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent                    Account?                   @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children                  Account[]                  @relation("AccountHierarchy")
+  journalEntries            JournalEntry[]
+
+  @@unique([organizationId, code, ledgerType])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, currency])
+  @@index([organizationId, ledgerType])
+  @@index([chartEntryId])
+  @@map("accounts")
+}
+
+/// *
+///  * Сопоставление счёта NAS ↔ IFRS для теневых проводок (Multi-GAAP).
+model AccountMapping {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  nasAccountId   String       @map("nas_account_id") @db.Uuid
+  ifrsAccountId  String       @map("ifrs_account_id") @db.Uuid
+  /// *
+  ///    * Коэффициент пересчёта суммы строки NAS → IFRS (1 = 1:1).
+  ratio          Decimal      @default(1) @db.Decimal(19, 8)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  ifrsAccount    Account      @relation("AccountMappingIfrs", fields: [ifrsAccountId], references: [id])
+  nasAccount     Account      @relation("AccountMappingNas", fields: [nasAccountId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, nasAccountId])
+  @@index([organizationId])
+  @@map("account_mappings")
+}
+
+/**
+ * Global template NAS ↔ IFRS mapping (v14.0 / PRD §5.1).
+ * Used as a starting point when bootstrapping Multi-GAAP for a new organization.
+ */
+model TemplateIFRSMapping {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  nasCode     String   @map("nas_code")
+  ifrsCode    String   @map("ifrs_code")
+  ratio       Decimal  @default(1) @db.Decimal(19, 8)
+  description String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([nasCode, ifrsCode])
+  @@index([nasCode])
+  @@index([ifrsCode])
+  @@map("template_ifrs_mappings")
+}
+
+model Transaction {
+  id                           String                        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId               String                        @map("organization_id") @db.Uuid
+  date                         DateTime                      @db.Date
+  reference                    String?
+  description                  String?
+  createdAt                    DateTime                      @default(now()) @map("created_at")
+  updatedAt                    DateTime                      @updatedAt @map("updated_at")
+  /// *
+  ///    * true — курс/суммы в документе зафиксированы (подтверждено бухгалтерией);
+  ///    * false — «плавающий» курс до подтверждения.
+  isFinal                      Boolean                       @default(false) @map("is_final")
+  /// *
+  ///    * Закрытый период: транзакция не должна корректироваться задним числом
+  isLocked                     Boolean                       @default(false) @map("is_locked")
+  counterpartyId               String?                       @map("counterparty_id") @db.Uuid
+  advanceReportsPosted         AdvanceReport?                @relation("AdvanceReportPostedTx")
+  cashOrdersLinked             CashOrder[]                   @relation("CashOrderLinkedTx")
+  cashOrdersPosted             CashOrder[]                   @relation("CashOrderPostedTx")
+  fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
+  invoicePayments              InvoicePayment[]
+  journalEntries               JournalEntry[]
+  payrollRuns                  PayrollRun[]
+  counterparty                 Counterparty?                 @relation(fields: [counterpartyId], references: [id])
+  organization                 Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, date])
+  @@index([counterpartyId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, date, isLocked])
+  @@map("transactions")
+}
+
+model JournalEntry {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  transactionId  String       @map("transaction_id") @db.Uuid
+  accountId      String       @map("account_id") @db.Uuid
+  debit          Decimal      @default(0) @db.Decimal(19, 4)
+  credit         Decimal      @default(0) @db.Decimal(19, 4)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  ledgerType     LedgerType   @default(NAS) @map("ledger_type")
+  account        Account      @relation(fields: [accountId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transaction    Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, transactionId])
+  @@index([organizationId, accountId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, ledgerType])
+  @@map("journal_entries")
+}
+
+model Counterparty {
+  id                    String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId        String                 @map("organization_id") @db.Uuid
+  name                  String
+  taxId                 String                 @map("tax_id")
+  kind                  CounterpartyKind
+  role                  CounterpartyRole       @default(CUSTOMER)
+  address               String?
+  bankAccounts          Json                   @default("[]") @map("bank_accounts")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  email                 String?
+  /// *
+  ///    * Статус плательщика НДС по данным VÖEN lookup (e-taxes), null — не проверяли
+  isVatPayer            Boolean?               @map("is_vat_payer")
+  globalId              String?                @map("global_id") @db.Uuid
+  cashOrders            CashOrder[]
+  global                GlobalCounterparty?    @relation(fields: [globalId], references: [id])
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices              Invoice[]
+  transactions          Transaction[]
+
+  @@index([organizationId, taxId])
+  @@index([organizationId, createdAt])
+  @@index([globalId])
+  @@map("counterparties")
+}
+
+/// *
+///  * История ЭЦП (ASAN/SİMA, публичная верификация по id записи).
+model DigitalSignatureLog {
+  id                    String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId        String                 @map("organization_id") @db.Uuid
+  /// *
+  ///    * INVOICE: invoice.id; RECONCILIATION_ACT: детерминированный UUID периода (см. reconciliationDocumentUuid).
+  documentId            String                 @map("document_id") @db.Uuid
+  certificateThumbprint String?                @map("certificate_thumbprint")
+  signedAt              DateTime?              @map("signed_at")
+  provider              SignatureProvider      @map("provider")
+  status                DigitalSignatureStatus @default(PENDING_MOBILE) @map("status")
+  certificateSubject    String?                @map("certificate_subject")
+  certificateIssuer     String?                @map("certificate_issuer")
+  pendingStartedAt      DateTime?              @map("pending_started_at")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  documentKind          SignedDocumentKind     @default(INVOICE) @map("document_kind")
+  /// *
+  ///    * SHA-256 финального PDF (hex), после генерации файла
+  contentHashSha256     String?                @map("content_hash_sha256") @db.VarChar(64)
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, signedAt])
+  @@index([organizationId, documentId])
+  @@index([organizationId, status])
+  @@map("digital_signature_logs")
+}
+
+model Product {
+  id                     String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId         String                  @map("organization_id") @db.Uuid
+  name                   String
+  sku                    String
+  price                  Decimal                 @db.Decimal(19, 4)
+  vatRate                Decimal                 @map("vat_rate") @db.Decimal(5, 2)
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  isService              Boolean                 @default(false) @map("is_service")
+  inventoryAuditLines    InventoryAuditLine[]
+  invoiceItems           InvoiceItem[]
+  recipeLinesAsComponent ProductRecipeLine[]     @relation("RecipeComponentProduct")
+  recipeFinished         ProductRecipe?          @relation("RecipeFinishedProduct")
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stockItems             StockItem[]
+  stockMovements         StockMovement[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+  @@map("products")
+}
+
+/// *
+///  * Спецификация: из каких продуктов-составляющих состоит готовая продукция.
+model ProductRecipe {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId    String              @map("organization_id") @db.Uuid
+  /// *
+  ///    * Одна спецификация на продукт (id продукта уникален в системе).
+  finishedProductId String              @unique @map("finished_product_id") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  lines             ProductRecipeLine[]
+  finishedProduct   Product             @relation("RecipeFinishedProduct", fields: [finishedProductId], references: [id], onDelete: Cascade)
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("product_recipes")
+}
+
+model ProductRecipeLine {
+  id                 String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  recipeId           String        @map("recipe_id") @db.Uuid
+  componentProductId String        @map("component_product_id") @db.Uuid
+  /// *
+  ///    * Количество компонента на 1 единицу готовой продукции
+  quantityPerUnit    Decimal       @map("quantity_per_unit") @db.Decimal(19, 4)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  wasteFactor       Decimal       @default(0) @map("waste_factor") @db.Decimal(19, 6)
+  component          Product       @relation("RecipeComponentProduct", fields: [componentProductId], references: [id])
+  recipe             ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, componentProductId])
+  @@index([recipeId])
+  @@map("product_recipe_lines")
+}
+
+/// *
+///  * Основное средство (линейная амортизация).
+model FixedAsset {
+  id                 String                        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId     String                        @map("organization_id") @db.Uuid
+  name               String
+  inventoryNumber    String                        @map("inventory_number")
+  commissioningDate  DateTime                      @map("commissioning_date") @db.Date
+  initialCost        Decimal                       @map("initial_cost") @db.Decimal(19, 4)
+  usefulLifeMonths   Int                           @map("useful_life_months")
+  salvageValue       Decimal                       @default(0) @map("salvage_value") @db.Decimal(19, 4)
+  /// *
+  ///    * Уже начисленная амортизация (сумма проведённых месяцев)
+  bookedDepreciation Decimal                       @default(0) @map("booked_depreciation") @db.Decimal(19, 4)
+  createdAt          DateTime                      @default(now()) @map("created_at")
+  updatedAt          DateTime                      @updatedAt @map("updated_at")
+  depreciationMonths FixedAssetDepreciationMonth[]
+  organization       Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, inventoryNumber])
+  @@index([organizationId, commissioningDate])
+  @@map("fixed_assets")
+}
+
+/// *
+///  * Факт начисления амортизации по ОС за календарный месяц (идемпотентность при закрытии).
+model FixedAssetDepreciationMonth {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  fixedAssetId   String       @map("fixed_asset_id") @db.Uuid
+  year           Int
+  month          Int
+  amount         Decimal      @db.Decimal(19, 4)
+  transactionId  String?      @map("transaction_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  fixedAsset     FixedAsset   @relation(fields: [fixedAssetId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@unique([fixedAssetId, year, month])
+  @@index([organizationId, year, month])
+  @@map("fixed_asset_depreciation_months")
+}
+
+model Invoice {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId    String              @map("organization_id") @db.Uuid
+  number            String
+  status            InvoiceStatus       @default(DRAFT)
+  dueDate           DateTime            @map("due_date") @db.Date
+  counterpartyId    String              @map("counterparty_id") @db.Uuid
+  /// *
+  ///    * Дт при оплате: 101 касса / 221 банк (см. ТЗ)
+  debitAccountCode  String              @default("101") @map("debit_account_code")
+  totalAmount       Decimal             @default(0) @map("total_amount") @db.Decimal(19, 4)
+  currency          String              @default("AZN")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  warehouseId       String?             @map("warehouse_id") @db.Uuid
+  /// *
+  ///    * Списание склада и проводка 701/201 выполнены (обычно при оплате)
+  inventorySettled  Boolean             @default(false) @map("inventory_settled")
+  /// *
+  ///    * Дт 211 / Кт 601 отражены (отгрузка / начисление выручки)
+  revenueRecognized Boolean             @default(false) @map("revenue_recognized")
+  /// *
+  ///    * Дт 101|221 / Кт 211 отражены (оплата от дебитора)
+  paymentReceived   Boolean             @default(false) @map("payment_received")
+  /// *
+  ///    * Момент первого проведения Дт 211 — Кт 601 (для акта сверки и сальдо)
+  recognizedAt      DateTime?           @map("recognized_at")
+  matchedBankLines  BankStatementLine[] @relation("InvoiceBankMatch")
+  cashOrders        CashOrder[]
+  items             InvoiceItem[]
+  payments          InvoicePayment[]
+  counterparty      Counterparty        @relation(fields: [counterpartyId], references: [id])
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse         Warehouse?          @relation(fields: [warehouseId], references: [id])
+  stockMovements    StockMovement[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, counterpartyId])
+  @@map("invoices")
+}
+
+/// *
+///  * Оплата инвойса (частичная или полная); сумма проводок Дт касса/банк — Кт 211 = amount.
+model InvoicePayment {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  invoiceId      String       @map("invoice_id") @db.Uuid
+  amount         Decimal      @db.Decimal(19, 4)
+  date           DateTime     @db.Date
+  transactionId  String?      @map("transaction_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([organizationId, invoiceId])
+  @@index([organizationId, date])
+  @@map("invoice_payments")
+}
+
+model BankStatement {
+  id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  date           DateTime             @db.Date
+  totalAmount    Decimal              @map("total_amount") @db.Decimal(19, 4)
+  bankName       String               @map("bank_name")
+  sourceFileName String?              @map("source_file_name")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  channel        BankStatementChannel @default(BANK) @map("channel")
+  lines          BankStatementLine[]
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, date])
+  @@index([organizationId, createdAt])
+  @@map("bank_statements")
+}
+
+model BankStatementLine {
+  id                String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId    String                  @map("organization_id") @db.Uuid
+  bankStatementId   String                  @map("bank_statement_id") @db.Uuid
+  description       String?
+  /// *
+  ///    * Сумма всегда > 0; направление задаёт type
+  amount            Decimal                 @db.Decimal(19, 4)
+  type              BankStatementLineType
+  isMatched         Boolean                 @default(false) @map("is_matched")
+  /// *
+  ///    * VÖEN контрагента (из выписки / парсинга) для Match с инвойсом
+  counterpartyTaxId String?                 @map("counterparty_tax_id")
+  valueDate         DateTime?               @map("value_date") @db.Date
+  matchedInvoiceId  String?                 @map("matched_invoice_id") @db.Uuid
+  rawRow            Json?                   @map("raw_row")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  /// *
+  ///    * Идемпотентность API/вебхука: pasha:tx-…, abb:…
+  integrationKey    String?                 @map("integration_key")
+  origin            BankStatementLineOrigin @default(FILE_IMPORT) @map("origin")
+  cashFlowItemId    String?                 @map("cash_flow_item_id") @db.Uuid
+  bankStatement     BankStatement           @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  cashFlowItem      CashFlowItem?           @relation(fields: [cashFlowItemId], references: [id])
+  matchedInvoice    Invoice?                @relation("InvoiceBankMatch", fields: [matchedInvoiceId], references: [id])
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, integrationKey])
+  @@index([organizationId, isMatched])
+  @@index([organizationId, counterpartyTaxId])
+  @@index([organizationId, bankStatementId])
+  @@index([cashFlowItemId])
+  @@map("bank_statement_lines")
+}
+
+model CashOrder {
+  id                     String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId         String               @map("organization_id") @db.Uuid
+  orderNumber            String               @map("order_number")
+  date                   DateTime             @db.Date
+  kind                   CashOrderKind
+  status                 CashOrderStatus      @default(DRAFT)
+  pkoSubtype             CashOrderPkoSubtype? @map("pko_subtype")
+  rkoSubtype             CashOrderRkoSubtype? @map("rko_subtype")
+  currency               String               @default("AZN")
+  amount                 Decimal              @db.Decimal(19, 4)
+  purpose                String               @default("")
+  notes                  String?
+  cashAccountCode        String               @default("101.01") @map("cash_account_code")
+  /// *
+  ///    * Второй счёт проводки (601, 244, 221, 531 и т.д.).
+  offsetAccountCode      String?              @map("offset_account_code")
+  counterpartyId         String?              @map("counterparty_id") @db.Uuid
+  employeeId             String?              @map("employee_id") @db.Uuid
+  sourceInvoiceId        String?              @map("source_invoice_id") @db.Uuid
+  sourceInvoicePaymentId String?              @unique @map("source_invoice_payment_id") @db.Uuid
+  /// *
+  ///    * Проводка уже создана (напр. оплата инвойса) — печать ордера без дубля проводки.
+  skipJournalPosting     Boolean              @default(false) @map("skip_journal_posting")
+  linkedTransactionId    String?              @map("linked_transaction_id") @db.Uuid
+  postedTransactionId    String?              @map("posted_transaction_id") @db.Uuid
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  cashDeskId            String?               @map("cash_desk_id") @db.Uuid
+  cashFlowItemId        String?               @map("cash_flow_item_id") @db.Uuid
+  withholdingTaxAmount  Decimal?              @map("withholding_tax_amount") @db.Decimal(19, 4)
+  cashDesk              CashDesk?             @relation(fields: [cashDeskId], references: [id])
+  cashFlowItem          CashFlowItem?         @relation(fields: [cashFlowItemId], references: [id])
+  counterparty           Counterparty?        @relation(fields: [counterpartyId], references: [id])
+  employee               Employee?            @relation("CashOrderEmployee", fields: [employeeId], references: [id])
+  linkedTransaction      Transaction?         @relation("CashOrderLinkedTx", fields: [linkedTransactionId], references: [id])
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  postedTransaction      Transaction?         @relation("CashOrderPostedTx", fields: [postedTransactionId], references: [id])
+  sourceInvoice          Invoice?             @relation(fields: [sourceInvoiceId], references: [id])
+
+  @@unique([organizationId, orderNumber])
+  @@index([organizationId, date])
+  @@index([organizationId, status])
+  @@index([cashDeskId])
+  @@index([cashFlowItemId])
+  @@map("cash_orders")
+}
+
+/// *
+///  * Авансовый отчёт подотчётного лица (закрытие 244).
+model AdvanceReport {
+  id             String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  employeeId     String              @map("employee_id") @db.Uuid
+  reportDate     DateTime            @map("report_date") @db.Date
+  /// *
+  ///    * Строки расходов: [{ amount, description }]
+  expenseLines   Json                @default("[]") @map("expense_lines")
+  totalDeclared  Decimal             @map("total_declared") @db.Decimal(19, 4)
+  purpose        String              @default("")
+  status         AdvanceReportStatus @default(DRAFT)
+  transactionId  String?             @unique @map("transaction_id") @db.Uuid
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  employee       Employee            @relation(fields: [employeeId], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transaction    Transaction?        @relation("AdvanceReportPostedTx", fields: [transactionId], references: [id])
+
+  @@index([organizationId, employeeId])
+  @@map("advance_reports")
+}
+
+model InvoiceItem {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  invoiceId      String       @map("invoice_id") @db.Uuid
+  productId      String?      @map("product_id") @db.Uuid
+  description    String?
+  quantity       Decimal      @db.Decimal(19, 4)
+  unitPrice      Decimal      @map("unit_price") @db.Decimal(19, 4)
+  vatRate        Decimal      @map("vat_rate") @db.Decimal(5, 2)
+  lineTotal      Decimal      @map("line_total") @db.Decimal(19, 4)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product?     @relation(fields: [productId], references: [id])
+
+  @@index([organizationId, invoiceId])
+  @@map("invoice_items")
+}
+
+model AuditLog {
+  id             String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  userId         String?       @map("user_id") @db.Uuid
+  entityType     String        @map("entity_type")
+  entityId       String        @map("entity_id")
+  action         String
+  /// *
+  ///    * Устаревшее агрегированное поле; для новых записей см. oldValues/newValues.
+  changes        Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  /// *
+  ///    * Снимок сущности до изменения (JSON).
+  oldValues      Json?         @map("old_values")
+  /// *
+  ///    * Снимок сущности после изменения или ответ API (JSON).
+  newValues      Json?         @map("new_values")
+  clientIp       String?       @map("client_ip")
+  userAgent      String?       @map("user_agent")
+  /// *
+  ///    * SHA-256 от канонического JSON полей + AUDIT_HASH_SECRET.
+  hash           String?       @map("hash")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+/// *
+///  * Архив audit_logs старше политики хранения (перенос из основной таблицы).
+model AuditLogArchive {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  action         String
+  changes        Json?
+  oldValues      Json?    @map("old_values")
+  newValues      Json?    @map("new_values")
+  clientIp       String?  @map("client_ip")
+  userAgent      String?  @map("user_agent")
+  hash           String?  @map("hash")
+  createdAt      DateTime @map("created_at")
+  archivedAt     DateTime @default(now()) @map("archived_at")
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_log_archives")
+}
+
+model AbsenceType {
+  id              String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String            @map("organization_id") @db.Uuid
+  code            String
+  nameAz          String            @map("name_az")
+  isPaid          Boolean           @map("is_paid")
+  description     String            @default("")
+  formula         AbsencePayFormula
+  maxCalendarDays Int?              @map("max_calendar_days")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  absences     Absence[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("absence_types")
+}
+
+model CashDesk {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  employeeId     String?  @map("employee_id") @db.Uuid
+  currencies     String[] @default([])
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  employee     Employee?    @relation(fields: [employeeId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cashOrders   CashOrder[]
+
+  @@index([employeeId])
+  @@index([organizationId])
+  @@map("cash_desks")
+}
+
+model CashFlowItem {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  bankStatementLines BankStatementLine[]
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cashOrders          CashOrder[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("cash_flow_items")
+}
+
+model ChartOfAccountsEntry {
+  id            String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code          String      @unique
+  name          String
+  accountType   AccountType @map("account_type")
+  cashProfile   String?     @map("cash_profile")
+  sortOrder     Int         @default(0) @map("sort_order")
+  isDeprecated  Boolean     @default(false) @map("is_deprecated")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  accounts      Account[]
+
+  @@map("chart_of_accounts_entries")
+}
+
+model GlobalCounterparty {
+  id             String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  taxId          String         @unique @map("tax_id")
+  name           String
+  legalAddress   String?        @map("legal_address")
+  vatStatus      Boolean?       @map("vat_status")
+  updatedAt      DateTime       @default(now()) @map("updated_at") @db.Timestamptz(6)
+  counterparties Counterparty[]
+
+  @@map("global_counterparties")
+}
+
+model HoldingMembership {
+  userId    String            @map("user_id") @db.Uuid
+  holdingId String            @map("holding_id") @db.Uuid
+  role      HoldingAccessRole @default(VIEWER)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  holding Holding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, holdingId])
+  @@index([holdingId])
+  @@map("holding_memberships")
+}
+
+model Holding {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name         String   @unique
+  ownerId      String   @map("owner_id") @db.Uuid
+  baseCurrency String   @default("AZN") @map("base_currency")
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships  HoldingMembership[]
+  owner        User                 @relation(fields: [ownerId], references: [id])
+  organizations Organization[]
+
+  @@index([ownerId])
+  @@map("holdings")
+}
+
+model InventoryAuditLine {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String        @map("organization_id") @db.Uuid
+  inventoryAuditId String       @map("inventory_audit_id") @db.Uuid
+  productId       String        @map("product_id") @db.Uuid
+  systemQty       Decimal       @map("system_qty") @db.Decimal(19, 4)
+  factQty         Decimal       @map("fact_qty") @db.Decimal(19, 4)
+  costPrice       Decimal       @map("cost_price") @db.Decimal(19, 4)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  inventoryAudit InventoryAudit @relation(fields: [inventoryAuditId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "inventory_audit_lines_audit_fkey")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "inventory_audit_lines_org_fkey")
+  product        Product        @relation(fields: [productId], references: [id], onUpdate: NoAction, map: "inventory_audit_lines_product_fkey")
+
+  @@unique([inventoryAuditId, productId], map: "inventory_audit_lines_audit_product_uidx")
+  @@index([organizationId, inventoryAuditId], map: "inventory_audit_lines_org_audit_idx")
+  @@index([organizationId, productId], map: "inventory_audit_lines_org_product_idx")
+  @@map("inventory_audit_lines")
 }
 
 enum UserRole {
@@ -33,23 +1371,22 @@ enum CounterpartyRole {
   CUSTOMER
   SUPPLIER
   BOTH
+  OTHER
 }
 
 enum InvoiceStatus {
   DRAFT
   SENT
-  PARTIALLY_PAID
   PAID
   CANCELLED
-  /**
-   * Редактирование и платежи заблокированы после успешной ЭЦП
-   */
+  PARTIALLY_PAID
+  /// *
+  ///    * Редактирование и платежи заблокированы после успешной ЭЦП
   LOCKED_BY_SIGNATURE
 }
 
-/**
- * ASAN İmza / SİMA (Mobile ID).
- */
+/// *
+///  * ASAN İmza / SİMA (Mobile ID).
 enum SignatureProvider {
   ASAN_IMZA
   SIMA
@@ -71,28 +1408,26 @@ enum BankStatementLineType {
   OUTFLOW
 }
 
-/**
- * Реестр: банк vs касса (фильтр в UI).
- */
+/// *
+///  * Реестр: банк vs касса (фильтр в UI).
 enum BankStatementChannel {
   BANK
   CASH
 }
 
-/**
- * Источник строки: импорт, синхронизация, оплата инвойса, ручная касса.
- */
+/// *
+///  * Источник строки: импорт, синхронизация, оплата инвойса, ручная касса.
 enum BankStatementLineOrigin {
   FILE_IMPORT
   DIRECT_SYNC
   WEBHOOK
   INVOICE_PAYMENT_SYSTEM
   MANUAL_CASH_OUT
+  MANUAL_BANK_ENTRY
 }
 
-/**
- * Курс ЦБА, сохранённый в системе (целостность / переоценка только FINAL).
- */
+/// *
+///  * Курс ЦБА, сохранённый в системе (целостность / переоценка только FINAL).
 enum CbarRateStatus {
   PRELIMINARY
   FINAL
@@ -103,17 +1438,11 @@ enum PayrollRunStatus {
   POSTED
 }
 
-/**
- * Штатный сотрудник или ГПХ (xidmət müqaviləsi, физлицо с VÖEN).
- */
+/// *
+///  * Штатный сотрудник или ГПХ (xidmət müqaviləsi, физлицо с VÖEN).
 enum EmployeeKind {
   EMPLOYEE
   CONTRACTOR
-}
-
-enum AbsenceType {
-  VACATION
-  SICK_LEAVE
 }
 
 enum TimesheetStatus {
@@ -121,9 +1450,8 @@ enum TimesheetStatus {
   APPROVED
 }
 
-/**
- * Ячейка табеля: рабочий день, отпуск, больничный, выходной, служебная поездка (ezamiyyət).
- */
+/// *
+///  * Ячейка табеля: рабочий день, отпуск, больничный, выходной, служебная поездка (ezamiyyət).
 enum TimesheetEntryType {
   WORK
   VACATION
@@ -142,40 +1470,35 @@ enum StockMovementReason {
   SALE
   PURCHASE
   ADJUSTMENT
-  /**
-   * Выпуск готовой продукции (списание компонентов / приход ГП)
-   */
+  /// *
+  ///    * Выпуск готовой продукции (списание компонентов / приход ГП)
   MANUFACTURING
 }
 
-/**
- * Инвентаризационная опись (v5.9): системные остатки vs факт, проведение — корректировки склада.
- */
+/// *
+///  * Инвентаризационная опись (v5.9): системные остатки vs факт, проведение — корректировки склада.
 enum InventoryAuditStatus {
   DRAFT
   APPROVED
 }
 
-/**
- * Книга учёта: национальный план (NAS) или параллельный IFRS.
- */
+/// *
+///  * Книга учёта: национальный план (NAS) или параллельный IFRS.
 enum LedgerType {
   NAS
   IFRS
 }
 
-/**
- * Коммерческий тариф SaaS (v4.0).
- */
+/// *
+///  * Коммерческий тариф SaaS (v4.0).
 enum SubscriptionTier {
   STARTER
   BUSINESS
   ENTERPRISE
 }
 
-/**
- * Счёт подписки платформы (v10.2), не путать с Invoice (продажи).
- */
+/// *
+///  * Счёт подписки платформы (v10.2), не путать с Invoice (продажи).
 enum SubscriptionInvoiceStatus {
   DRAFT
   ISSUED
@@ -184,184 +1507,12 @@ enum SubscriptionInvoiceStatus {
   CANCELLED
 }
 
-/**
- * Тип строки прайса v10.2: модуль, база Foundation, пакет квоты.
- */
+/// *
+///  * Тип строки прайса v10.2: модуль, база Foundation, пакет квоты.
 enum PricingKind {
   FOUNDATION
   MODULE
   QUOTA
-}
-
-model Organization {
-  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name              String
-  taxId             String   @map("tax_id")
-  currency          String   @default("AZN")
-  settings          Json     @default("{}")
-  /**
-   * Секрет URL вебхука Direct Banking: POST /api/public/banking/webhook/:secret
-   */
-  bankWebhookSecret String?  @unique @map("bank_webhook_secret")
-  subscriptionPlan  String?  @map("subscription_plan")
-  /**
-   * Владелец организации для биллинга (v10.2).
-   */
-  ownerId           String?  @map("owner_id") @db.Uuid
-  /**
-   * Включённые модули (slug) на уровне организации — денормализация для биллинга v10.2;
-   * источник правды для гейтинга остаётся OrganizationSubscription.customConfig / activeModules.
-   */
-  activeModules     String[] @default([]) @map("active_modules")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  owner                        User?                         @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  memberships                  OrganizationMembership[]
-  accounts                     Account[]
-  transactions                 Transaction[]
-  journalEntries               JournalEntry[]
-  counterparties               Counterparty[]
-  auditLogs                    AuditLog[]
-  digitalSignatureLogs         DigitalSignatureLog[]
-  products                     Product[]
-  invoices                     Invoice[]
-  invoiceItems                 InvoiceItem[]
-  bankStatements               BankStatement[]
-  bankStatementLines           BankStatementLine[]
-  employees                    Employee[]
-  payrollRuns                  PayrollRun[]
-  payrollSlips                 PayrollSlip[]
-  absences                     Absence[]
-  warehouses                   Warehouse[]
-  stockItems                   StockItem[]
-  stockMovements               StockMovement[]
-  accountMappings              AccountMapping[]
-  invoicePayments              InvoicePayment[]
-  fixedAssets                  FixedAsset[]
-  fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
-  productRecipes               ProductRecipe[]
-  subscription                 OrganizationSubscription?
-  paymentOrders                PaymentOrder[]
-  departments                  Department[]
-  accessRequests               AccessRequest[]
-  invites                      OrganizationInvite[]
-  inventoryAudits              InventoryAudit[]
-  timesheets                   Timesheet[]
-  cashOrders                   CashOrder[]
-  advanceReports               AdvanceReport[]
-  billingInvoiceItems          BillingInvoiceItem[]
-  /**
-   * Нормализованные включённые модули (TZ §14.8.3); параллельно денормализация в activeModules.
-   */
-  organizationModules          OrganizationModule[]
-
-  @@index([ownerId])
-  @@map("organizations")
-}
-
-/**
- * Подключённые модули по организации: цена на момент включения и политика отмены (pro-rata / конец периода).
- */
-model OrganizationModule {
-  organizationId String    @map("organization_id") @db.Uuid
-  moduleKey      String    @map("module_key")
-  priceSnapshot  Decimal   @map("price_snapshot") @db.Decimal(12, 2)
-  activatedAt    DateTime  @default(now()) @map("activated_at")
-  /**
-   * Заполнено при отключении: автопродление снято, доступ до accessUntil.
-   */
-  cancelledAt    DateTime? @map("cancelled_at")
-  /**
-   * Конец текущего оплаченного периода (UTC), после — модуль снимается с activeModules.
-   */
-  accessUntil    DateTime? @map("access_until") @db.Timestamptz(6)
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@id([organizationId, moduleKey])
-  @@map("organization_modules")
-}
-
-/**
- * Актуальные цены конструктора: база, модули, квоты (v10.2). Сидируется по умолчанию.
- */
-model Pricing {
-  id        String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  key       String      @unique
-  kind      PricingKind
-  name      String
-  amountAzn Decimal     @map("amount_azn") @db.Decimal(12, 2)
-  /**
-   * Для квот: размер блока (напр. 10 сотрудников, 5 GB, 500 инвойсов); для Foundation/модуля — null.
-   */
-  unitSize  Int?        @map("unit_size")
-  sortOrder Int         @default(0) @map("sort_order")
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
-
-  @@map("pricing")
-}
-
-/**
- * Единый счёт платформы на Owner-аккаунт (TZ §14.8 / v12.3). Не путать с Invoice (продажи).
- */
-model SubscriptionInvoice {
-  id             String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  /**
-   * Плательщик / владелец портфеля (owner user).
-   */
-  userId         String                    @map("user_id") @db.Uuid
-  /**
-   * Итог по счёту (AZN).
-   */
-  amount         Decimal                   @db.Decimal(12, 2)
-  status         SubscriptionInvoiceStatus
-  /**
-   * Дата выставления / учёта.
-   */
-  date           DateTime                  @db.Date
-  /**
-   * Расчётный период (месяц и т.п.).
-   */
-  periodStart    DateTime?                 @map("period_start") @db.Timestamptz(6)
-  periodEnd      DateTime?                 @map("period_end") @db.Timestamptz(6)
-  /**
-   * Готовый PDF в объектном хранилище (опционально).
-   */
-  pdfLink        String?                   @map("pdf_link")
-  /**
-   * Связь с заказом оплаты (шлюз); счёт выставляется на owner, услуга — по organization в строках.
-   */
-  paymentOrderId String?                   @unique @map("payment_order_id") @db.Uuid
-  createdAt      DateTime                  @default(now()) @map("created_at")
-  updatedAt      DateTime                  @updatedAt @map("updated_at")
-
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  paymentOrder PaymentOrder?        @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
-  items        BillingInvoiceItem[]
-
-  @@index([userId])
-  @@index([userId, date])
-  @@map("subscription_invoices")
-}
-
-/**
- * Строки платформенного счёта: разбивка по организациям (VÖEN) — TZ §14.8.4.
- */
-model BillingInvoiceItem {
-  id                    String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  subscriptionInvoiceId String  @map("subscription_invoice_id") @db.Uuid
-  organizationId        String  @map("organization_id") @db.Uuid
-  description           String
-  amount                Decimal @db.Decimal(12, 2)
-
-  subscriptionInvoice SubscriptionInvoice @relation(fields: [subscriptionInvoiceId], references: [id], onDelete: Cascade)
-  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([subscriptionInvoiceId])
-  @@index([organizationId])
-  @@map("billing_invoice_items")
 }
 
 enum AccessRequestStatus {
@@ -376,114 +1527,6 @@ enum InviteStatus {
   DECLINED
 }
 
-/**
- * Связь пользователь ↔ организация (роль в рамках организации).
- */
-model OrganizationMembership {
-  userId         String   @map("user_id") @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  role           UserRole
-  joinedAt       DateTime @default(now()) @map("joined_at")
-
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@id([userId, organizationId])
-  @@index([organizationId])
-  @@map("organization_memberships")
-}
-
-/**
- * Запрос на вступление в организацию (поиск по VÖEN).
- */
-model AccessRequest {
-  id              String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId  String              @map("organization_id") @db.Uuid
-  requesterId     String              @map("requester_id") @db.Uuid
-  status          AccessRequestStatus @default(PENDING)
-  message         String?
-  createdAt       DateTime            @default(now()) @map("created_at")
-  decidedAt       DateTime?           @map("decided_at")
-  decidedByUserId String?             @map("decided_by_user_id") @db.Uuid
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  requester    User         @relation("AccessRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  decidedBy    User?        @relation("AccessRequestDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, status])
-  @@index([requesterId])
-  @@map("access_requests")
-}
-
-/**
- * Приглашение по email в организацию.
- */
-model OrganizationInvite {
-  id              String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId  String       @map("organization_id") @db.Uuid
-  email           String
-  role            UserRole
-  status          InviteStatus @default(PENDING)
-  invitedByUserId String?      @map("invited_by_user_id") @db.Uuid
-  createdAt       DateTime     @default(now()) @map("created_at")
-  decidedAt       DateTime?    @map("decided_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invitedBy    User?        @relation("InviteInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, email])
-  @@map("organization_invites")
-}
-
-/**
- * Подразделение (иерархия: parentId).
- */
-model Department {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  name           String
-  parentId       String?  @map("parent_id") @db.Uuid
-  managerId      String?  @map("manager_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent       Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children     Department[]  @relation("DepartmentHierarchy")
-  manager      Employee?     @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
-  jobPositions JobPosition[]
-
-  @@index([organizationId])
-  @@index([parentId])
-  @@map("departments")
-}
-
-/**
- * Штатная единица (должность) в подразделении.
- */
-model JobPosition {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  departmentId String   @map("department_id") @db.Uuid
-  name         String
-  totalSlots   Int      @map("total_slots")
-  /**
-   * Нижняя граница вилки оклада по штатке (AZN), справочно.
-   */
-  minSalary    Decimal  @map("min_salary") @db.Decimal(19, 4)
-  /**
-   * Верхняя граница вилки оклада по штатке (AZN), справочно.
-   */
-  maxSalary    Decimal  @map("max_salary") @db.Decimal(19, 4)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  employees  Employee[]
-
-  @@index([departmentId])
-  @@map("job_positions")
-}
-
 enum PaymentOrderStatus {
   PENDING
   PAID
@@ -491,856 +1534,11 @@ enum PaymentOrderStatus {
   CANCELLED
 }
 
-/**
- * Заказ на оплату подписки (шлюз Pasha Bank / mock).
- */
-model PaymentOrder {
-  id             String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String             @map("organization_id") @db.Uuid
-  amountAzn      Decimal            @map("amount_azn") @db.Decimal(12, 2)
-  currency       String             @default("AZN")
-  status         PaymentOrderStatus @default(PENDING)
-  /**
-   * pasha_bank | mock
-   */
-  provider       String             @default("pasha_bank")
-  providerTxnId  String?            @map("provider_txn_id")
-  monthsApplied  Int                @default(1) @map("months_applied")
-  description    String             @default("")
-  idempotencyKey String?            @unique @map("idempotency_key")
-  metadata       Json               @default("{}")
-  createdAt      DateTime           @default(now()) @map("created_at")
-  paidAt         DateTime?          @map("paid_at")
-
-  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subscriptionInvoice SubscriptionInvoice?
-
-  @@index([organizationId])
-  @@index([status])
-  @@map("payment_orders")
-}
-
-/**
- * Подписка организации (1:1). Slugs модулей: production, ifrs, banking_pro и др.; v8.1 — customConfig.modules (конструктор).
- */
-model OrganizationSubscription {
-  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String           @unique @map("organization_id") @db.Uuid
-  tier           SubscriptionTier
-  expiresAt      DateTime?        @map("expires_at")
-  activeModules  String[]         @default([]) @map("active_modules")
-  /**
-   * Конструктор тарифа (v8.1): JSON с полями `modules` (массив slug), опционально `preset`, `quotas`.
-   * При непустом `modules` гейтинг модулей в первую очередь по этому массиву (см. TZ §14).
-   */
-  customConfig   Json?            @map("custom_config")
-  isTrial        Boolean          @default(false) @map("is_trial")
-  /**
-   * Принудительная блокировка доступа (супер-админ).
-   */
-  isBlocked      Boolean          @default(false) @map("is_blocked")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@map("organization_subscriptions")
-}
-
-/**
- * Ключ-значение: тарифы, лимиты, системные сообщения (Super-Admin).
- */
-model SystemConfig {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  key       String   @unique
-  value     Json
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("system_config")
-}
-
-/**
- * Каталог платных модулей: месячная цена (поле pricePerMonth = «priceMonthly» в API-описаниях).
- */
-model PricingModule {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  key           String   @unique
-  name          String
-  pricePerMonth Decimal  @map("price_per_month") @db.Decimal(12, 2)
-  sortOrder     Int      @default(0) @map("sort_order")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  @@map("pricing_modules")
-}
-
-/**
- * Именованный пакет модулей со скидкой (Paket Yaradıcısı).
- */
-model PricingBundle {
-  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name            String
-  discountPercent Decimal  @default(0) @map("discount_percent") @db.Decimal(5, 2)
-  moduleKeys      Json     @map("module_keys")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  @@map("pricing_bundles")
-}
-
-/**
- * Переопределение строк i18n поверх статических файлов фронта.
- */
-model TranslationOverride {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  locale    String
-  key       String
-  value     String   @db.Text
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@unique([locale, key])
-  @@index([locale])
-  @@map("translation_overrides")
-}
-
-/**
- * Инвентаризационная опись: строки в `items` (JSON) — warehouseId, productId, factQty, inventoryAccountCode и др.
- */
-model InventoryAudit {
-  id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String               @map("organization_id") @db.Uuid
-  date           DateTime             @db.Date
-  status         InventoryAuditStatus
-  items          Json                 @default("[]")
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
-  @@map("inventory_audits")
-}
-
-model Warehouse {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  name           String
-  location       String   @default("")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stockItems     StockItem[]
-  stockMovements StockMovement[]
-  invoices       Invoice[]
-
-  @@index([organizationId])
-  @@map("warehouses")
-}
-
-model StockItem {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  warehouseId    String   @map("warehouse_id") @db.Uuid
-  productId      String   @map("product_id") @db.Uuid
-  quantity       Decimal  @default(0) @db.Decimal(19, 4)
-  averageCost    Decimal  @default(0) @map("average_cost") @db.Decimal(19, 4)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, warehouseId, productId])
-  @@index([organizationId, warehouseId])
-  @@map("stock_items")
-}
-
-model StockMovement {
-  id              String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId  String              @map("organization_id") @db.Uuid
-  warehouseId     String              @map("warehouse_id") @db.Uuid
-  productId       String              @map("product_id") @db.Uuid
-  type            StockMovementType
-  reason          StockMovementReason
-  /**
-   * Количество > 0; направление задаёт type
-   */
-  quantity        Decimal             @db.Decimal(19, 4)
-  /**
-   * Цена закупки (IN) или учётная / средняя на момент операции (OUT)
-   */
-  price           Decimal             @db.Decimal(19, 4)
-  note            String?
-  invoiceId       String?             @map("invoice_id") @db.Uuid
-  transferBatchId String?             @map("transfer_batch_id") @db.Uuid
-  createdAt       DateTime            @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, warehouseId, createdAt])
-  @@index([organizationId, productId, createdAt])
-  @@map("stock_movements")
-}
-
-/**
- * Официальные курсы ЦБА (общие для всех организаций).
- */
-model CbarOfficialRate {
-  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  /**
-   * Календарный день курса (по дате из XML ValCurs).
-   */
-  rateDate     DateTime       @map("rate_date") @db.Date
-  currencyCode String         @map("currency_code")
-  /**
-   * Value из XML (для сравнения с предыдущим днём).
-   */
-  value        Decimal        @db.Decimal(19, 4)
-  nominal      Int
-  /**
-   * Value / Nominal
-   */
-  rate         Decimal        @db.Decimal(19, 8)
-  status       CbarRateStatus @default(PRELIMINARY)
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-
-  @@unique([rateDate, currencyCode])
-  @@index([rateDate, status])
-  @@map("cbar_official_rates")
-}
-
-model Employee {
-  id                         String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId             String       @map("organization_id") @db.Uuid
-  kind                       EmployeeKind @default(EMPLOYEE) @map("kind")
-  /**
-   * ФИН, ровно 7 символов (валидация в API)
-   */
-  finCode                    String       @map("fin_code")
-  /**
-   * VÖEN (10 цифр) — обязателен для CONTRACTOR в API
-   */
-  voen                       String?      @map("voen")
-  firstName                  String       @map("first_name")
-  lastName                   String       @map("last_name")
-  positionId                 String       @map("position_id") @db.Uuid
-  startDate                  DateTime     @map("start_date") @db.Date
-  /**
-   * Оклад gross (AZN), частный ненефтяной сектор
-   */
-  salary                     Decimal      @map("salary") @db.Decimal(19, 4)
-  /**
-   * Фиксированные соц. удержания с выплаты подрядчику в месяц (AZN), опционально.
-   * Учитываются при расчёте net вместе с 5% подоходного налога.
-   */
-  contractorMonthlySocialAzn Decimal?     @map("contractor_monthly_social_azn") @db.Decimal(19, 4)
-  createdAt                  DateTime     @default(now()) @map("created_at")
-  updatedAt                  DateTime     @updatedAt @map("updated_at")
-
-  organization              Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  jobPosition               JobPosition      @relation(fields: [positionId], references: [id], onDelete: Restrict)
-  managedDepartments        Department[]     @relation("DepartmentManager")
-  payrollSlips              PayrollSlip[]
-  absences                  Absence[]
-  timesheetEntries          TimesheetEntry[]
-  /**
-   * Субсчёт 244.x для подотчёта (если задан).
-   */
-  accountableAccountCode244 String?          @map("accountable_account_code_244")
-  cashOrders                CashOrder[]      @relation("CashOrderEmployee")
-  advanceReports            AdvanceReport[]
-
-  @@unique([organizationId, finCode])
-  @@index([positionId])
-  @@index([organizationId, createdAt])
-  @@map("employees")
-}
-
-model PayrollRun {
-  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String           @map("organization_id") @db.Uuid
-  year           Int
-  month          Int
-  status         PayrollRunStatus @default(DRAFT)
-  transactionId  String?          @map("transaction_id") @db.Uuid
-  /**
-   * Утверждённый табель месяца (импорт учёта рабочего времени при создании ведомости).
-   */
-  timesheetId    String?          @map("timesheet_id") @db.Uuid
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  transaction  Transaction?  @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-  timesheet    Timesheet?    @relation(fields: [timesheetId], references: [id], onDelete: SetNull)
-  slips        PayrollSlip[]
-
-  @@unique([organizationId, year, month])
-  @@index([organizationId, status])
-  @@map("payroll_runs")
-}
-
-model PayrollSlip {
-  id                        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId            String   @map("organization_id") @db.Uuid
-  payrollRunId              String   @map("payroll_run_id") @db.Uuid
-  employeeId                String   @map("employee_id") @db.Uuid
-  gross                     Decimal  @db.Decimal(19, 4)
-  incomeTax                 Decimal  @map("income_tax") @db.Decimal(19, 4)
-  dsmfWorker                Decimal  @map("dsmf_worker") @db.Decimal(19, 4)
-  dsmfEmployer              Decimal  @map("dsmf_employer") @db.Decimal(19, 4)
-  itsWorker                 Decimal  @map("its_worker") @db.Decimal(19, 4)
-  itsEmployer               Decimal  @map("its_employer") @db.Decimal(19, 4)
-  unemploymentWorker        Decimal  @map("unemployment_worker") @db.Decimal(19, 4)
-  unemploymentEmployer      Decimal  @map("unemployment_employer") @db.Decimal(19, 4)
-  /**
-   * Удержание фикс. соц. с подрядчика (AZN); для штатных — 0
-   */
-  contractorSocialWithheld  Decimal  @default(0) @map("contractor_social_withheld") @db.Decimal(19, 4)
-  net                       Decimal  @map("net") @db.Decimal(19, 4)
-  /**
-   * Дни из утверждённого табеля (при импорте при создании ведомости).
-   */
-  timesheetWorkDays         Int?     @map("timesheet_work_days")
-  timesheetVacationDays     Int?     @map("timesheet_vacation_days")
-  timesheetSickDays         Int?     @map("timesheet_sick_days")
-  timesheetBusinessTripDays Int?     @map("timesheet_business_trip_days")
-  createdAt                 DateTime @default(now()) @map("created_at")
-  updatedAt                 DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  payrollRun   PayrollRun   @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-
-  @@unique([payrollRunId, employeeId])
-  @@index([organizationId, payrollRunId])
-  @@map("payroll_slips")
-}
-
-/**
- * Отпуск / больничный (справочник периодов отсутствия).
- */
-model Absence {
-  id             String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String      @map("organization_id") @db.Uuid
-  employeeId     String      @map("employee_id") @db.Uuid
-  type           AbsenceType @map("type")
-  startDate      DateTime    @map("start_date") @db.Date
-  endDate        DateTime    @map("end_date") @db.Date
-  note           String      @default("")
-  /**
-   * Учитывается в табеле (синхронизация M/X).
-   */
-  approved       Boolean     @default(true) @map("approved")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-
-  @@index([organizationId, employeeId])
-  @@index([organizationId, startDate])
-  @@map("absences")
-}
-
-/**
- * Табель учёта рабочего времени (месяц).
- */
-model Timesheet {
-  id             String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String          @map("organization_id") @db.Uuid
-  year           Int
-  month          Int
-  status         TimesheetStatus @default(DRAFT)
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  entries      TimesheetEntry[]
-  payrollRuns  PayrollRun[]
-
-  @@unique([organizationId, year, month])
-  @@index([organizationId, year, month])
-  @@map("timesheets")
-}
-
-/**
- * Строка табеля: сотрудник × календарный день.
- */
-model TimesheetEntry {
-  id                String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  timesheetId       String             @map("timesheet_id") @db.Uuid
-  employeeId        String             @map("employee_id") @db.Uuid
-  dayDate           DateTime           @map("day_date") @db.Date
-  type              TimesheetEntryType @map("type")
-  hours             Decimal            @default(8) @db.Decimal(8, 2)
-  /**
-   * Заполнено из Absence — ручное редактирование запрещено.
-   */
-  lockedFromAbsence Boolean            @default(false) @map("locked_from_absence")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-
-  timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
-  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-
-  @@unique([timesheetId, employeeId, dayDate])
-  @@index([timesheetId, employeeId])
-  @@map("timesheet_entries")
-}
-
-model User {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  firstName    String?  @map("first_name")
-  lastName     String?  @map("last_name")
-  /**
-   * Совместимость / отображение: можно дублировать «Имя Фамилия» или старые данные.
-   */
-  fullName     String?  @map("full_name")
-  avatarUrl    String?  @map("avatar_url")
-  /**
-   * Глобальный супер-админ платформы (без привязки к org в JWT).
-   */
-  isSuperAdmin Boolean  @default(false) @map("is_super_admin")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  ownedOrganizations        Organization[]           @relation("OrganizationOwner")
-  subscriptionInvoices      SubscriptionInvoice[]
-  memberships               OrganizationMembership[]
-  auditLogs                 AuditLog[]
-  accessRequestsAsRequester AccessRequest[]          @relation("AccessRequestRequester")
-  accessRequestsDecidedBy   AccessRequest[]          @relation("AccessRequestDecider")
-  invitesSent               OrganizationInvite[]     @relation("InviteInviter")
-
-  @@map("users")
-}
-
-model Account {
-  id             String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String      @map("organization_id") @db.Uuid
-  code           String
-  name           String
-  type           AccountType
-  /**
-   * Валюта учёта остатка по счёту (AZN, USD, EUR). Для переоценки — не-AZN.
-   */
-  currency       String      @default("AZN")
-  /**
-   * Книга: NAS (основной план) или IFRS (параллельный учёт).
-   */
-  ledgerType     LedgerType  @default(NAS) @map("ledger_type")
-  parentId       String?     @map("parent_id") @db.Uuid
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
-
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent         Account?         @relation("AccountHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children       Account[]        @relation("AccountHierarchy")
-  journalEntries JournalEntry[]
-  mappingsAsNas  AccountMapping[] @relation("AccountMappingNas")
-  mappingsAsIfrs AccountMapping[] @relation("AccountMappingIfrs")
-
-  @@unique([organizationId, code, ledgerType])
-  @@index([organizationId, createdAt])
-  @@index([organizationId, currency])
-  @@index([organizationId, ledgerType])
-  @@map("accounts")
-}
-
-/**
- * Сопоставление счёта NAS ↔ IFRS для теневых проводок (Multi-GAAP).
- */
-model AccountMapping {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  nasAccountId   String   @map("nas_account_id") @db.Uuid
-  ifrsAccountId  String   @map("ifrs_account_id") @db.Uuid
-  /**
-   * Коэффициент пересчёта суммы строки NAS → IFRS (1 = 1:1).
-   */
-  ratio          Decimal  @default(1) @db.Decimal(19, 8)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  nasAccount   Account      @relation("AccountMappingNas", fields: [nasAccountId], references: [id], onDelete: Cascade)
-  ifrsAccount  Account      @relation("AccountMappingIfrs", fields: [ifrsAccountId], references: [id], onDelete: Restrict)
-
-  @@unique([organizationId, nasAccountId])
-  @@index([organizationId])
-  @@map("account_mappings")
-}
-
-model Transaction {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  date           DateTime @db.Date
-  reference      String?
-  description    String?
-  /**
-   * true — курс/суммы в документе зафиксированы (подтверждено бухгалтерией);
-   * false — «плавающий» курс до подтверждения.
-   */
-  isFinal        Boolean  @default(false) @map("is_final")
-  /**
-   * Закрытый период: транзакция не должна корректироваться задним числом
-   */
-  isLocked       Boolean  @default(false) @map("is_locked")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization                 Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  counterpartyId               String?                       @map("counterparty_id") @db.Uuid
-  counterparty                 Counterparty?                 @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
-  journalEntries               JournalEntry[]
-  invoicePayments              InvoicePayment[]
-  fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
-  payrollRuns                  PayrollRun[]
-  cashOrdersLinked             CashOrder[]                   @relation("CashOrderLinkedTx")
-  cashOrdersPosted             CashOrder[]                   @relation("CashOrderPostedTx")
-  advanceReportsPosted         AdvanceReport[]               @relation("AdvanceReportPostedTx")
-
-  @@index([organizationId, date])
-  @@index([counterpartyId])
-  @@index([organizationId, createdAt])
-  @@index([organizationId, date, isLocked])
-  @@map("transactions")
-}
-
-model JournalEntry {
-  id             String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String     @map("organization_id") @db.Uuid
-  transactionId  String     @map("transaction_id") @db.Uuid
-  accountId      String     @map("account_id") @db.Uuid
-  debit          Decimal    @default(0) @db.Decimal(19, 4)
-  credit         Decimal    @default(0) @db.Decimal(19, 4)
-  ledgerType     LedgerType @default(NAS) @map("ledger_type")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  transaction  Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  account      Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
-
-  @@index([organizationId, transactionId])
-  @@index([organizationId, accountId])
-  @@index([organizationId, createdAt])
-  @@index([organizationId, ledgerType])
-  @@map("journal_entries")
-}
-
-model Counterparty {
-  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String           @map("organization_id") @db.Uuid
-  name           String
-  email          String?
-  taxId          String           @map("tax_id")
-  kind           CounterpartyKind
-  role           CounterpartyRole @default(CUSTOMER)
-  address        String?
-  /**
-   * Статус плательщика НДС по данным VÖEN lookup (e-taxes), null — не проверяли
-   */
-  isVatPayer     Boolean?         @map("is_vat_payer")
-  bankAccounts   Json             @default("[]") @map("bank_accounts")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoices     Invoice[]
-  transactions Transaction[]
-  cashOrders   CashOrder[]
-
-  @@index([organizationId, taxId])
-  @@index([organizationId, createdAt])
-  @@map("counterparties")
-}
-
-/**
- * История ЭЦП (ASAN/SİMA, публичная верификация по id записи).
- */
-model DigitalSignatureLog {
-  id                    String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId        String                 @map("organization_id") @db.Uuid
-  /**
-   * INVOICE: invoice.id; RECONCILIATION_ACT: детерминированный UUID периода (см. reconciliationDocumentUuid).
-   */
-  documentId            String                 @map("document_id") @db.Uuid
-  documentKind          SignedDocumentKind     @default(INVOICE) @map("document_kind")
-  provider              SignatureProvider      @map("provider")
-  status                DigitalSignatureStatus @default(PENDING_MOBILE) @map("status")
-  /**
-   * SHA-256 финального PDF (hex), после генерации файла
-   */
-  contentHashSha256     String?                @map("content_hash_sha256") @db.VarChar(64)
-  certificateThumbprint String?                @map("certificate_thumbprint")
-  certificateSubject    String?                @map("certificate_subject")
-  certificateIssuer     String?                @map("certificate_issuer")
-  signedAt              DateTime?              @map("signed_at")
-  pendingStartedAt      DateTime?              @map("pending_started_at")
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId, signedAt])
-  @@index([organizationId, documentId])
-  @@index([organizationId, status])
-  @@map("digital_signature_logs")
-}
-
-model Product {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  name           String
-  sku            String
-  price          Decimal  @db.Decimal(19, 4)
-  vatRate        Decimal  @map("vat_rate") @db.Decimal(5, 2)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization           Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoiceItems           InvoiceItem[]
-  stockItems             StockItem[]
-  stockMovements         StockMovement[]
-  recipeFinished         ProductRecipe?      @relation("RecipeFinishedProduct")
-  recipeLinesAsComponent ProductRecipeLine[] @relation("RecipeComponentProduct")
-
-  @@unique([organizationId, sku])
-  @@index([organizationId])
-  @@map("products")
-}
-
-/**
- * Спецификация: из каких продуктов-составляющих состоит готовая продукция.
- */
-model ProductRecipe {
-  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId    String   @map("organization_id") @db.Uuid
-  /**
-   * Одна спецификация на продукт (id продукта уникален в системе).
-   */
-  finishedProductId String   @unique @map("finished_product_id") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  finishedProduct Product             @relation("RecipeFinishedProduct", fields: [finishedProductId], references: [id], onDelete: Cascade)
-  lines           ProductRecipeLine[]
-
-  @@index([organizationId])
-  @@map("product_recipes")
-}
-
-model ProductRecipeLine {
-  id                 String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  recipeId           String   @map("recipe_id") @db.Uuid
-  componentProductId String   @map("component_product_id") @db.Uuid
-  /**
-   * Количество компонента на 1 единицу готовой продукции
-   */
-  quantityPerUnit    Decimal  @map("quantity_per_unit") @db.Decimal(19, 4)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  recipe    ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  component Product       @relation("RecipeComponentProduct", fields: [componentProductId], references: [id], onDelete: Restrict)
-
-  @@unique([recipeId, componentProductId])
-  @@index([recipeId])
-  @@map("product_recipe_lines")
-}
-
-/**
- * Основное средство (линейная амортизация).
- */
-model FixedAsset {
-  id                 String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId     String   @map("organization_id") @db.Uuid
-  name               String
-  inventoryNumber    String   @map("inventory_number")
-  commissioningDate  DateTime @map("commissioning_date") @db.Date
-  initialCost        Decimal  @map("initial_cost") @db.Decimal(19, 4)
-  usefulLifeMonths   Int      @map("useful_life_months")
-  salvageValue       Decimal  @default(0) @map("salvage_value") @db.Decimal(19, 4)
-  /**
-   * Уже начисленная амортизация (сумма проведённых месяцев)
-   */
-  bookedDepreciation Decimal  @default(0) @map("booked_depreciation") @db.Decimal(19, 4)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  organization       Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  depreciationMonths FixedAssetDepreciationMonth[]
-
-  @@unique([organizationId, inventoryNumber])
-  @@index([organizationId, commissioningDate])
-  @@map("fixed_assets")
-}
-
-/**
- * Факт начисления амортизации по ОС за календарный месяц (идемпотентность при закрытии).
- */
-model FixedAssetDepreciationMonth {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  fixedAssetId   String   @map("fixed_asset_id") @db.Uuid
-  year           Int
-  month          Int
-  amount         Decimal  @db.Decimal(19, 4)
-  transactionId  String?  @map("transaction_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  fixedAsset   FixedAsset   @relation(fields: [fixedAssetId], references: [id], onDelete: Cascade)
-  transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-
-  @@unique([fixedAssetId, year, month])
-  @@index([organizationId, year, month])
-  @@map("fixed_asset_depreciation_months")
-}
-
-model Invoice {
-  id                String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId    String        @map("organization_id") @db.Uuid
-  number            String
-  status            InvoiceStatus @default(DRAFT)
-  dueDate           DateTime      @map("due_date") @db.Date
-  counterpartyId    String        @map("counterparty_id") @db.Uuid
-  /**
-   * Дт при оплате: 101 касса / 221 банк (см. ТЗ)
-   */
-  debitAccountCode  String        @default("101") @map("debit_account_code")
-  totalAmount       Decimal       @default(0) @map("total_amount") @db.Decimal(19, 4)
-  currency          String        @default("AZN")
-  warehouseId       String?       @map("warehouse_id") @db.Uuid
-  /**
-   * Списание склада и проводка 701/201 выполнены (обычно при оплате)
-   */
-  inventorySettled  Boolean       @default(false) @map("inventory_settled")
-  /**
-   * Дт 211 / Кт 601 отражены (отгрузка / начисление выручки)
-   */
-  revenueRecognized Boolean       @default(false) @map("revenue_recognized")
-  /**
-   * Дт 101|221 / Кт 211 отражены (оплата от дебитора)
-   */
-  paymentReceived   Boolean       @default(false) @map("payment_received")
-  /**
-   * Момент первого проведения Дт 211 — Кт 601 (для акта сверки и сальдо)
-   */
-  recognizedAt      DateTime?     @map("recognized_at")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-
-  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  counterparty     Counterparty        @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  warehouse        Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  items            InvoiceItem[]
-  payments         InvoicePayment[]
-  matchedBankLines BankStatementLine[] @relation("InvoiceBankMatch")
-  stockMovements   StockMovement[]
-  cashOrders       CashOrder[]
-
-  @@unique([organizationId, number])
-  @@index([organizationId, status])
-  @@index([organizationId, createdAt])
-  @@index([organizationId, counterpartyId])
-  @@map("invoices")
-}
-
-/**
- * Оплата инвойса (частичная или полная); сумма проводок Дт касса/банк — Кт 211 = amount.
- */
-model InvoicePayment {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  invoiceId      String   @map("invoice_id") @db.Uuid
-  amount         Decimal  @db.Decimal(19, 4)
-  date           DateTime @db.Date
-  transactionId  String?  @map("transaction_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  transaction  Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, invoiceId])
-  @@index([organizationId, date])
-  @@map("invoice_payments")
-}
-
-model BankStatement {
-  id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String               @map("organization_id") @db.Uuid
-  date           DateTime             @db.Date
-  totalAmount    Decimal              @map("total_amount") @db.Decimal(19, 4)
-  bankName       String               @map("bank_name")
-  sourceFileName String?              @map("source_file_name")
-  channel        BankStatementChannel @default(BANK) @map("channel")
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
-
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lines        BankStatementLine[]
-
-  @@index([organizationId, date])
-  @@index([organizationId, createdAt])
-  @@map("bank_statements")
-}
-
-model BankStatementLine {
-  id                String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId    String                  @map("organization_id") @db.Uuid
-  bankStatementId   String                  @map("bank_statement_id") @db.Uuid
-  description       String?
-  /**
-   * Сумма всегда > 0; направление задаёт type
-   */
-  amount            Decimal                 @db.Decimal(19, 4)
-  type              BankStatementLineType
-  origin            BankStatementLineOrigin @default(FILE_IMPORT) @map("origin")
-  isMatched         Boolean                 @default(false) @map("is_matched")
-  /**
-   * VÖEN контрагента (из выписки / парсинга) для Match с инвойсом
-   */
-  counterpartyTaxId String?                 @map("counterparty_tax_id")
-  valueDate         DateTime?               @map("value_date") @db.Date
-  matchedInvoiceId  String?                 @map("matched_invoice_id") @db.Uuid
-  rawRow            Json?                   @map("raw_row")
-  /**
-   * Идемпотентность API/вебхука: pasha:tx-…, abb:…
-   */
-  integrationKey    String?                 @map("integration_key")
-  createdAt         DateTime                @default(now()) @map("created_at")
-  updatedAt         DateTime                @updatedAt @map("updated_at")
-
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  bankStatement  BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
-  matchedInvoice Invoice?      @relation("InvoiceBankMatch", fields: [matchedInvoiceId], references: [id], onDelete: SetNull)
-
-  @@unique([organizationId, integrationKey])
-  @@index([organizationId, isMatched])
-  @@index([organizationId, counterpartyTaxId])
-  @@index([organizationId, bankStatementId])
-  @@map("bank_statement_lines")
-}
-
-/**
- * Приходный / расходный кассовый ордер (PKO / RKO), см. PRD §4.5–4.6.
- */
+/// *
+///  * Приходный / расходный кассовый ордер (PKO / RKO), см. PRD §4.5–4.6.
 enum CashOrderKind {
-  PKO
-  RKO
+  MKO
+  MXO
 }
 
 enum CashOrderStatus {
@@ -1369,153 +1567,15 @@ enum AdvanceReportStatus {
   POSTED
 }
 
-model CashOrder {
-  id                     String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId         String               @map("organization_id") @db.Uuid
-  orderNumber            String               @map("order_number")
-  date                   DateTime             @db.Date
-  kind                   CashOrderKind
-  status                 CashOrderStatus      @default(DRAFT)
-  pkoSubtype             CashOrderPkoSubtype? @map("pko_subtype")
-  rkoSubtype             CashOrderRkoSubtype? @map("rko_subtype")
-  currency               String               @default("AZN")
-  amount                 Decimal              @db.Decimal(19, 4)
-  purpose                String               @default("")
-  notes                  String?
-  cashAccountCode        String               @default("101.01") @map("cash_account_code")
-  /**
-   * Второй счёт проводки (601, 244, 221, 531 и т.д.).
-   */
-  offsetAccountCode      String?              @map("offset_account_code")
-  counterpartyId         String?              @map("counterparty_id") @db.Uuid
-  employeeId             String?              @map("employee_id") @db.Uuid
-  sourceInvoiceId        String?              @map("source_invoice_id") @db.Uuid
-  sourceInvoicePaymentId String?              @unique @map("source_invoice_payment_id") @db.Uuid
-  /**
-   * Проводка уже создана (напр. оплата инвойса) — печать ордера без дубля проводки.
-   */
-  skipJournalPosting     Boolean              @default(false) @map("skip_journal_posting")
-  linkedTransactionId    String?              @map("linked_transaction_id") @db.Uuid
-  postedTransactionId    String?              @map("posted_transaction_id") @db.Uuid
-  createdAt              DateTime             @default(now()) @map("created_at")
-  updatedAt              DateTime             @updatedAt @map("updated_at")
-
-  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  counterparty      Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: SetNull)
-  employee          Employee?     @relation("CashOrderEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
-  sourceInvoice     Invoice?      @relation(fields: [sourceInvoiceId], references: [id], onDelete: SetNull)
-  linkedTransaction Transaction?  @relation("CashOrderLinkedTx", fields: [linkedTransactionId], references: [id], onDelete: SetNull)
-  postedTransaction Transaction?  @relation("CashOrderPostedTx", fields: [postedTransactionId], references: [id], onDelete: SetNull)
-
-  @@unique([organizationId, orderNumber])
-  @@index([organizationId, date])
-  @@index([organizationId, status])
-  @@map("cash_orders")
+enum AbsencePayFormula {
+  LABOR_LEAVE_304
+  SICK_LEAVE_STAJ
+  UNPAID_RECORD
 }
 
-/**
- * Авансовый отчёт подотчётного лица (закрытие 244).
- */
-model AdvanceReport {
-  id             String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String              @map("organization_id") @db.Uuid
-  employeeId     String              @map("employee_id") @db.Uuid
-  reportDate     DateTime            @map("report_date") @db.Date
-  /**
-   * Строки расходов: [{ amount, description }]
-   */
-  expenseLines   Json                @default("[]") @map("expense_lines")
-  totalDeclared  Decimal             @map("total_declared") @db.Decimal(19, 4)
-  purpose        String              @default("")
-  status         AdvanceReportStatus @default(DRAFT)
-  transactionId  String?             @unique @map("transaction_id") @db.Uuid
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  transaction  Transaction? @relation("AdvanceReportPostedTx", fields: [transactionId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, employeeId])
-  @@map("advance_reports")
-}
-
-model InvoiceItem {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  invoiceId      String   @map("invoice_id") @db.Uuid
-  productId      String?  @map("product_id") @db.Uuid
-  description    String?
-  quantity       Decimal  @db.Decimal(19, 4)
-  unitPrice      Decimal  @map("unit_price") @db.Decimal(19, 4)
-  vatRate        Decimal  @map("vat_rate") @db.Decimal(5, 2)
-  lineTotal      Decimal  @map("line_total") @db.Decimal(19, 4)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, invoiceId])
-  @@map("invoice_items")
-}
-
-model AuditLog {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String?  @map("organization_id") @db.Uuid
-  userId         String?  @map("user_id") @db.Uuid
-  entityType     String   @map("entity_type")
-  entityId       String   @map("entity_id")
-  action         String
-  /**
-   * Устаревшее агрегированное поле; для новых записей см. oldValues/newValues.
-   */
-  changes        Json?
-  /**
-   * Снимок сущности до изменения (JSON).
-   */
-  oldValues      Json?    @map("old_values")
-  /**
-   * Снимок сущности после изменения или ответ API (JSON).
-   */
-  newValues      Json?    @map("new_values")
-  clientIp       String?  @map("client_ip")
-  userAgent      String?  @map("user_agent")
-  /**
-   * SHA-256 от канонического JSON полей + AUDIT_HASH_SECRET.
-   */
-  hash           String?  @map("hash")
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, createdAt])
-  @@index([entityType, entityId])
-  @@map("audit_logs")
-}
-
-/**
- * Архив audit_logs старше политики хранения (перенос из основной таблицы).
- */
-model AuditLogArchive {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String?  @map("organization_id") @db.Uuid
-  userId         String?  @map("user_id") @db.Uuid
-  entityType     String   @map("entity_type")
-  entityId       String   @map("entity_id")
-  action         String
-  changes        Json?
-  oldValues      Json?    @map("old_values")
-  newValues      Json?    @map("new_values")
-  clientIp       String?  @map("client_ip")
-  userAgent      String?  @map("user_agent")
-  hash           String?  @map("hash")
-  createdAt      DateTime @map("created_at")
-  archivedAt     DateTime @default(now()) @map("archived_at")
-
-  @@index([organizationId, createdAt])
-  @@index([entityType, entityId])
-  @@map("audit_log_archives")
+enum HoldingAccessRole {
+  OWNER
+  ADMIN
+  ACCOUNTANT
+  VIEWER
 }

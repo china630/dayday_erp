@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { FileStack } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "next/navigation";
 import { apiFetch } from "../../lib/api-client";
 import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { formatMoneyAzn } from "../../lib/format-money";
@@ -25,6 +26,7 @@ type Row = {
 export default function InvoicesPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
+  const search = useSearchParams();
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,15 @@ export default function InvoicesPage() {
     if (!ready || !token) return;
     void load();
   }, [load, ready, token]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!rows.length) return;
+    if (payForId) return;
+    if (search?.get("pay") !== "1") return;
+    const firstPayable = rows.find((r) => r.status === "SENT" || r.status === "PARTIALLY_PAID");
+    if (firstPayable) openPay(firstPayable);
+  }, [loading, rows, payForId, search]);
 
   async function patchStatus(id: string, status: "SENT" | "PAID") {
     const key = `${id}:${status}`;

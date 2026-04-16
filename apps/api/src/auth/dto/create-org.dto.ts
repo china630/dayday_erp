@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, Length, Matches, MaxLength } from "class-validator";
+import {
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Matches,
+  MaxLength,
+} from "class-validator";
 
 export class CreateOrgDto {
   @ApiProperty({ example: "ООО Пример" })
@@ -17,4 +24,11 @@ export class CreateOrgDto {
   @IsString()
   @Length(3, 3)
   currency?: string;
+
+  @ApiPropertyOptional({
+    description: "Опционально: привязать организацию к холдингу (владелец холдинга = текущий пользователь)",
+  })
+  @IsOptional()
+  @IsUUID()
+  holdingId?: string;
 }

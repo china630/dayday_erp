@@ -117,8 +117,14 @@ export class InvoicesService {
     }
 
     const debitAccountCode = dto.debitAccountCode ?? "101";
+    const currency = dto.currency ?? "AZN";
+    const vatInclusive = !!dto.vatInclusive;
 
-    const { items: builtItems, total } = await this.buildItems(organizationId, dto.items);
+    const { items: builtItems, total } = await this.buildItems(
+      organizationId,
+      dto.items,
+      { vatInclusive },
+    );
 
     const warehouseId =
       dto.warehouseId ??
@@ -138,7 +144,7 @@ export class InvoicesService {
           counterpartyId: dto.counterpartyId,
           debitAccountCode,
           totalAmount: total,
-          currency: "AZN",
+          currency,
           warehouseId: warehouseId ?? null,
         },
       });
@@ -712,6 +718,7 @@ export class InvoicesService {
   private async buildItems(
     organizationId: string,
     items: CreateInvoiceDto["items"],
+    opts?: { vatInclusive?: boolean },
   ): Promise<{
     items: Array<{
       productId: string | null;
@@ -732,11 +739,12 @@ export class InvoicesService {
       lineTotal: Decimal;
     }> = [];
     let total = new Decimal(0);
+    const vatInclusive = !!opts?.vatInclusive;
 
     for (const row of items) {
       let productId: string | null = null;
       let description: string | null = row.description ?? null;
-      let unitPrice = new Decimal(row.unitPrice);
+      let unitPriceInput = new Decimal(row.unitPrice);
       let vatRate = new Decimal(row.vatRate);
 
       if (row.productId) {
@@ -745,21 +753,40 @@ export class InvoicesService {
         });
         if (!p) throw new NotFoundException(`Product ${row.productId} not found`);
         productId = p.id;
-        unitPrice = p.price;
+        unitPriceInput = p.price;
         vatRate = p.vatRate;
         description = description ?? p.name;
       }
 
+      const vr = vatRate.toNumber();
+      if (vr !== 0 && vr !== 18) {
+        throw new BadRequestException("vatRate must be 0 or 18");
+      }
+
       const qty = new Decimal(row.quantity);
-      const net = qty.mul(unitPrice);
-      const vatAmt = net.mul(vatRate).div(100);
-      const lineTotal = net.add(vatAmt);
+      let unitPriceNet: Decimal;
+      let net: Decimal;
+      let lineTotal: Decimal;
+
+      if (vatInclusive) {
+        const div = new Decimal(1).add(vatRate.div(100));
+        unitPriceNet = unitPriceInput.div(div);
+        net = qty.mul(unitPriceNet);
+        const vatAmt = net.mul(vatRate).div(100);
+        lineTotal = net.add(vatAmt);
+      } else {
+        unitPriceNet = unitPriceInput;
+        net = qty.mul(unitPriceNet);
+        const vatAmt = net.mul(vatRate).div(100);
+        lineTotal = net.add(vatAmt);
+      }
+
       total = total.add(lineTotal);
       out.push({
         productId,
         description,
         quantity: qty,
-        unitPrice,
+        unitPrice: unitPriceNet,
         vatRate,
         lineTotal,
       });

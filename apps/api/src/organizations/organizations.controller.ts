@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Post } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Post } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -15,6 +15,15 @@ import { OrganizationsService } from "./organizations.service";
 @Controller("organizations")
 export class OrganizationsController {
   constructor(private readonly organizations: OrganizationsService) {}
+
+  @Get("tree")
+  @ApiOperation({
+    summary:
+      "Дерево доступных организаций: Holdings -> organizations + отдельный список свободных компаний",
+  })
+  async tree(@CurrentUser() user: AuthUser) {
+    return this.organizations.getOrganizationsTreeForUser(user.userId);
+  }
 
   @Post("transfer-ownership")
   @ApiOperation({

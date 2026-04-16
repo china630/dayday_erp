@@ -18,6 +18,8 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CreatePayrollRunDto } from "./dto/create-payroll-run.dto";
 import { PayrollHeavyQueueService } from "./payroll-heavy.queue";
+import { AbsencesService } from "./absences.service";
+import type { SickPayCalcDto } from "./dto/sick-pay-calc.dto";
 import { TimesheetService } from "./timesheet.service";
 import { PAYROLL_ENTITY_ASYNC_THRESHOLD } from "./payroll.constants";
 import {
@@ -32,6 +34,7 @@ export class PayrollService {
     private readonly accounting: AccountingService,
     private readonly payrollQueue: PayrollHeavyQueueService,
     private readonly timesheet: TimesheetService,
+    private readonly absences: AbsencesService,
   ) {}
 
   listRuns(organizationId: string) {
@@ -104,13 +107,28 @@ export class PayrollService {
       });
 
       for (const emp of employees) {
+        let grossBase = new Decimal(emp.salary);
+        if (
+          emp.kind === EmployeeKind.EMPLOYEE &&
+          tsSummary?.mixByEmployeeId[emp.id]
+        ) {
+          const m = tsSummary.mixByEmployeeId[emp.id];
+          grossBase = await this.absences.adjustGrossForStampedTimesheetMonth(
+            organizationId,
+            emp.id,
+            grossBase,
+            tsSummary.year,
+            tsSummary.month,
+            m,
+          );
+        }
         const b =
           emp.kind === EmployeeKind.CONTRACTOR
             ? calculateContractorMicroPayroll(
                 new Decimal(emp.salary),
                 emp.contractorMonthlySocialAzn,
               )
-            : calculatePrivateNonOilPayroll(new Decimal(emp.salary));
+            : calculatePrivateNonOilPayroll(grossBase);
         if (b.net.isNegative()) {
           throw new BadRequestException(
             `Отрицательная сумма к выплате для сотрудника ${emp.lastName}: проверьте оклад и фикс. соц. удержания`,
@@ -276,5 +294,31 @@ export class PayrollService {
       return { async: true, jobId };
     }
     return this.postRunSync(organizationId, runId);
+  }
+
+  /**
+   * TZ §7.0: xəstəlik üzrə işəgötürən hissəsi (14 günədək, staj %) — tam məntiqi `AbsencesService`.
+   */
+  previewSickLeavePay(organizationId: string, dto: SickPayCalcDto) {
+    return this.absences.calculateSickPay(organizationId, dto);
+  }
+
+  /**
+   * TZ §7.0: əmək məzuniyyəti / 30.4 — tam məntiqi `AbsencesService`.
+   */
+  previewLaborLeavePay(
+    organizationId: string,
+    employeeId: string,
+    vacationStart: string,
+    vacationEnd: string,
+    absenceTypeId?: string,
+  ) {
+    return this.absences.calculateVacationPay(
+      organizationId,
+      employeeId,
+      vacationStart,
+      vacationEnd,
+      absenceTypeId,
+    );
   }
 }

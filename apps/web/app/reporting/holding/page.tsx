@@ -1,0 +1,242 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { apiFetch } from "../../../lib/api-client";
+import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
+import { useRequireAuth } from "../../../lib/use-require-auth";
+import { ModulePageLinks } from "../../../components/module-page-links";
+import { CARD_CONTAINER_CLASS, PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import { EmptyState } from "../../../components/empty-state";
+import { Building2 } from "lucide-react";
+
+function monthBounds(): { from: string; to: string } {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth() + 1;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return {
+    from: `${y}-${pad(m)}-01`,
+    to: `${y}-${pad(m)}-${pad(last)}`,
+  };
+}
+
+type HoldingListItem = {
+  id: string;
+  name: string;
+  organizations: { id: string; name: string; taxId: string; currency: string }[];
+};
+
+type OrgPnlRow = {
+  organizationId: string;
+  organizationName: string;
+  taxId: string;
+  currency: string;
+  netProfit: string;
+};
+
+type ConsolidatedPayload = {
+  holdingId: string;
+  holdingName: string;
+  dateFrom: string;
+  dateTo: string;
+  ledgerType?: string;
+  organizations: OrgPnlRow[];
+  consolidatedNetProfitByCurrency: Record<string, string>;
+};
+
+export default function HoldingConsolidatedReportingPage() {
+  const { t } = useTranslation();
+  const { token, ready } = useRequireAuth();
+  const { ledgerType, ready: ledgerReady } = useLedger();
+  const b = monthBounds();
+  const [from, setFrom] = useState(b.from);
+  const [to, setTo] = useState(b.to);
+  const [holdings, setHoldings] = useState<HoldingListItem[]>([]);
+  const [holdingId, setHoldingId] = useState("");
+  const [report, setReport] = useState<ConsolidatedPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
+
+  const loadHoldings = useCallback(async () => {
+    if (!token) return;
+    setLoadingList(true);
+    setError(null);
+    const res = await apiFetch("/api/holdings");
+    if (!res.ok) {
+      setError(`HTTP ${res.status}`);
+      setHoldings([]);
+    } else {
+      const data = (await res.json()) as HoldingListItem[];
+      setHoldings(data);
+    }
+    setLoadingList(false);
+  }, [token]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    void loadHoldings();
+  }, [ready, token, loadHoldings]);
+
+  useEffect(() => {
+    if (holdings.length > 0 && !holdingId) {
+      setHoldingId(holdings[0].id);
+    }
+  }, [holdings, holdingId]);
+
+  const ledgerParam = ledgerQueryParam(ledgerType);
+  const loadReport = useCallback(async () => {
+    if (!token || !holdingId) return;
+    setLoadingReport(true);
+    setError(null);
+    const res = await apiFetch(
+      `/api/holdings/${encodeURIComponent(holdingId)}/consolidated-pnl?dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}&${ledgerParam}`,
+    );
+    if (!res.ok) {
+      setError(`${t("holdingReport.loadErr", { defaultValue: "Load failed" })}: ${res.status}`);
+      setReport(null);
+    } else {
+      setReport((await res.json()) as ConsolidatedPayload);
+    }
+    setLoadingReport(false);
+  }, [token, holdingId, from, to, ledgerParam, t]);
+
+  if (!ready || !ledgerReady) {
+    return (
+      <div className="text-gray-600">
+        <p>{t("common.loading")}</p>
+      </div>
+    );
+  }
+  if (!token) return null;
+
+  return (
+    <div className="space-y-6">
+      <ModulePageLinks
+        items={[
+          { href: "/", labelKey: "nav.home" },
+          { href: "/reporting", labelKey: "nav.reportingHub" },
+        ]}
+      />
+      <div>
+        <h1 className="text-xl font-semibold text-[#34495E]">
+          {t("holdingReport.title", {
+            defaultValue: "Сводный отчёт по холдингу (P&L)",
+          })}
+        </h1>
+        <p className="mt-1 max-w-2xl text-[13px] text-[#7F8C8D]">
+          {t("holdingReport.subtitle", {
+            defaultValue:
+              "Чистая прибыль по каждой организации холдинга за период и итоги по валютам.",
+          })}
+        </p>
+      </div>
+
+      <div className={`${CARD_CONTAINER_CLASS} space-y-4 p-4`}>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-[13px]">
+            <span className="text-[#7F8C8D]">
+              {t("holdingReport.holding", { defaultValue: "Холдинг" })}
+            </span>
+            <select
+              className="rounded border border-[#E0E6ED] px-2 py-1.5 text-[13px] min-w-[200px]"
+              value={holdingId}
+              onChange={(e) => setHoldingId(e.target.value)}
+              disabled={loadingList}
+            >
+              {holdings.length === 0 && (
+                <option value="">{t("holdingReport.noHoldings", { defaultValue: "Нет холдингов" })}</option>
+              )}
+              {holdings.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name} ({h.organizations?.length ?? 0})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[13px]">
+            <span className="text-[#7F8C8D]">{t("reporting.from", { defaultValue: "С" })}</span>
+            <input
+              type="date"
+              className="rounded border border-[#E0E6ED] px-2 py-1.5 text-[13px]"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[13px]">
+            <span className="text-[#7F8C8D]">{t("reporting.to", { defaultValue: "По" })}</span>
+            <input
+              type="date"
+              className="rounded border border-[#E0E6ED] px-2 py-1.5 text-[13px]"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            disabled={!holdingId || loadingReport}
+            onClick={() => void loadReport()}
+          >
+            {loadingReport
+              ? t("common.loading")
+              : t("holdingReport.load", { defaultValue: "Показать" })}
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      {!loadingReport && report && report.organizations.length === 0 && (
+        <EmptyState
+          icon={<Building2 className="h-12 w-12 mx-auto stroke-[1.5]" aria-hidden />}
+          title={t("holdingReport.noOrgs", { defaultValue: "Нет организаций в холдинге" })}
+          description={t("holdingReport.noOrgsHint", {
+            defaultValue: "Привяжите организации в разделе компаний или через API.",
+          })}
+        />
+      )}
+
+      {report && report.organizations.length > 0 && (
+        <div className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
+          <table className="min-w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#E0E6ED]">
+                <th className="px-3 py-2 text-left font-semibold text-[#34495E]">
+                  {t("holdingReport.colOrg", { defaultValue: "Организация" })}
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-[#34495E]">VÖEN</th>
+                <th className="px-3 py-2 text-right font-semibold text-[#34495E]">
+                  {t("holdingReport.colNetProfit", { defaultValue: "Чистая прибыль" })}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.organizations.map((row) => (
+                <tr key={row.organizationId} className="border-b border-[#F0F3F6]">
+                  <td className="px-3 py-2 text-[#34495E]">{row.organizationName}</td>
+                  <td className="px-3 py-2 text-[#7F8C8D]">{row.taxId}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium text-[#34495E]">
+                    {row.netProfit} {row.currency}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="px-3 py-3 border-t border-[#E0E6ED] bg-[#FAFBFC] space-y-1">
+            <p className="text-[12px] font-semibold text-[#34495E]">
+              {t("holdingReport.consolidated", { defaultValue: "Итого по валютам" })}
+            </p>
+            {Object.entries(report.consolidatedNetProfitByCurrency).map(([cur, amt]) => (
+              <p key={cur} className="text-[13px] tabular-nums text-[#34495E]">
+                {amt} {cur}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

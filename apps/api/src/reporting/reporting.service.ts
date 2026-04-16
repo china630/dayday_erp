@@ -34,7 +34,14 @@ import { verifyQrPublicBase } from "../common/verify-public-url";
 import { reconciliationDocumentUuid } from "../signature/reconciliation-document-id";
 import { renderReconciliationPdfAz } from "./reconciliation-pdf.render";
 
-const CASH_CODES = ["101", "221"] as const;
+/**
+ * Cash/Bank balances for dashboards:
+ * - Cash: 101* (cash desks)
+ * - Bank: 221–224 (bank accounts / cards)
+ */
+const CASH_PREFIX = "101";
+const BANK_CODES = ["221", "222", "223", "224"] as const;
+const BANK_PREFIXES = [...BANK_CODES] as ReadonlyArray<string>;
 
 function d(v: Decimal | null | undefined): Decimal {
   return v ?? new Decimal(0);
@@ -839,7 +846,10 @@ export class ReportingService {
       where: {
         organizationId,
         ledgerType,
-        code: { in: [...CASH_CODES] },
+        OR: [
+          { code: { startsWith: CASH_PREFIX } },
+          ...BANK_PREFIXES.map((p) => ({ code: { startsWith: p } })),
+        ],
       },
     });
     const taxAcc = await this.prisma.account.findFirst({
@@ -1178,7 +1188,10 @@ export class ReportingService {
       where: {
         organizationId,
         ledgerType,
-        code: { in: [...CASH_CODES] },
+        OR: [
+          { code: { startsWith: CASH_PREFIX } },
+          ...BANK_PREFIXES.map((p) => ({ code: { startsWith: p } })),
+        ],
       },
       select: { id: true },
     });

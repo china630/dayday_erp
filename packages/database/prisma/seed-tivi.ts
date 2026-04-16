@@ -800,10 +800,10 @@ async function main(): Promise<void> {
     });
   }
 
-  /* ---------- Касса: PKO (услуги), RKO подотчёт, авансовый отчёт ---------- */
+  /* ---------- Касса: MKO (услуги), MXO подотчёт, авансовый отчёт ---------- */
   const y = now.getUTCFullYear();
-  const pkoNum = `PKO-${y}-00001`;
-  const rkoNum = `RKO-${y}-00001`;
+  const pkoNum = `MKO-${y}-00001`;
+  const rkoNum = `MXO-${y}-00001`;
 
   const emp244 = employees.find((e) => e.accountable244 === "244.01");
   if (emp244) {
@@ -813,7 +813,7 @@ async function main(): Promise<void> {
           organizationId: org.id,
           orderNumber: pkoNum,
           date: new Date(Date.UTC(y, now.getUTCMonth(), 8, 12, 0, 0, 0)),
-          kind: CashOrderKind.PKO,
+          kind: CashOrderKind.MKO,
           status: CashOrderStatus.DRAFT,
           pkoSubtype: CashOrderPkoSubtype.INCOME_FROM_CUSTOMER,
           amount: new Decimal(1200),
@@ -846,7 +846,7 @@ async function main(): Promise<void> {
           organizationId: org.id,
           orderNumber: rkoNum,
           date: new Date(Date.UTC(y, now.getUTCMonth(), 9, 12, 0, 0, 0)),
-          kind: CashOrderKind.RKO,
+          kind: CashOrderKind.MXO,
           status: CashOrderStatus.DRAFT,
           rkoSubtype: CashOrderRkoSubtype.ACCOUNTABLE_ISSUE,
           amount: new Decimal(500),

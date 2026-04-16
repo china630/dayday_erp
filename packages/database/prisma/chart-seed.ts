@@ -50,6 +50,9 @@ export async function seedChartOfAccountsForOrganization(
 
   async function upsertOne(row: ChartAccountSeed, parentId: string | null) {
     const type = toAccountType(row.type as string);
+    const catalogRow = await db.chartOfAccountsEntry.findUnique({
+      where: { code: row.code },
+    });
     const account = await db.account.upsert({
       where: {
         organizationId_code_ledgerType: {
@@ -65,11 +68,13 @@ export async function seedChartOfAccountsForOrganization(
         type,
         ledgerType: LedgerType.NAS,
         parentId,
+        chartEntryId: catalogRow?.id ?? null,
       },
       update: {
         name: row.name,
         type,
         parentId,
+        ...(catalogRow && { chartEntryId: catalogRow.id }),
       },
     });
     const entry = byCode.get(row.code);
@@ -119,10 +124,48 @@ export async function loadChartJson(): Promise<ChartAccountSeed[]> {
   return parsed.accounts;
 }
 
+/**
+ * Глобальный справочник `chart_of_accounts_entries` из того же JSON, что и счета организаций.
+ */
+export async function seedChartOfAccountsCatalogEntries(
+  db: PrismaClient | Prisma.TransactionClient,
+  accounts: ChartAccountSeed[],
+): Promise<void> {
+  const seen = new Set<string>();
+  for (const row of accounts) {
+    if (seen.has(row.code)) continue;
+    seen.add(row.code);
+    const type = toAccountType(row.type as string);
+    let cashProfile: string | null = null;
+    if (row.code === "101" || row.code.startsWith("101.")) {
+      cashProfile = "AZN";
+    } else if (row.code === "102" || row.code.startsWith("102.")) {
+      cashProfile = "FX";
+    }
+    await db.chartOfAccountsEntry.upsert({
+      where: { code: row.code },
+      create: {
+        code: row.code,
+        name: row.name,
+        accountType: type,
+        cashProfile,
+        sortOrder: 0,
+        isDeprecated: false,
+      },
+      update: {
+        name: row.name,
+        accountType: type,
+        cashProfile,
+      },
+    });
+  }
+}
+
 export async function syncAzChartForOrganization(
   db: PrismaClient | Prisma.TransactionClient,
   organizationId: string,
 ): Promise<void> {
   const accounts = await loadChartJson();
+  await seedChartOfAccountsCatalogEntries(db, accounts);
   await seedChartOfAccountsForOrganization(db, organizationId, accounts);
 }

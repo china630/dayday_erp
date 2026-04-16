@@ -19,6 +19,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { AbsencesService } from "./absences.service";
 import { CreateAbsenceDto } from "./dto/create-absence.dto";
+import { SickPayCalcDto } from "./dto/sick-pay-calc.dto";
 import { UpdateAbsenceDto } from "./dto/update-absence.dto";
 import { VacationPayCalcDto } from "./dto/vacation-pay-calc.dto";
 
@@ -85,6 +86,21 @@ export class AbsencesController {
       dto.employeeId,
       dto.vacationStart,
       dto.vacationEnd,
+      dto.absenceTypeId,
     );
+  }
+
+  @Post("sick-pay/calculate")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary:
+      "Xəstəlik vərəqəsi: ilk 14 gün işəgötürən (staj %), qalan təqvim günləri DSMF (kənar)",
+  })
+  calcSickPay(
+    @OrganizationId() organizationId: string,
+    @Body() dto: SickPayCalcDto,
+  ) {
+    return this.absences.calculateSickPay(organizationId, dto);
   }
 }

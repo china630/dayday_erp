@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { DashboardWidgets } from "./dashboard-widgets";
 import { useAuth, type AuthUser } from "../lib/auth-context";
+import { useRequireAuth } from "../lib/use-require-auth";
 
 function greetingName(user: AuthUser): string {
   const full = user.fullName?.trim();
@@ -16,6 +17,7 @@ function greetingName(user: AuthUser): string {
 
 export default function Home() {
   const { t } = useTranslation();
+  useRequireAuth();
   const { token, ready, user } = useAuth();
 
   const heading = useMemo(() => {

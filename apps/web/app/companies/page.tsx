@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight, Link2Off, Plus, Send, Unlink2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { apiBaseUrl, apiFetch } from "../../lib/api-client";
-import { FORM_INPUT_CLASS, FORM_TEXTAREA_CLASS } from "../../lib/form-styles";
+import { apiFetch } from "../../lib/api-client";
+import { FORM_INPUT_CLASS } from "../../lib/form-styles";
 import type { AuthUser, OrgSummary } from "../../lib/auth-context";
 import { useAuth } from "../../lib/auth-context";
 import {
@@ -16,29 +16,147 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 import { useRequireAuth } from "../../lib/use-require-auth";
+import { Badge } from "../../components/ui/badge";
+import { VoenRequestModal } from "../../components/companies/voen-request-modal";
+import { CreateCompanyModal } from "../../components/companies/create-company-modal";
+
+type OrganizationsTree = {
+  holdings: Array<{
+    holdingId: string;
+    holdingName: string;
+    baseCurrency: string;
+    organizations: Array<{
+      id: string;
+      name: string;
+      taxId: string;
+      currency: string;
+    }>;
+  }>;
+  freeOrganizations: Array<{
+    id: string;
+    name: string;
+    taxId: string;
+    currency: string;
+  }>;
+};
+
+type HoldingListItem = {
+  id: string;
+  name: string;
+  baseCurrency?: string | null;
+  organizations?: unknown[];
+};
 
 export default function CompaniesPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { ready, token } = useRequireAuth();
-  const {
-    user,
-    organizations,
-    switchOrganization,
-    login,
-  } = useAuth();
+  const { user, organizations, switchOrganization } = useAuth();
 
-  const [joinTaxId, setJoinTaxId] = useState("");
-  const [joinMessage, setJoinMessage] = useState("");
-  const [joinBusy, setJoinBusy] = useState(false);
-  const [joinErr, setJoinErr] = useState<string | null>(null);
-  const [joinOk, setJoinOk] = useState(false);
+  const [voenModalOpen, setVoenModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [orgName, setOrgName] = useState("");
-  const [createTaxId, setCreateTaxId] = useState("");
-  const [createBusy, setCreateBusy] = useState(false);
-  const [createErr, setCreateErr] = useState<string | null>(null);
+  const [tree, setTree] = useState<OrganizationsTree | null>(null);
+  const [holdings, setHoldings] = useState<HoldingListItem[]>([]);
+  const [holdingUiErr, setHoldingUiErr] = useState<string | null>(null);
+  const [holdingBusyOrgId, setHoldingBusyOrgId] = useState<string | null>(null);
+  const [assignHoldingByOrg, setAssignHoldingByOrg] = useState<
+    Record<string, string>
+  >({});
+
+  const loadHoldingUi = useCallback(async () => {
+    setHoldingUiErr(null);
+    const [treeRes, holdingsRes] = await Promise.all([
+      apiFetch("/api/organizations/tree"),
+      apiFetch("/api/holdings"),
+    ]);
+    if (!treeRes.ok) {
+      setHoldingUiErr(`${t("common.loadErr")}: ${treeRes.status}`);
+      setTree(null);
+      return;
+    }
+    setTree((await treeRes.json()) as OrganizationsTree);
+    if (holdingsRes.ok) {
+      setHoldings((await holdingsRes.json()) as HoldingListItem[]);
+    } else {
+      setHoldings([]);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    void loadHoldingUi();
+  }, [ready, token, loadHoldingUi]);
+
+  const orgRoleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of organizations) {
+      m.set(o.id, o.role);
+    }
+    return m;
+  }, [organizations]);
+
+  const roleVariant = useCallback((role: string) => {
+    if (role === "OWNER") return "owner";
+    if (role === "ADMIN") return "admin";
+    if (role === "ACCOUNTANT") return "accountant";
+    if (role === "USER") return "user";
+    return "neutral";
+  }, []);
+
+  const roleLabel = useCallback(
+    (role: string) =>
+      t(`common.role${role}` as never, {
+        defaultValue: role,
+      }),
+    [t],
+  );
+
+  const isOwnerOnly = useCallback(
+    (orgId: string) => {
+      const r = orgRoleById.get(orgId) ?? "";
+      return r === "OWNER";
+    },
+    [orgRoleById],
+  );
+
+  async function attachToHolding(organizationId: string) {
+    const holdingId = (assignHoldingByOrg[organizationId] ?? "").trim();
+    if (!holdingId) return;
+    setHoldingBusyOrgId(organizationId);
+    setHoldingUiErr(null);
+    try {
+      const res = await apiFetch(
+        `/api/holdings/${encodeURIComponent(holdingId)}/organizations/${encodeURIComponent(organizationId)}`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        setHoldingUiErr(await res.text());
+        return;
+      }
+      await loadHoldingUi();
+    } finally {
+      setHoldingBusyOrgId(null);
+    }
+  }
+
+  async function detachFromHolding(holdingId: string, organizationId: string) {
+    setHoldingBusyOrgId(organizationId);
+    setHoldingUiErr(null);
+    try {
+      const res = await apiFetch(
+        `/api/holdings/${encodeURIComponent(holdingId)}/organizations/${encodeURIComponent(organizationId)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        setHoldingUiErr(await res.text());
+        return;
+      }
+      await loadHoldingUi();
+    } finally {
+      setHoldingBusyOrgId(null);
+    }
+  }
 
   if (!ready || !token) {
     return (
@@ -55,240 +173,301 @@ export default function CompaniesPage() {
       await switchOrganization(o.id);
       router.push("/");
     } catch {
-      setJoinErr(t("companiesPage.switchErr"));
+      // toast is global; keep page minimal
     }
   }
 
-  async function onJoin(e: FormEvent) {
-    e.preventDefault();
-    setJoinErr(null);
-    setJoinOk(false);
-    setJoinBusy(true);
-    try {
-      const res = await apiFetch("/api/auth/join-org", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taxId: joinTaxId.replace(/\D/g, "").slice(0, 10),
-          message: joinMessage.trim() || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        setJoinErr(txt || String(res.status));
-        return;
-      }
-      setJoinOk(true);
-      setJoinTaxId("");
-      setJoinMessage("");
-    } catch {
-      setJoinErr(t("auth.apiUnreachable", { url: apiBaseUrl() }));
-    } finally {
-      setJoinBusy(false);
-    }
-  }
-
-  async function onCreate(e: FormEvent) {
-    e.preventDefault();
-    setCreateErr(null);
-    setCreateBusy(true);
-    try {
-      const res = await apiFetch("/api/auth/organizations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationName: orgName.trim(),
-          taxId: createTaxId.replace(/\D/g, "").slice(0, 10),
-          currency: "AZN",
-        }),
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        setCreateErr(txt || String(res.status));
-        return;
-      }
-      const data = (await res.json()) as {
-        accessToken: string;
-        user: AuthUser;
-        organizations: OrgSummary[];
-      };
-      login(data.accessToken, data.user, data.organizations);
-      setShowCreate(false);
-      setOrgName("");
-      setCreateTaxId("");
-      router.push("/");
-    } catch {
-      setCreateErr(t("auth.apiUnreachable", { url: apiBaseUrl() }));
-    } finally {
-      setCreateBusy(false);
-    }
-  }
+  const freeOrgs = tree?.freeOrganizations ?? [];
+  const freeOwned = freeOrgs.filter((o) => (orgRoleById.get(o.id) ?? "") === "OWNER");
+  const freeManaged = freeOrgs.filter((o) => (orgRoleById.get(o.id) ?? "") !== "OWNER");
 
   return (
-    <div className="space-y-10 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">
-          {t("companiesPage.title")}
-        </h1>
-        <p className="text-gray-600 mt-2">{t("companiesPage.subtitle")}</p>
-      </div>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-medium text-gray-900">
-            {t("companiesPage.yourCompanies")}
-          </h2>
+    <div className="space-y-6 max-w-5xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            {t("companiesPage.title")}
+          </h1>
+          <p className="text-gray-600 mt-2">{t("companiesPage.subtitle")}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setShowCreate((v) => !v)}
-            className={`${PRIMARY_BUTTON_CLASS} !h-9 !min-h-9 w-9 shrink-0 p-0 text-lg leading-none`}
+            className={SECONDARY_BUTTON_CLASS}
+            onClick={() => setVoenModalOpen(true)}
+          >
+            <Send className="h-4 w-4" aria-hidden />
+            {t("companiesPage.joinTitle")}
+          </button>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            onClick={() => setCreateModalOpen(true)}
             aria-label={t("companiesPage.addCompanyAria")}
           >
-            +
+            <Plus className="h-4 w-4" aria-hidden />
+            {t("companiesPage.modals.createCompanyTitle")}
           </button>
         </div>
+      </div>
 
-        {showCreate && (
-          <form
-            onSubmit={(e) => void onCreate(e)}
-            className={`${CARD_CONTAINER_CLASS} p-4 grid gap-3`}
-          >
-            <p className="text-sm font-medium text-gray-800">
-              {t("companiesPage.createTitle")}
-            </p>
-            <label className="block text-sm font-medium text-gray-800">
-              {t("auth.orgName")}
-              <input
-                required
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                className={FORM_INPUT_CLASS}
-                autoComplete="organization"
-              />
-            </label>
-            <label className="block text-sm font-medium text-gray-800">
-              {t("auth.taxId")}
-              <input
-                required
-                pattern="\d{10}"
-                maxLength={10}
-                inputMode="numeric"
-                value={createTaxId}
-                onChange={(e) =>
-                  setCreateTaxId(e.target.value.replace(/\D/g, "").slice(0, 10))
-                }
-                className={FORM_INPUT_CLASS}
-                autoComplete="off"
-              />
-            </label>
-            {createErr && (
-              <p className="text-red-600 text-sm">{createErr}</p>
-            )}
-            <div className="flex gap-2 flex-wrap items-center">
-              <button
-                type="submit"
-                disabled={createBusy}
-                className={`${PRIMARY_BUTTON_CLASS} inline-flex items-center justify-center gap-2`}
-              >
-                {createBusy ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
-                    <span>{t("companiesPage.creating")}</span>
-                  </>
-                ) : (
-                  t("companiesPage.createSubmit")
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreate(false)}
-                disabled={createBusy}
-                className={`${SECONDARY_BUTTON_CLASS} disabled:opacity-50`}
-              >
-                {t("companiesPage.cancel")}
-              </button>
-            </div>
-          </form>
-        )}
+      {holdingUiErr ? (
+        <div className={`${CARD_CONTAINER_CLASS} p-3 text-sm text-red-600`}>
+          {holdingUiErr}
+        </div>
+      ) : null}
 
-        <ul className={`${CARD_CONTAINER_CLASS} divide-y divide-[#D5DADF]`}>
-          {organizations.map((o) => (
-            <li
-              key={o.id}
-              className="flex items-center justify-between gap-4 px-4 py-3"
-            >
-              <div className="min-w-0">
-                <div className="font-medium text-gray-900 truncate">{o.name}</div>
-                <div className="text-xs text-gray-500">
-                  VÖEN {o.taxId} · {o.currency} · {o.role}
-                  {o.id === user?.organizationId
-                    ? ` · ${t("companiesPage.current")}`
-                    : ""}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-lg font-medium text-gray-900">
+              {t("companiesPage.holdingTitle")}
+            </h2>
+            <Link href="/holding" className={LINK_ACCENT_CLASS}>
+              {t("companiesPage.holdingOpenDash")}
+            </Link>
+          </div>
+          <p className="text-sm text-gray-600">{t("companiesPage.holdingHint")}</p>
+
+          <div className="space-y-3">
+            {(tree?.holdings ?? []).map((h) => (
+              <div key={h.holdingId} className={`${CARD_CONTAINER_CLASS} p-4`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900 truncate">
+                      {h.holdingName}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {t("companiesPage.holdingBase")}: {h.baseCurrency}
+                    </div>
+                  </div>
+                  <Link
+                    href={`/holding?id=${encodeURIComponent(h.holdingId)}`}
+                    className={`${LINK_ACCENT_CLASS} shrink-0`}
+                  >
+                    {t("companiesPage.holdingOpen")}
+                    <ChevronRight className="h-4 w-4" aria-hidden />
+                  </Link>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void openOrg(o)}
-                className={`${PRIMARY_BUTTON_CLASS} shrink-0`}
-              >
-                {t("companiesPage.open")}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium text-gray-900">
-          {t("companiesPage.joinTitle")}
-        </h2>
-        <p className="text-sm text-gray-600">{t("companiesPage.joinHint")}</p>
-        <form
-          onSubmit={(e) => void onJoin(e)}
-          className={`${CARD_CONTAINER_CLASS} p-4 grid gap-3 max-w-md`}
-        >
-          <label className="block text-sm font-medium text-gray-800">
-            {t("auth.taxId")}
-            <input
-              required
-              pattern="\d{10}"
-              maxLength={10}
-              inputMode="numeric"
-              value={joinTaxId}
-              onChange={(e) =>
-                setJoinTaxId(e.target.value.replace(/\D/g, "").slice(0, 10))
-              }
-              className={FORM_INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-sm font-medium text-gray-800">
-            {t("companiesPage.messageOptional")}
-            <textarea
-              value={joinMessage}
-              onChange={(e) => setJoinMessage(e.target.value)}
-              rows={2}
-              className={FORM_TEXTAREA_CLASS}
-            />
-          </label>
-          {joinErr && <p className="text-red-600 text-sm">{joinErr}</p>}
-          {joinOk && (
-            <p className="text-green-700 text-sm">{t("companiesPage.joinOk")}</p>
-          )}
-          <button
-            type="submit"
-            disabled={joinBusy}
-            className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}
-          >
-            {joinBusy ? t("common.loading") : t("companiesPage.joinSubmit")}
-          </button>
-        </form>
-      </section>
+                {h.organizations.length === 0 ? (
+                  <p className="mt-3 text-sm text-gray-500">
+                    {t("companiesPage.holdingNoCompanies")}
+                  </p>
+                ) : (
+                  <div className="mt-3 rounded-[2px] border border-[#D5DADF] bg-[#EBEDF0]/40">
+                    <ul className="divide-y divide-[#D5DADF]">
+                      {h.organizations.map((o) => {
+                        const role = orgRoleById.get(o.id) ?? "";
+                        return (
+                          <li
+                            key={o.id}
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 py-2 bg-white"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="font-medium text-gray-900 truncate">
+                                  {o.name}
+                                </div>
+                                {role ? (
+                                  <Badge variant={roleVariant(role)} title={roleLabel(role)}>
+                                    {roleLabel(role)}
+                                  </Badge>
+                                ) : null}
+                                {o.id === user?.organizationId ? (
+                                  <Badge variant="neutral">{t("companiesPage.current")}</Badge>
+                                ) : null}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                VÖEN {o.taxId} · {o.currency}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 sm:shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void openOrg({
+                                    id: o.id,
+                                    name: o.name,
+                                    taxId: o.taxId,
+                                    currency: o.currency,
+                                    role,
+                                  } as OrgSummary)
+                                }
+                                className={PRIMARY_BUTTON_CLASS}
+                              >
+                                {t("companiesPage.open")}
+                              </button>
+
+                              {isOwnerOnly(o.id) ? (
+                                <button
+                                  type="button"
+                                  disabled={holdingBusyOrgId === o.id}
+                                  onClick={() => void detachFromHolding(h.holdingId, o.id)}
+                                  className={`${SECONDARY_BUTTON_CLASS} disabled:opacity-50`}
+                                  title={t("companiesPage.holdingDetach")}
+                                >
+                                  <Link2Off className="h-4 w-4" aria-hidden />
+                                  {holdingBusyOrgId === o.id
+                                    ? t("common.loading")
+                                    : t("companiesPage.holdingDetach")}
+                                </button>
+                              ) : null}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-medium text-gray-900">
+            {t("orgSwitcher.freeCompanies")}
+          </h2>
+          <p className="text-sm text-gray-600">{t("companiesPage.freeHint")}</p>
+
+          <div className="space-y-3">
+            <div className={`${CARD_CONTAINER_CLASS} p-4`}>
+              <div className="font-semibold text-gray-900">
+                {t("companiesPage.ownedGroupTitle")}
+              </div>
+              {freeOwned.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-500">{t("companiesPage.freeNone")}</p>
+              ) : (
+                <ul className="mt-3 divide-y divide-[#D5DADF]">
+                  {freeOwned.map((o) => (
+                    <li
+                      key={o.id}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="font-medium text-gray-900 truncate">{o.name}</div>
+                          <Badge variant="owner">{roleLabel("OWNER")}</Badge>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          VÖEN {o.taxId} · {o.currency}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 sm:shrink-0">
+                        <button
+                          type="button"
+                          className={PRIMARY_BUTTON_CLASS}
+                          onClick={() =>
+                            void openOrg({
+                              id: o.id,
+                              name: o.name,
+                              taxId: o.taxId,
+                              currency: o.currency,
+                              role: "OWNER",
+                            } as OrgSummary)
+                          }
+                        >
+                          {t("companiesPage.open")}
+                        </button>
+                        <select
+                          className={`${FORM_INPUT_CLASS} !h-8 !min-h-8 text-sm`}
+                          value={assignHoldingByOrg[o.id] ?? ""}
+                          onChange={(e) =>
+                            setAssignHoldingByOrg((prev) => ({
+                              ...prev,
+                              [o.id]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">{t("companiesPage.chooseHolding")}</option>
+                          {holdings.map((h) => (
+                            <option key={h.id} value={h.id}>
+                              {h.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!assignHoldingByOrg[o.id] || holdingBusyOrgId === o.id}
+                          onClick={() => void attachToHolding(o.id)}
+                          className={`${SECONDARY_BUTTON_CLASS} disabled:opacity-50`}
+                          title={t("companiesPage.holdingAttach")}
+                        >
+                          <Unlink2 className="h-4 w-4" aria-hidden />
+                          {holdingBusyOrgId === o.id
+                            ? t("common.loading")
+                            : t("companiesPage.holdingAttach")}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className={`${CARD_CONTAINER_CLASS} p-4`}>
+              <div className="font-semibold text-gray-900">
+                {t("companiesPage.managedGroupTitle")}
+              </div>
+              {freeManaged.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-500">{t("companiesPage.freeNone")}</p>
+              ) : (
+                <ul className="mt-3 divide-y divide-[#D5DADF]">
+                  {freeManaged.map((o) => {
+                    const role = orgRoleById.get(o.id) ?? "";
+                    return (
+                      <li
+                        key={o.id}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{o.name}</div>
+                            {role ? (
+                              <Badge variant={roleVariant(role)} title={roleLabel(role)}>
+                                {roleLabel(role)}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            VÖEN {o.taxId} · {o.currency}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className={PRIMARY_BUTTON_CLASS}
+                          onClick={() =>
+                            void openOrg({
+                              id: o.id,
+                              name: o.name,
+                              taxId: o.taxId,
+                              currency: o.currency,
+                              role,
+                            } as OrgSummary)
+                          }
+                        >
+                          {t("companiesPage.open")}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
 
       <p className="text-sm">
         <Link href="/" className={LINK_ACCENT_CLASS}>
           {t("companiesPage.backHome")}
         </Link>
       </p>
+
+      <VoenRequestModal open={voenModalOpen} onClose={() => setVoenModalOpen(false)} />
+      <CreateCompanyModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} />
     </div>
   );
 }

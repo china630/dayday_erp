@@ -17,6 +17,15 @@ import { AccountsService } from "./accounts.service";
 export class AccountsController {
   constructor(private readonly accounts: AccountsService) {}
 
+  @Get("chart/cash-catalog")
+  @ApiOperation({
+    summary:
+      "Справочник счетов кассы (101 / 102) из глобального плана счетов АР",
+  })
+  cashChartCatalog() {
+    return this.accounts.listCashChartCatalogEntries();
+  }
+
   @Get()
   @ApiOperation({ summary: "Список счетов по книге (NAS / IFRS)" })
   list(

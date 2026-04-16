@@ -12,8 +12,6 @@ import { formatMoneyAzn } from "../../lib/format-money";
 import { FORM_INPUT_CLASS } from "../../lib/form-styles";
 import {
   CARD_CONTAINER_CLASS,
-  FILTER_ACTIVE_CLASS,
-  FILTER_IDLE_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
@@ -74,7 +72,148 @@ type SyncStatus = {
   webhookUrl: string | null;
 };
 
-type RegistryFilter = "ALL" | "BANK" | "CASH";
+function BankingQuickExpenseModal({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation();
+  const { token, ready } = useRequireAuth();
+  const [cfItems, setCfItems] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [amount, setAmount] = useState("");
+  const [bankAcc, setBankAcc] = useState("221.01");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [cfId, setCfId] = useState("");
+  const [desc, setDesc] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadCf = useCallback(async () => {
+    if (!token) return;
+    const res = await apiFetch("/api/treasury/cash-flow-items");
+    if (res.ok) {
+      const list = (await res.json()) as { id: string; code: string; name: string }[];
+      setCfItems(list);
+      if (list[0]) setCfId((v) => v || list[0].id);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    void loadCf();
+  }, [ready, token, loadCf]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !cfId) {
+      toast.error(t("banking.cash.cashFlowRequired"));
+      return;
+    }
+    const amt = Number(amount.replace(",", "."));
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    setBusy(true);
+    const res = await apiFetch("/api/banking/manual-entry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "OUTFLOW",
+        amount: amt,
+        bankAccountCode: bankAcc.trim(),
+        offsetAccountCode: "731",
+        date,
+        cashFlowItemId: cfId,
+        description: desc.trim() || undefined,
+      }),
+    });
+    setBusy(false);
+    if (res.ok) {
+      toast.success(t("banking.manualEntryOk"));
+      setAmount("");
+      setDesc("");
+      onDone();
+      onClose();
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-lg p-6 bg-white`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 m-0">{t("banking.quickExpense")}</h3>
+            <p className="text-sm text-slate-600 mt-1 mb-0">
+              {t("banking.manualEntryHint")}
+            </p>
+          </div>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose}>
+            {t("common.cancel")}
+          </button>
+        </div>
+
+        <form className="space-y-4 mt-4" onSubmit={(e) => void onSubmit(e)}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block text-sm font-medium text-gray-700">
+              {t("banking.thAmount")}
+              <input
+                className={FORM_INPUT_CLASS}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              {t("banking.cashOutDate")}
+              <input
+                type="date"
+                className={FORM_INPUT_CLASS}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              {t("banking.manualEntryDds")}
+              <select
+                className={FORM_INPUT_CLASS}
+                value={cfId}
+                onChange={(e) => setCfId(e.target.value)}
+                required
+              >
+                {cfItems.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              {t("banking.manualEntryBankAcc")}
+              <input
+                className={FORM_INPUT_CLASS}
+                value={bankAcc}
+                onChange={(e) => setBankAcc(e.target.value)}
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              {t("banking.manualEntryDesc")}
+              <input
+                className={FORM_INPUT_CLASS}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                placeholder={t("banking.cashOutDescPh")}
+              />
+            </label>
+          </div>
+          <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}>
+            {busy ? t("banking.uploadHint") : t("banking.manualEntrySubmit")}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function formatBalanceLine(amount: string, currency: string): string {
   const n = Number(amount);
@@ -108,12 +247,21 @@ function sourceLabelKey(origin: string): string {
       return "banking.sourceWebhook";
     case "MANUAL_CASH_OUT":
       return "banking.sourceManualCash";
+    case "MANUAL_BANK_ENTRY":
+      return "banking.sourceManualBank";
     default:
       return "banking.sourceOther";
   }
 }
 
-function CashAccountCards({ refreshKey }: { refreshKey: number }) {
+function CashAccountCards({
+  refreshKey,
+  segmentFilter = "ALL",
+}: {
+  refreshKey: number;
+  /** На странице «Банк» показываем только банковские счета; касса — в разделе Kassa. */
+  segmentFilter?: "ALL" | "BANK" | "CASH";
+}) {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
   const { ledgerType, ready: ledgerReady } = useLedger();
@@ -177,7 +325,10 @@ function CashAccountCards({ refreshKey }: { refreshKey: number }) {
       )}
       {!loading && !error && data && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {data.accounts.map((acc) => {
+          {(segmentFilter === "ALL"
+            ? data.accounts
+            : data.accounts.filter((a) => a.segment === segmentFilter)
+          ).map((acc) => {
             const Icon = segmentIcon(acc.segment);
             const segTitle =
               acc.segment === "CASH" ? t("banking.segmentCash") : t("banking.segmentBank");
@@ -407,13 +558,9 @@ function BankingImportCenter({
 }
 
 function BankingRegistry({
-  registryFilter,
-  onRegistryFilter,
   refreshKey,
   onTreasuryChanged,
 }: {
-  registryFilter: RegistryFilter;
-  onRegistryFilter: (f: RegistryFilter) => void;
   refreshKey: number;
   onTreasuryChanged: () => void;
 }) {
@@ -432,11 +579,6 @@ function BankingRegistry({
   const [dateFrom, setDateFrom] = useState(defaultFrom);
   const [dateTo, setDateTo] = useState(defaultTo);
 
-  const [cashAmount, setCashAmount] = useState("");
-  const [cashDesc, setCashDesc] = useState("");
-  const [cashDate, setCashDate] = useState(defaultTo);
-  const [cashBusy, setCashBusy] = useState(false);
-
   const load = useCallback(async () => {
     if (!token) {
       setLines([]);
@@ -445,21 +587,18 @@ function BankingRegistry({
     }
     setLoading(true);
     setError(null);
-    const q =
-      registryFilter === "ALL"
-        ? ""
-        : `?channel=${registryFilter}`;
-    const res = await apiFetch(`/api/banking/lines${q}`);
+    const res = await apiFetch("/api/banking/lines?channel=BANK&bankOnly=true");
     if (!res.ok) {
       const detail = String(res.status);
       toast.error(t("banking.loadErr"), { description: detail });
       setError(detail);
       setLines([]);
     } else {
-      setLines(await res.json());
+      const data = (await res.json()) as BankLine[];
+      setLines(data);
     }
     setLoading(false);
-  }, [token, t, registryFilter]);
+  }, [token, t]);
 
   useEffect(() => {
     if (!ready || !token) return;
@@ -506,107 +645,20 @@ function BankingRegistry({
     await load();
   }
 
-  async function submitCashOut(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token) return;
-    const n = Number(cashAmount);
-    if (!Number.isFinite(n) || n <= 0) return;
-    setCashBusy(true);
-    const res = await apiFetch("/api/banking/cash-out", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: n,
-        description: cashDesc.trim() || undefined,
-        date: cashDate || undefined,
-      }),
-    });
-    setCashBusy(false);
-    if (!res.ok) {
-      alert(`${t("banking.cashOutErr")}: ${await res.text()}`);
-      return;
-    }
-    setCashAmount("");
-    setCashDesc("");
-    onTreasuryChanged();
-    await load();
-  }
-
-  const filterBtn =
-    "rounded-[2px] px-3 py-1.5 text-[13px] font-medium border transition-colors";
-
   return (
     <section className="space-y-4">
       <h3 className="text-base font-semibold text-gray-900 m-0">{t("banking.recentTransactionsTitle")}</h3>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-slate-600">{t("banking.registryFilter")}:</span>
-        <button
-          type="button"
-          className={`${filterBtn} ${registryFilter === "ALL" ? FILTER_ACTIVE_CLASS : FILTER_IDLE_CLASS}`}
-          onClick={() => onRegistryFilter("ALL")}
-        >
-          {t("banking.filterAll")}
-        </button>
-        <button
-          type="button"
-          className={`${filterBtn} ${registryFilter === "BANK" ? FILTER_ACTIVE_CLASS : FILTER_IDLE_CLASS}`}
-          onClick={() => onRegistryFilter("BANK")}
-        >
-          {t("banking.filterBank")}
-        </button>
-        <button
-          type="button"
-          className={`${filterBtn} ${registryFilter === "CASH" ? FILTER_ACTIVE_CLASS : FILTER_IDLE_CLASS}`}
-          onClick={() => onRegistryFilter("CASH")}
-        >
-          {t("banking.filterCash")}
-        </button>
-      </div>
-
-      <form
-        onSubmit={(e) => void submitCashOut(e)}
-        className={`${CARD_CONTAINER_CLASS} p-4 flex flex-wrap items-end gap-3`}
-      >
-        <p className="text-sm font-medium text-slate-800 w-full m-0">{t("banking.cashOutTitle")}</p>
-        <label className="text-sm text-slate-700 min-w-[7rem]">
-          <span className="block mb-1">{t("banking.cashOutAmount")}</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={cashAmount}
-            onChange={(e) => setCashAmount(e.target.value)}
-            className={FORM_INPUT_CLASS}
-            required
-          />
-        </label>
-        <label className="text-sm text-slate-700 flex-1 min-w-[10rem]">
-          <span className="block mb-1">{t("banking.cashOutDesc")}</span>
-          <input
-            value={cashDesc}
-            onChange={(e) => setCashDesc(e.target.value)}
-            className={FORM_INPUT_CLASS}
-            placeholder={t("banking.cashOutDescPh")}
-          />
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="block mb-1">{t("banking.cashOutDate")}</span>
-          <input
-            type="date"
-            value={cashDate}
-            onChange={(e) => setCashDate(e.target.value)}
-            className={FORM_INPUT_CLASS}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={cashBusy}
-          className={PRIMARY_BUTTON_CLASS}
-        >
-          {cashBusy ? "…" : t("banking.cashOutBtn")}
-        </button>
-      </form>
+      <p className="text-sm text-slate-600 m-0">
+        {t("banking.cashOpsMovedHint")}{" "}
+        <Link href="/banking/cash" className="font-medium text-action hover:underline">
+          {t("nav.kassa")}
+        </Link>
+        {" · "}
+        <Link href="/banking/money" className="font-medium text-action hover:underline">
+          {t("treasury.moneyTitle")}
+        </Link>
+      </p>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm text-slate-700">
@@ -760,8 +812,8 @@ function BankingRegistry({
 export default function BankingPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
-  const [registryFilter, setRegistryFilter] = useState<RegistryFilter>("ALL");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [quickExpenseOpen, setQuickExpenseOpen] = useState(false);
 
   const bump = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -788,19 +840,23 @@ export default function BankingPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-xl font-semibold text-[#34495E] m-0">{t("banking.title")}</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/invoices" className={SECONDARY_BUTTON_CLASS}>
+            <Link href="/invoices?pay=1" className={SECONDARY_BUTTON_CLASS}>
               {t("banking.quickPay")}
             </Link>
-            <Link href="/expenses/quick" className={SECONDARY_BUTTON_CLASS}>
+            <button
+              type="button"
+              className={SECONDARY_BUTTON_CLASS}
+              onClick={() => setQuickExpenseOpen(true)}
+            >
               {t("banking.quickExpense")}
-            </Link>
+            </button>
             <Link href="/settings/mapping" className={PRIMARY_BUTTON_CLASS}>
               {t("banking.addAccount")}
             </Link>
           </div>
         </div>
 
-        <CashAccountCards refreshKey={refreshKey} />
+        <CashAccountCards refreshKey={refreshKey} segmentFilter="BANK" />
 
         <section className={`${CARD_CONTAINER_CLASS} p-6`}>
           <BankingImportCenter
@@ -811,11 +867,16 @@ export default function BankingPage() {
         </section>
 
         <BankingRegistry
-          registryFilter={registryFilter}
-          onRegistryFilter={setRegistryFilter}
           refreshKey={refreshKey}
           onTreasuryChanged={bump}
         />
+
+        {quickExpenseOpen && (
+          <BankingQuickExpenseModal
+            onClose={() => setQuickExpenseOpen(false)}
+            onDone={bump}
+          />
+        )}
       </div>
     </SubscriptionPaywall>
   );

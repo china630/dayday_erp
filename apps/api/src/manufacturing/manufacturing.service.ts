@@ -81,11 +81,19 @@ export class ManufacturingService {
 
       await tx.productRecipeLine.deleteMany({ where: { recipeId: recipe.id } });
       for (const line of dto.lines) {
+        const wf =
+          line.wasteFactor != null && Number.isFinite(line.wasteFactor)
+            ? new Decimal(line.wasteFactor)
+            : new Decimal(0);
+        if (wf.lt(0) || wf.gt(2)) {
+          throw new BadRequestException("wasteFactor must be between 0 and 2");
+        }
         await tx.productRecipeLine.create({
           data: {
             recipeId: recipe.id,
             componentProductId: line.componentProductId,
             quantityPerUnit: new Decimal(line.quantityPerUnit),
+            wasteFactor: wf,
           },
         });
       }
@@ -133,7 +141,10 @@ export class ManufacturingService {
       let totalMaterial = new Decimal(0);
 
       for (const line of recipe.lines) {
-        const need = new Decimal(line.quantityPerUnit).mul(batchQty);
+        const wf = line.wasteFactor != null ? new Decimal(line.wasteFactor) : new Decimal(0);
+        const need = new Decimal(line.quantityPerUnit)
+          .mul(new Decimal(1).add(wf))
+          .mul(batchQty);
         const si = await tx.stockItem.findUnique({
           where: {
             organizationId_warehouseId_productId: {

@@ -43,7 +43,6 @@ const ALLOWED_SINGLE_SEGMENT_OVERRIDE_KEYS = new Set([
  */
 const FLAT_OVERRIDE_KEYS_THAT_SHADOW_NESTED_OBJECTS = new Set([
   "banking.cash",
-  "BANKING.CASH",
 ]);
 
 export function dropFlatKeysThatShadowNestedObjects(

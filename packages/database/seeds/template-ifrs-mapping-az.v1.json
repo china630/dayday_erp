@@ -1,0 +1,27 @@
+{
+  "templateKey": "ifrsMapping.az",
+  "version": 1,
+  "defaultRule": {
+    "type": "IDENTITY",
+    "ratio": "1"
+  },
+  "overrides": [
+    {
+      "nasCode": "211",
+      "ifrsCode": "1200",
+      "ratio": "1",
+      "description": "Demo override: receivables"
+    },
+    {
+      "nasCode": "601",
+      "ifrsCode": "4000",
+      "ratio": "1",
+      "description": "Demo override: revenue"
+    }
+  ],
+  "meta": {
+    "note": "IDENTITY means: if no override exists, nasCode maps to the same ifrsCode (=nasCode). Store only overrides to keep file maintainable.",
+    "source": "DayDay ERP template package"
+  }
+}
+

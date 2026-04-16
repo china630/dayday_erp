@@ -11,6 +11,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import {
   AccessRequestStatus,
+  HoldingAccessRole,
   InviteStatus,
   SubscriptionTier,
   syncAzChartForOrganization,
@@ -218,6 +219,15 @@ export class AuthService {
 
     await this.quota.assertOrganizationsPerUserMembershipLimit(userId);
 
+    if (dto.holdingId) {
+      const holding = await this.prisma.holding.findFirst({
+        where: { id: dto.holdingId, ownerId: userId },
+      });
+      if (!holding) {
+        throw new ForbiddenException("Holding not found or access denied");
+      }
+    }
+
     const { org } = await this.prisma.$transaction(async (tx) => {
       const o = await tx.organization.create({
         data: {
@@ -226,6 +236,7 @@ export class AuthService {
           currency: (dto.currency ?? "AZN").toUpperCase(),
           subscriptionPlan: "mvp",
           activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
+          ...(dto.holdingId && { holdingId: dto.holdingId }),
         },
       });
       const demoExpiresAt = new Date();
@@ -386,10 +397,18 @@ export class AuthService {
     });
     const tokens = await this.signTokenPair(userId, organizationId);
     const orgs = await this.listOrganizationsForUser(userId);
+    const canViewHoldingReports = await this.userMayViewAnyHoldingReport(
+      userId,
+    );
     return {
       ...tokens,
       user: this.toPublicUser(user, organizationId, m.role),
       organizations: orgs,
+      access: this.sessionAccessFlags(
+        organizationId,
+        m.role,
+        canViewHoldingReports,
+      ),
     };
   }
 
@@ -402,16 +421,73 @@ export class AuthService {
       where: { id: userId },
     });
     const orgs = await this.listOrganizationsForUser(userId);
+    const canViewHoldingReports = await this.userMayViewAnyHoldingReport(
+      userId,
+    );
+    const access = this.sessionAccessFlags(
+      organizationId,
+      role,
+      canViewHoldingReports,
+    );
     if (!organizationId || role == null) {
       return {
         user: this.toPublicUserNoOrg(user),
         organizations: orgs,
+        access,
       };
     }
     return {
       user: this.toPublicUser(user, organizationId, role),
       organizations: orgs,
+      access,
     };
+  }
+
+  private sessionAccessFlags(
+    organizationId: string | null,
+    role: UserRole | null,
+    canViewHoldingReports: boolean,
+  ): {
+    canPostAccounting: boolean;
+    canViewHoldingReports: boolean;
+  } {
+    if (!organizationId || role == null) {
+      return { canPostAccounting: false, canViewHoldingReports };
+    }
+    return {
+      canPostAccounting:
+        role === UserRole.OWNER ||
+        role === UserRole.ADMIN ||
+        role === UserRole.ACCOUNTANT,
+      canViewHoldingReports,
+    };
+  }
+
+  /** Владелец холдинга или участник с ролью не VIEWER — как в AccessControlService. */
+  private async userMayViewAnyHoldingReport(userId: string): Promise<boolean> {
+    const row = await this.prisma.holding.findFirst({
+      where: {
+        OR: [
+          { ownerId: userId },
+          {
+            memberships: {
+              some: {
+                userId,
+                role: {
+                  in: [
+                    HoldingAccessRole.OWNER,
+                    HoldingAccessRole.ADMIN,
+                    HoldingAccessRole.ACCOUNTANT,
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    return Boolean(row);
   }
 
   private async listOrganizationsForUser(userId: string): Promise<OrgSummary[]> {

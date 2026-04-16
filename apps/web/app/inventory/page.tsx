@@ -60,6 +60,7 @@ export default function InventoryPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [settings, setSettings] = useState<{
     allowNegativeStock?: boolean;
+    defaultWarehouseId?: string | null;
     defaultWarehouseResolvedId?: string | null;
   } | null>(null);
   const [filterWh, setFilterWh] = useState("");
@@ -68,6 +69,7 @@ export default function InventoryPage() {
   const [settingsSaving, setSettingsSaving] = useState(false);
 
   const [allowNeg, setAllowNeg] = useState(false);
+  const [defWh, setDefWh] = useState("");
 
   const load = useCallback(async () => {
     if (!token) {
@@ -94,6 +96,9 @@ export default function InventoryPage() {
         const j = await cfg.json();
         setSettings(j);
         setAllowNeg(!!j.allowNegativeStock);
+        setDefWh(
+          typeof j.defaultWarehouseId === "string" ? j.defaultWarehouseId : "",
+        );
       }
     } catch (e) {
       setError(String(e));
@@ -112,7 +117,10 @@ export default function InventoryPage() {
       const res = await apiFetch("/api/inventory/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allowNegativeStock: allowNeg }),
+        body: JSON.stringify({
+          allowNegativeStock: allowNeg,
+          defaultWarehouseId: defWh.trim() ? defWh.trim() : null,
+        }),
       });
       if (!res.ok) return;
       await load();
@@ -166,6 +174,12 @@ export default function InventoryPage() {
           >
             {t("inventory.adjustNav")}
           </Link>
+          <Link href="/inventory/surplus" className={SECONDARY_BUTTON_CLASS}>
+            {t("inventory.surplusNav")}
+          </Link>
+          <Link href="/inventory/write-off" className={SECONDARY_BUTTON_CLASS}>
+            {t("inventory.writeOffNav")}
+          </Link>
           <Link
             href="/inventory/audit/new"
             className={`${SECONDARY_BUTTON_CLASS} border-[#2980B9]/40 bg-[#2980B9]/10 text-[#34495E]`}
@@ -193,6 +207,21 @@ export default function InventoryPage() {
               className="rounded border-slate-300 text-action focus:ring-action"
             />
             {t("inventory.allowNeg")}
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t("inventory.defaultWhLabel")}
+            <select
+              value={defWh}
+              onChange={(e) => setDefWh(e.target.value)}
+              className={`mt-1 ${inputFieldWideClass} max-w-md`}
+            >
+              <option value="">{t("inventory.defaultWhAuto")}</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
           </label>
           <div>
             <button

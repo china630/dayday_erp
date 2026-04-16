@@ -22,7 +22,10 @@ export class CreatePkoDraftDto {
 
   @ApiProperty({ example: 100 })
   @Type(() => Number)
-  @IsNumber()
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 4 },
+    { message: "amount must be a finite number" },
+  )
   @Min(0.01)
   amount!: number;
 
@@ -59,4 +62,13 @@ export class CreatePkoDraftDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ description: "Статья ДДС (обязательна)" })
+  @IsUUID()
+  cashFlowItemId!: string;
+
+  @ApiPropertyOptional({ description: "Физическая касса" })
+  @IsOptional()
+  @IsUUID()
+  cashDeskId?: string;
 }

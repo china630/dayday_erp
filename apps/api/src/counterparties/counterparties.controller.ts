@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   NotFoundException,
@@ -13,12 +14,16 @@ import { OrganizationId } from "../common/org-id.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCounterpartyDto } from "./dto/create-counterparty.dto";
 import { UpdateCounterpartyDto } from "./dto/update-counterparty.dto";
+import { CounterpartiesService } from "./counterparties.service";
 
 @ApiTags("counterparties")
 @ApiBearerAuth("bearer")
 @Controller("counterparties")
 export class CounterpartiesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly svc: CounterpartiesService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "Список контрагентов" })
@@ -26,6 +31,7 @@ export class CounterpartiesController {
     return this.prisma.counterparty.findMany({
       where: { organizationId: orgId },
       orderBy: { name: "asc" },
+      include: { global: true },
     });
   }
 
@@ -34,6 +40,7 @@ export class CounterpartiesController {
   async getOne(@OrganizationId() orgId: string, @Param("id") id: string) {
     const row = await this.prisma.counterparty.findFirst({
       where: { id, organizationId: orgId },
+      include: { global: true },
     });
     if (!row) {
       throw new NotFoundException("Counterparty not found");
@@ -41,20 +48,69 @@ export class CounterpartiesController {
     return row;
   }
 
+  @Get("global/by-voen/:taxId")
+  @ApiOperation({ summary: "MDM lookup by VÖEN (GlobalCounterparty)" })
+  lookupGlobal(@Param("taxId") taxId: string) {
+    return this.svc.lookupGlobalByVoen(taxId);
+  }
+
   @Post()
   @ApiOperation({ summary: "Создать контрагента" })
-  create(@OrganizationId() orgId: string, @Body() dto: CreateCounterpartyDto) {
+  async create(
+    @OrganizationId() orgId: string,
+    @Body() dto: CreateCounterpartyDto,
+  ) {
+    const name = dto.name.trim();
+    if (!name) {
+      throw new ConflictException("name is required");
+    }
+    const taxId = dto.taxId.trim();
+    const dup = await this.prisma.counterparty.findFirst({
+      where: { organizationId: orgId, taxId },
+    });
+    if (dup) {
+      throw new ConflictException(
+        "A counterparty with this VÖEN already exists in the organization",
+      );
+    }
+
+    // MDM: attach to global registry if possible (or create global stub).
+    // Local counterparty remains the org-scoped record with globalId link.
+    try {
+      const linked = await this.svc.findOrCreateByVoen({
+        organizationId: orgId,
+        taxId,
+        nameFallback: name,
+        legalAddressFallback: dto.address ?? null,
+        vatStatusFallback: dto.isVatPayer ?? null,
+      });
+      // allow local overrides of kind/role/email if provided
+      return this.prisma.counterparty.update({
+        where: { id: linked.id },
+        data: {
+          kind: dto.kind,
+          role: dto.role ?? CounterpartyRole.CUSTOMER,
+          address: dto.address ?? null,
+          email: dto.email?.trim() || null,
+          isVatPayer: dto.isVatPayer ?? linked.isVatPayer ?? null,
+        },
+        include: { global: true },
+      });
+    } catch {
+      // fallback to legacy local-only create
+    }
     return this.prisma.counterparty.create({
       data: {
         organizationId: orgId,
-        name: dto.name,
-        taxId: dto.taxId,
+        name,
+        taxId,
         kind: dto.kind,
         role: dto.role ?? CounterpartyRole.CUSTOMER,
         address: dto.address ?? null,
         email: dto.email?.trim() || null,
         isVatPayer: dto.isVatPayer ?? null,
       },
+      include: { global: true },
     });
   }
 
@@ -71,17 +127,32 @@ export class CounterpartiesController {
     if (!existing) {
       throw new NotFoundException("Counterparty not found");
     }
+    if (dto.taxId !== undefined && dto.taxId.trim() !== existing.taxId) {
+      const dup = await this.prisma.counterparty.findFirst({
+        where: {
+          organizationId: orgId,
+          taxId: dto.taxId.trim(),
+          NOT: { id },
+        },
+      });
+      if (dup) {
+        throw new ConflictException(
+          "A counterparty with this VÖEN already exists in the organization",
+        );
+      }
+    }
     return this.prisma.counterparty.update({
       where: { id },
       data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.taxId !== undefined && { taxId: dto.taxId }),
+        ...(dto.name !== undefined && { name: dto.name.trim() }),
+        ...(dto.taxId !== undefined && { taxId: dto.taxId.trim() }),
         ...(dto.kind !== undefined && { kind: dto.kind }),
         ...(dto.role !== undefined && { role: dto.role }),
         ...(dto.address !== undefined && { address: dto.address || null }),
         ...(dto.email !== undefined && { email: dto.email?.trim() || null }),
         ...(dto.isVatPayer !== undefined && { isVatPayer: dto.isVatPayer }),
       },
+      include: { global: true },
     });
   }
 }

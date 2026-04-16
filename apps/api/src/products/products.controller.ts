@@ -42,6 +42,7 @@ export class ProductsController {
         sku: dto.sku,
         price: dto.price,
         vatRate: dto.vatRate,
+        isService: dto.isService ?? false,
       },
     });
   }
@@ -66,6 +67,7 @@ export class ProductsController {
         ...(dto.sku !== undefined && { sku: dto.sku }),
         ...(dto.price !== undefined && { price: dto.price }),
         ...(dto.vatRate !== undefined && { vatRate: dto.vatRate }),
+        ...(dto.isService !== undefined && { isService: dto.isService }),
       },
     });
   }

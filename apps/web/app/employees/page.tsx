@@ -19,6 +19,7 @@ import {
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
+import { EmployeeModal } from "./employee-modal";
 
 function sanitizeFinInput(raw: string): string {
   return raw.replace(/[^0-9A-HJ-NP-Za-hj-np-z]/g, "").slice(0, 7);
@@ -57,6 +58,7 @@ export default function EmployeesPage() {
   const { user } = useAuth();
   const hideDestructive = isRestrictedUserRole(user?.role ?? undefined);
   const { ready: subReady, effectiveSnapshot: snapshot } = useSubscription();
+  const [createOpen, setCreateOpen] = useState(false);
   const [rows, setRows] = useState<Employee[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -157,12 +159,17 @@ export default function EmployeesPage() {
         try {
           const j = JSON.parse(raw) as { code?: string; message?: unknown };
           if (j.code === "QUOTA_EXCEEDED") {
+            if (res.status === 402) return;
             const msg =
               typeof j.message === "string"
                 ? j.message
                 : Array.isArray(j.message)
                   ? j.message.join(" ")
-                  : t("employees.quotaExceeded");
+                  : j.message &&
+                      typeof j.message === "object" &&
+                      "ru" in (j.message as object)
+                    ? String((j.message as { ru?: string }).ru)
+                    : t("employees.quotaExceeded");
             alert(msg);
             return;
           }
@@ -214,21 +221,19 @@ export default function EmployeesPage() {
         <div>
           <h1 className="text-2xl font-semibold text-[#34495E]">{t("employees.title")}</h1>
         </div>
-        <Link
-          href="/employees/new"
+        <button
+          type="button"
           className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}
-          aria-disabled={subReady && Boolean(snapshot?.quotas.employees.atLimit)}
+          disabled={subReady && Boolean(snapshot?.quotas.employees.atLimit)}
           title={
             subReady && snapshot?.quotas.employees.atLimit
               ? t("subscription.employeesLimitTooltip")
               : undefined
           }
-          onClick={(e) => {
-            if (subReady && snapshot?.quotas.employees.atLimit) e.preventDefault();
-          }}
+          onClick={() => setCreateOpen(true)}
         >
           + {t("employees.newBtn")}
-        </Link>
+        </button>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
@@ -545,15 +550,24 @@ export default function EmployeesPage() {
           title={t("employees.none")}
           description={t("employees.emptyHint")}
           action={
-            <Link
-              href="/employees/new"
-              className="inline-flex items-center justify-center bg-action text-white px-4 py-2 rounded-lg hover:bg-action-hover text-sm font-medium shadow-sm transition-colors"
+            <button
+              type="button"
+              className="inline-flex items-center justify-center bg-action text-white px-4 py-2 rounded-lg hover:bg-action-hover text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
+              disabled={subReady && Boolean(snapshot?.quotas.employees.atLimit)}
+              onClick={() => setCreateOpen(true)}
             >
               + {t("employees.newTitle")}
-            </Link>
+            </button>
           }
         />
       )}
+
+      <EmployeeModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => void load()}
+        quotaAtLimit={subReady && Boolean(snapshot?.quotas.employees.atLimit)}
+      />
     </div>
   );
 }

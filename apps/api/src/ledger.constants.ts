@@ -36,8 +36,16 @@ export const INVENTORY_SURPLUS_INCOME_ACCOUNT_CODE = "631";
 /** Касса (операционная) — источник оплаты расхода. */
 export const CASH_OPERATIONAL_ACCOUNT_CODE = "101.01";
 
+/** Касса в иностранной валюте (субсчёт 102). */
+export const FOREIGN_CASH_OPERATIONAL_ACCOUNT_CODE = "102.01";
+
 /** Расчёты с подотчётными лицами (NAS). */
 export const ACCOUNTABLE_PERSONS_ACCOUNT_CODE = "244";
 
 /** Основной расчётный счёт в банке (типовой код для инкассации). */
 export const MAIN_BANK_ACCOUNT_CODE = "221";
+
+/** НДС к зачёту (входящий). */
+export const VAT_INPUT_ACCOUNT_CODE = "241";
+/** НДС к уплате (исходящий). */
+export const VAT_OUTPUT_ACCOUNT_CODE = "541";

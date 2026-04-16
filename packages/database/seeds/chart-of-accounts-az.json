@@ -22,6 +22,7 @@
     { "code": "101.01", "name": "Касса (операционная)", "type": "ASSET", "parentCode": "101" },
     { "code": "101.02", "name": "Касса (филиал)", "type": "ASSET", "parentCode": "101" },
     { "code": "102", "name": "Наличные деньги в иностранной валюте", "type": "ASSET", "parentCode": "100" },
+    { "code": "102.01", "name": "Касса (иностранная валюта)", "type": "ASSET", "parentCode": "102" },
     { "code": "103", "name": "Денежные документы", "type": "ASSET", "parentCode": "100" },
 
     { "code": "112", "name": "Накопленная амортизация основных средств", "type": "ASSET", "parentCode": "111" },

@@ -31,7 +31,7 @@ export default function EditCounterpartyPage() {
   const [name, setName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [kind, setKind] = useState<"LEGAL_ENTITY" | "INDIVIDUAL">("LEGAL_ENTITY");
-  const [role, setRole] = useState<"CUSTOMER" | "SUPPLIER" | "BOTH">("CUSTOMER");
+  const [role, setRole] = useState<"CUSTOMER" | "SUPPLIER" | "BOTH" | "OTHER">("CUSTOMER");
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [isVatPayer, setIsVatPayer] = useState<boolean | null>(null);
@@ -52,7 +52,7 @@ export default function EditCounterpartyPage() {
     setName(r.name);
     setTaxId(r.taxId);
     setKind(r.kind as "LEGAL_ENTITY" | "INDIVIDUAL");
-    setRole(r.role as "CUSTOMER" | "SUPPLIER" | "BOTH");
+    setRole(r.role as "CUSTOMER" | "SUPPLIER" | "BOTH" | "OTHER");
     setAddress(r.address ?? "");
     setEmail(r.email ?? "");
     setIsVatPayer(r.isVatPayer ?? null);
@@ -72,13 +72,42 @@ export default function EditCounterpartyPage() {
     }
     setVoenCheckBusy(true);
     setMsg(null);
-    const res = await apiFetch(`/api/tax/taxpayer-info?voen=${encodeURIComponent(digits)}`);
+    // 1) MDM lookup (GlobalCounterparty)
+    const mdm = await apiFetch(
+      `/api/counterparties/global/by-voen/${encodeURIComponent(digits)}`,
+    );
+    if (mdm.ok) {
+      const g = (await mdm.json()) as {
+        taxId: string;
+        name: string;
+        legalAddress?: string | null;
+        vatStatus?: boolean | null;
+      } | null;
+      setVoenCheckBusy(false);
+      if (g) {
+        setName(g.name);
+        setIsVatPayer(g.vatStatus ?? null);
+        if (g.legalAddress?.trim()) {
+          setAddress((a) => (a.trim() ? a : g.legalAddress!));
+        }
+        return;
+      }
+    }
+
+    // 2) External lookup fallback (e-taxes)
+    const res = await apiFetch(
+      `/api/tax/taxpayer-info?voen=${encodeURIComponent(digits)}`,
+    );
     setVoenCheckBusy(false);
     if (!res.ok) {
       setMsg(`${t("counterparties.voenCheckErr")}: ${res.status} ${await res.text()}`);
       return;
     }
-    const j = (await res.json()) as { name: string; isVatPayer: boolean; address: string | null };
+    const j = (await res.json()) as {
+      name: string;
+      isVatPayer: boolean;
+      address: string | null;
+    };
     setName(j.name);
     setIsVatPayer(j.isVatPayer);
     if (j.address?.trim()) {
@@ -90,6 +119,10 @@ export default function EditCounterpartyPage() {
     e.preventDefault();
     setMsg(null);
     if (!token || !id) return;
+    if (!name.trim()) {
+      alert(t("counterparties.nameRequired", { defaultValue: "Укажите название" }));
+      return;
+    }
     const digits = taxId.replace(/\D/g, "");
     if (digits.length !== 10) {
       alert(t("counterparties.taxInvalid"));
@@ -190,7 +223,14 @@ export default function EditCounterpartyPage() {
           <select value={role} onChange={(e) => setRole(e.target.value as typeof role)} className={inputFieldClass}>
             <option value="CUSTOMER">{t("counterparties.roleCustomer")}</option>
             <option value="SUPPLIER">{t("counterparties.roleSupplier")}</option>
-            <option value="BOTH">{t("counterparties.roleBoth")}</option>
+            <option value="BOTH">
+              {t("counterparties.roleTradingPartner", {
+                defaultValue: "Поставщик / Покупатель",
+              })}
+            </option>
+            <option value="OTHER">
+              {t("counterparties.roleOther", { defaultValue: "Прочее" })}
+            </option>
           </select>
         </div>
         <div>

@@ -15,7 +15,10 @@ import { AccountingService } from "./accounting.service";
 import {
   PAYABLE_SUPPLIERS_ACCOUNT_CODE,
   RECEIVABLE_ACCOUNT_CODE,
+  VAT_INPUT_ACCOUNT_CODE,
+  VAT_OUTPUT_ACCOUNT_CODE,
 } from "../ledger.constants";
+import { parseOrgIsVatPayer } from "../common/org-vat-payer.util";
 import { PrismaService } from "../prisma/prisma.service";
 
 function d(v: Decimal | null | undefined): Decimal {
@@ -269,9 +272,70 @@ export class NettingService {
       throw new BadRequestException("Счета 211 или 531 не найдены в плане счетов");
     }
 
+    const orgRow = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    const orgIsVatPayer = parseOrgIsVatPayer(orgRow?.settings);
+    const cpIsVatPayer = cp.isVatPayer === true;
+    const vatOnNetting = orgIsVatPayer && cpIsVatPayer;
+    /** Доля НДС 18% в сумме с НДС (НК АР, упрощённо для взаимозачёта). */
+    const vatPortion = vatOnNetting
+      ? amount.mul(new Decimal(18)).div(new Decimal(118))
+      : new Decimal(0);
+    const vatStr = vatPortion.toFixed(4);
+
+    const acc241 = vatOnNetting
+      ? await this.prisma.account.findFirst({
+          where: {
+            organizationId,
+            ledgerType,
+            code: VAT_INPUT_ACCOUNT_CODE,
+          },
+        })
+      : null;
+    const acc541 = vatOnNetting
+      ? await this.prisma.account.findFirst({
+          where: {
+            organizationId,
+            ledgerType,
+            code: VAT_OUTPUT_ACCOUNT_CODE,
+          },
+        })
+      : null;
+    const canPostVat = Boolean(acc241 && acc541);
+
     const payDate = new Date();
 
     return this.prisma.$transaction(async (tx) => {
+      const baseLines = [
+        {
+          accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
+          debit: amount.toString(),
+          credit: 0,
+        },
+        {
+          accountCode: RECEIVABLE_ACCOUNT_CODE,
+          debit: 0,
+          credit: amount.toString(),
+        },
+      ];
+      const vatLines =
+        vatOnNetting && canPostVat
+          ? [
+              {
+                accountCode: VAT_INPUT_ACCOUNT_CODE,
+                debit: vatStr,
+                credit: 0,
+              },
+              {
+                accountCode: VAT_OUTPUT_ACCOUNT_CODE,
+                debit: 0,
+                credit: vatStr,
+              },
+            ]
+          : [];
+
       const { transactionId } = await this.accounting.postJournalInTransaction(tx, {
         organizationId,
         date: payDate,
@@ -279,18 +343,7 @@ export class NettingService {
         description: `Взаимозачёт: ${cp.name}`,
         isFinal: true,
         counterpartyId,
-        lines: [
-          {
-            accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
-            debit: amount.toString(),
-            credit: 0,
-          },
-          {
-            accountCode: RECEIVABLE_ACCOUNT_CODE,
-            debit: 0,
-            credit: amount.toString(),
-          },
-        ],
+        lines: [...baseLines, ...vatLines],
       });
 
       await this.allocateNettingToInvoicePayments(
@@ -306,6 +359,13 @@ export class NettingService {
         transactionId,
         amount: amount.toFixed(4),
         counterpartyName: cp.name,
+        suggestVatInvoice: vatOnNetting,
+        vatPosted: vatOnNetting && canPostVat,
+        vatAmount: vatOnNetting ? vatStr : null,
+        vatSkippedReason:
+          vatOnNetting && !canPostVat
+            ? "Счета 241/541 не найдены в плане счетов — создайте e-qaimə вручную."
+            : null,
       };
     });
   }

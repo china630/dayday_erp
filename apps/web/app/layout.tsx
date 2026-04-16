@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { cookies, headers } from "next/headers";
 import { Providers } from "./providers";
 import { AppShell } from "./app-shell";
+import LoginPage from "./login/page";
 
 /** SSR-заглушка; актуальный title/description по языку выставляет SeoHeadSync в Providers. */
 export const metadata: Metadata = {
@@ -13,11 +15,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const token = cookies().get("dayday_access_token")?.value;
+  const pathname = headers().get("x-dayday-pathname") ?? "";
+  const publicPath =
+    pathname === "/login" ||
+    pathname === "/register" ||
+    pathname === "/register-org" ||
+    pathname.startsWith("/verify/");
+
   return (
     <html lang="ru" suppressHydrationWarning>
       <body style={{ fontFamily: "system-ui", margin: 0 }}>
         <Providers>
-          <AppShell>{children}</AppShell>
+          {!token && !publicPath ? <LoginPage /> : <AppShell>{children}</AppShell>}
         </Providers>
       </body>
     </html>

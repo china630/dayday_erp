@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
- * Показывает модалку при 403 SUBSCRIPTION_READ_ONLY (см. apiFetch).
+ * Показывает модалку при 403 SUBSCRIPTION_READ_ONLY и при 402 QUOTA_EXCEEDED (см. apiFetch).
  */
 export function UpgradeRequiredModalHost() {
   const { t } = useTranslation();
@@ -14,8 +14,11 @@ export function UpgradeRequiredModalHost() {
   useEffect(() => {
     const onEv = () => setOpen(true);
     window.addEventListener("dayday:subscription-read-only", onEv);
-    return () =>
+    window.addEventListener("dayday:quota-upgrade", onEv);
+    return () => {
       window.removeEventListener("dayday:subscription-read-only", onEv);
+      window.removeEventListener("dayday:quota-upgrade", onEv);
+    };
   }, []);
 
   if (!open) return null;

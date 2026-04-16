@@ -29,6 +29,15 @@ export class AccountsService {
     });
   }
 
+  /** Глобальный справочник: только счета кассы (cashProfile AZN / FX). */
+  listCashChartCatalogEntries() {
+    return this.prisma.chartOfAccountsEntry.findMany({
+      where: { isDeprecated: false, cashProfile: { not: null } },
+      orderBy: [{ cashProfile: "asc" }, { code: "asc" }],
+      select: { code: true, name: true, cashProfile: true },
+    });
+  }
+
   /**
    * Создаёт недостающие счета IFRS с теми же кодами/иерархией, что NAS (для маппинга и теневых проводок).
    */

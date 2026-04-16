@@ -27,6 +27,8 @@
     "db:studio": "prisma studio",
     "db:sync-i18n": "tsx prisma/sync-translation-overrides-from-resources.ts",
     "db:seed:tivi": "tsx prisma/seed-tivi.ts",
+    "db:prod-init": "tsx prisma/prod-init.ts",
+    "db:apply-template:ifrs": "tsx prisma/apply-template-ifrs-mapping.ts",
     "docker-init:export": "tsx prisma/docker-init/export-seed-data.ts",
     "docker-init:super-admin-hash": "tsx prisma/docker-init/export-super-admin-hash.ts"
   },
@@ -34,7 +36,8 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3"
+    "@prisma/client": "^6.19.3",
+    "bcrypt": "^6.0.0"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",

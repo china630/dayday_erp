@@ -1,6 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { AbsenceType } from "@dayday/database";
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from "class-validator";
+import { IsDateString, IsOptional, IsString, IsUUID } from "class-validator";
 
 export class UpdateAbsenceDto {
   @ApiPropertyOptional()
@@ -8,10 +7,10 @@ export class UpdateAbsenceDto {
   @IsUUID()
   employeeId?: string;
 
-  @ApiPropertyOptional({ enum: AbsenceType })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsEnum(AbsenceType)
-  type?: AbsenceType;
+  @IsUUID()
+  absenceTypeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

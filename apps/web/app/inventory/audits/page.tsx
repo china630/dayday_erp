@@ -15,6 +15,7 @@ type AuditRow = {
   date: string;
   status: string;
   createdAt: string;
+  warehouse?: { id: string; name: string } | null;
 };
 
 export default function InventoryAuditsHistoryPage() {
@@ -45,8 +46,6 @@ export default function InventoryAuditsHistoryPage() {
     if (!ready || !token) return;
     void load();
   }, [load, ready, token]);
-
-  const approved = rows.filter((r) => r.status === "APPROVED");
 
   if (!ready) {
     return (
@@ -88,7 +87,7 @@ export default function InventoryAuditsHistoryPage() {
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {loading && <p className="text-gray-600">{t("common.loading")}</p>}
 
-      {!loading && approved.length === 0 && !error && (
+      {!loading && rows.length === 0 && !error && (
         <EmptyState
           icon={
             <ClipboardList className="h-12 w-12 mx-auto stroke-[1.5] text-[#7F8C8D]" aria-hidden />
@@ -103,21 +102,33 @@ export default function InventoryAuditsHistoryPage() {
         />
       )}
 
-      {!loading && approved.length > 0 && (
+      {!loading && rows.length > 0 && (
         <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-x-auto">
           <table className="text-sm min-w-full">
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="text-left p-2">{t("inventory.auditThDateDoc")}</th>
+                <th className="text-left p-2">{t("inventory.thWh")}</th>
+                <th className="text-left p-2">{t("inventory.auditThStatus")}</th>
                 <th className="text-left p-2">{t("inventory.auditThCreated")}</th>
                 <th className="text-right p-2">{t("inventory.auditThOpen")}</th>
               </tr>
             </thead>
             <tbody>
-              {approved.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.id} className="border-t border-slate-50">
                   <td className="p-2 whitespace-nowrap">
                     {typeof r.date === "string" ? r.date.slice(0, 10) : "—"}
+                  </td>
+                  <td className="p-2 whitespace-nowrap text-slate-700">
+                    {r.warehouse?.name ?? "—"}
+                  </td>
+                  <td className="p-2 whitespace-nowrap text-slate-600">
+                    {r.status === "APPROVED"
+                      ? t("inventory.auditStatusApproved")
+                      : r.status === "DRAFT"
+                        ? t("inventory.auditStatusDraft")
+                        : r.status}
                   </td>
                   <td className="p-2 text-slate-600 whitespace-nowrap">
                     {r.createdAt?.slice(0, 19)?.replace("T", " ") ?? "—"}

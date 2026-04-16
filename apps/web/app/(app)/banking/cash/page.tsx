@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Printer, Wallet } from "lucide-react";
+import { CheckCircle2, Printer, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,7 +18,7 @@ import { ledgerQueryParam, useLedger } from "../../../../lib/ledger-context";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
 import { SubscriptionPaywall } from "../../../../components/subscription-paywall";
 
-type CashOrderKind = "PKO" | "RKO";
+type CashOrderKind = "MKO" | "MXO";
 type CashOrderStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
 type CashOrderRow = {
@@ -69,6 +69,62 @@ type EmployeeOpt = {
   accountableAccountCode244?: string | null;
 };
 
+type CashCatalogRow = { code: string; name: string; cashProfile: string | null };
+
+type CashFlowOpt = { id: string; code: string; name: string };
+type CashDeskOpt = { id: string; name: string };
+
+function defaultCashCodeForCurrency(
+  currency: string,
+  rows: CashCatalogRow[],
+): string {
+  const cur = currency.trim().toUpperCase() || "AZN";
+  const want = cur === "AZN" ? "AZN" : "FX";
+  const match = rows.filter((r) => r.cashProfile === want);
+  if (match.length === 0) return want === "AZN" ? "101.01" : "102.01";
+  return match[0].code;
+}
+
+function cashRowsForCurrency(currency: string, rows: CashCatalogRow[]) {
+  const cur = currency.trim().toUpperCase() || "AZN";
+  const want = cur === "AZN" ? "AZN" : "FX";
+  return rows.filter((r) => r.cashProfile === want);
+}
+
+function CashAccountSelect({
+  value,
+  onChange,
+  currency,
+  catalog,
+  className,
+}: {
+  value: string;
+  onChange: (code: string) => void;
+  currency: string;
+  catalog: CashCatalogRow[];
+  className: string;
+}) {
+  const opts = cashRowsForCurrency(currency, catalog);
+  if (opts.length === 0) {
+    return (
+      <input className={className} value={value} onChange={(e) => onChange(e.target.value)} />
+    );
+  }
+  return (
+    <select
+      className={className}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {opts.map((r) => (
+        <option key={r.code} value={r.code}>
+          {r.code} — {r.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -86,9 +142,14 @@ export default function BankingCashPage() {
   const [employees, setEmployees] = useState<EmployeeOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [cashCatalog, setCashCatalog] = useState<CashCatalogRow[]>([]);
+  const [cashFlowItems, setCashFlowItems] = useState<CashFlowOpt[]>([]);
+  const [cashDesks, setCashDesks] = useState<CashDeskOpt[]>([]);
 
   const [pkoOpen, setPkoOpen] = useState(false);
   const [rkoOpen, setRkoOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
 
   const [pkoDate, setPkoDate] = useState(todayIso);
   const [pkoSubtype, setPkoSubtype] = useState<PkoSubtype>("INCOME_FROM_CUSTOMER");
@@ -100,6 +161,8 @@ export default function BankingCashPage() {
   const [pkoCpId, setPkoCpId] = useState("");
   const [pkoEmpId, setPkoEmpId] = useState("");
   const [pkoNotes, setPkoNotes] = useState("");
+  const [pkoCfId, setPkoCfId] = useState("");
+  const [pkoDeskId, setPkoDeskId] = useState("");
 
   const [rkoDate, setRkoDate] = useState(todayIso);
   const [rkoSubtype, setRkoSubtype] = useState<RkoSubtype>("SUPPLIER_PAYMENT");
@@ -111,6 +174,9 @@ export default function BankingCashPage() {
   const [rkoCpId, setRkoCpId] = useState("");
   const [rkoEmpId, setRkoEmpId] = useState("");
   const [rkoNotes, setRkoNotes] = useState("");
+  const [rkoCfId, setRkoCfId] = useState("");
+  const [rkoDeskId, setRkoDeskId] = useState("");
+  const [rkoWithholding, setRkoWithholding] = useState("");
 
   const [advEmployeeId, setAdvEmployeeId] = useState("");
   const [advDate, setAdvDate] = useState(todayIso);
@@ -124,17 +190,21 @@ export default function BankingCashPage() {
   const [quickDate, setQuickDate] = useState(todayIso);
   const [quickAmount, setQuickAmount] = useState("");
   const [quickPurpose, setQuickPurpose] = useState("");
+  const [quickCfId, setQuickCfId] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
 
   const loadCore = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setErr(null);
-    const [b, o, c, e] = await Promise.all([
+    const [b, o, c, e, chart, cf, desks] = await Promise.all([
       apiFetch(`/api/banking/cash/balances?${lq}`),
       apiFetch("/api/banking/cash/orders"),
       apiFetch("/api/counterparties"),
       apiFetch("/api/hr/employees?page=1&pageSize=100"),
+      apiFetch("/api/accounts/chart/cash-catalog"),
+      apiFetch("/api/treasury/cash-flow-items"),
+      apiFetch("/api/treasury/cash-desks"),
     ]);
     if (!b.ok || !o.ok) {
       const msg = t("banking.cash.loadErr");
@@ -151,6 +221,19 @@ export default function BankingCashPage() {
     if (e.ok) {
       const ej = (await e.json()) as { items?: EmployeeOpt[] };
       setEmployees(ej.items ?? []);
+    }
+    if (chart.ok) {
+      setCashCatalog((await chart.json()) as CashCatalogRow[]);
+    }
+    if (cf.ok) {
+      setCashFlowItems((await cf.json()) as CashFlowOpt[]);
+    } else {
+      setCashFlowItems([]);
+    }
+    if (desks.ok) {
+      setCashDesks((await desks.json()) as CashDeskOpt[]);
+    } else {
+      setCashDesks([]);
     }
     const accRes = await apiFetch(`/api/banking/cash/accountable?${lq}`);
     if (accRes.ok) {
@@ -172,6 +255,34 @@ export default function BankingCashPage() {
     void loadCore();
   }, [ready, token, loadCore]);
 
+  useEffect(() => {
+    if (cashFlowItems.length === 0) return;
+    const first = cashFlowItems[0].id;
+    setPkoCfId((v) => v || first);
+    setRkoCfId((v) => v || first);
+    setQuickCfId((v) => v || first);
+  }, [cashFlowItems]);
+
+  useEffect(() => {
+    if (cashCatalog.length === 0) return;
+    const allowed = new Set(
+      cashRowsForCurrency(pkoCurrency, cashCatalog).map((r) => r.code),
+    );
+    if (!allowed.has(pkoCash)) {
+      setPkoCash(defaultCashCodeForCurrency(pkoCurrency, cashCatalog));
+    }
+  }, [pkoCurrency, cashCatalog, pkoCash]);
+
+  useEffect(() => {
+    if (cashCatalog.length === 0) return;
+    const allowed = new Set(
+      cashRowsForCurrency(rkoCurrency, cashCatalog).map((r) => r.code),
+    );
+    if (!allowed.has(rkoCash)) {
+      setRkoCash(defaultCashCodeForCurrency(rkoCurrency, cashCatalog));
+    }
+  }, [rkoCurrency, cashCatalog, rkoCash]);
+
   const partyLabel = useCallback((row: CashOrderRow) => {
     if (row.counterparty?.name) return row.counterparty.name;
     if (row.employee) {
@@ -182,7 +293,7 @@ export default function BankingCashPage() {
 
   const typeLabel = useCallback(
     (row: CashOrderRow) =>
-      row.kind === "PKO" ? t("banking.cash.typeIn") : t("banking.cash.typeOut"),
+      row.kind === "MKO" ? t("banking.cash.typeIn") : t("banking.cash.typeOut"),
     [t],
   );
 
@@ -204,6 +315,10 @@ export default function BankingCashPage() {
 
   async function submitPko(e: React.FormEvent) {
     e.preventDefault();
+    if (!pkoCfId) {
+      toast.error(t("banking.cash.cashFlowRequired"));
+      return;
+    }
     const body: Record<string, unknown> = {
       date: pkoDate,
       pkoSubtype,
@@ -211,12 +326,14 @@ export default function BankingCashPage() {
       currency: pkoCurrency,
       purpose: pkoPurpose,
       cashAccountCode: pkoCash,
+      cashFlowItemId: pkoCfId,
     };
     if (pkoOffset.trim()) body.offsetAccountCode = pkoOffset.trim();
     if (pkoCpId) body.counterpartyId = pkoCpId;
     if (pkoEmpId) body.employeeId = pkoEmpId;
     if (pkoNotes.trim()) body.notes = pkoNotes.trim();
-    const res = await apiFetch("/api/banking/cash/orders/pko", {
+    if (pkoDeskId) body.cashDeskId = pkoDeskId;
+    const res = await apiFetch("/api/banking/cash/orders/mko", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -232,6 +349,10 @@ export default function BankingCashPage() {
 
   async function submitRko(e: React.FormEvent) {
     e.preventDefault();
+    if (!rkoCfId) {
+      toast.error(t("banking.cash.cashFlowRequired"));
+      return;
+    }
     const body: Record<string, unknown> = {
       date: rkoDate,
       rkoSubtype,
@@ -239,12 +360,18 @@ export default function BankingCashPage() {
       currency: rkoCurrency,
       purpose: rkoPurpose,
       cashAccountCode: rkoCash,
+      cashFlowItemId: rkoCfId,
     };
     if (rkoOffset.trim()) body.offsetAccountCode = rkoOffset.trim();
     if (rkoCpId) body.counterpartyId = rkoCpId;
     if (rkoEmpId) body.employeeId = rkoEmpId;
     if (rkoNotes.trim()) body.notes = rkoNotes.trim();
-    const res = await apiFetch("/api/banking/cash/orders/rko", {
+    if (rkoDeskId) body.cashDeskId = rkoDeskId;
+    const wht = Number(rkoWithholding.replace(",", "."));
+    if (Number.isFinite(wht) && wht > 0) {
+      body.withholdingTaxAmount = wht;
+    }
+    const res = await apiFetch("/api/banking/cash/orders/mxo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -254,6 +381,7 @@ export default function BankingCashPage() {
       setRkoAmount("");
       setRkoPurpose("");
       setRkoNotes("");
+      setRkoWithholding("");
       await loadCore();
     }
   }
@@ -269,8 +397,12 @@ export default function BankingCashPage() {
     e.preventDefault();
     const amt = Number(quickAmount.replace(",", "."));
     if (!Number.isFinite(amt) || amt <= 0 || !quickPurpose.trim()) return;
+    if (!quickCfId) {
+      toast.error(t("banking.cash.cashFlowRequired"));
+      return;
+    }
     setQuickBusy(true);
-    const create = await apiFetch("/api/banking/cash/orders/rko", {
+    const create = await apiFetch("/api/banking/cash/orders/mxo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -281,6 +413,7 @@ export default function BankingCashPage() {
         purpose: quickPurpose.trim(),
         cashAccountCode: "101.01",
         offsetAccountCode: "731",
+        cashFlowItemId: quickCfId,
       }),
     });
     if (!create.ok) {
@@ -341,8 +474,11 @@ export default function BankingCashPage() {
     if (res.ok) {
       setAdvDraftId(null);
       setAdvLines([{ amount: "", description: "" }]);
+      setAdvPurpose("");
+      setAdvEmployeeId("");
       await loadAccountable();
       await loadCore();
+      setAdvOpen(false);
     }
   }
 
@@ -361,6 +497,36 @@ export default function BankingCashPage() {
               {t("banking.cash.backLink")}
             </Link>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPkoOpen(true)}
+              className={PRIMARY_BUTTON_CLASS}
+            >
+              {t("banking.cash.btnPko")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRkoOpen(true)}
+              className={SECONDARY_BUTTON_CLASS}
+            >
+              {t("banking.cash.btnRko")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdvOpen(true)}
+              className={SECONDARY_BUTTON_CLASS}
+            >
+              {t("banking.cash.btnAdvanceTop")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickOpen(true)}
+              className={SECONDARY_BUTTON_CLASS}
+            >
+              {t("banking.cash.quickCashOutTitle")}
+            </button>
+          </div>
         </div>
 
         {err && !loading ? (
@@ -374,8 +540,7 @@ export default function BankingCashPage() {
           <>
             {loading && <p className="text-[#7F8C8D] text-[13px]">{t("common.loading")}</p>}
 
-            <div className="flex flex-col lg:flex-row gap-6 items-start">
-          <div className="min-w-0 flex-1 space-y-4 w-full">
+            <div className="space-y-4 w-full">
             <div className={`${CARD_CONTAINER_CLASS} p-5`}>
               <h2 className="text-base font-semibold text-[#34495E] m-0">{t("banking.cash.balanceTitle")}</h2>
               {balances && (
@@ -396,71 +561,6 @@ export default function BankingCashPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPkoOpen(true)}
-                className={PRIMARY_BUTTON_CLASS}
-              >
-                {t("banking.cash.btnPko")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setRkoOpen(true)}
-                className={SECONDARY_BUTTON_CLASS}
-              >
-                {t("banking.cash.btnRko")}
-              </button>
-              <a href="#cash-advance" className={SECONDARY_BUTTON_CLASS}>
-                {t("banking.cash.btnAdvanceTop")}
-              </a>
-            </div>
-
-            <div className={`${CARD_CONTAINER_CLASS} p-4`}>
-              <p className="m-0 text-sm font-semibold text-[#34495E]">{t("banking.cash.quickCashOutTitle")}</p>
-              <p className="mb-3 mt-1 text-xs text-[#7F8C8D]">{t("banking.cash.quickCashOutHint")}</p>
-              <form className="space-y-3" onSubmit={submitQuickCashOut}>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outAmount")}</p>
-                    <input
-                      className={INPUT_BORDERED_CLASS}
-                      value={quickAmount}
-                      onChange={(e) => setQuickAmount(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outDate")}</p>
-                    <input
-                      type="date"
-                      className={INPUT_BORDERED_CLASS}
-                      value={quickDate}
-                      onChange={(e) => setQuickDate(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="sm:col-span-1">
-                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outDesc")}</p>
-                    <input
-                      className={INPUT_BORDERED_CLASS}
-                      value={quickPurpose}
-                      onChange={(e) => setQuickPurpose(e.target.value)}
-                      placeholder={t("banking.cash.outDescPh")}
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={quickBusy}
-                  className={PRIMARY_BUTTON_CLASS}
-                >
-                  {quickBusy ? "…" : t("banking.cash.quickCashOutSubmit")}
-                </button>
-              </form>
-            </div>
-
             <div className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
               <h2 className="m-0 px-4 pt-4 text-base font-semibold text-[#34495E]">
                 {t("banking.cash.journalTitle")}
@@ -468,13 +568,13 @@ export default function BankingCashPage() {
               <table className="min-w-full text-sm mt-3">
                 <thead>
                   <tr className="border-b border-[#D5DADF] text-left text-[13px] text-[#34495E]">
-                    <th className="px-4 py-2 font-semibold">{t("BANKING.CASH.COLORDERNO")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("BANKING.CASH.COLDATE")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("BANKING.CASH.COLTYPE")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("BANKING.CASH.COLPARTY")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("BANKING.CASH.COLPURPOSE")}</th>
-                    <th className="px-4 py-2 text-right font-semibold">{t("BANKING.CASH.COLAMOUNT")}</th>
-                    <th className="w-36 px-4 py-2 font-semibold">{t("BANKING.CASH.COLACTIONS")}</th>
+                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colOrderNo")}</th>
+                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colDate")}</th>
+                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colType")}</th>
+                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colParty")}</th>
+                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colPurpose")}</th>
+                    <th className="px-4 py-2 text-right font-semibold">{t("banking.cash.colAmount")}</th>
+                    <th className="w-36 px-4 py-2 font-semibold">{t("banking.cash.colActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -510,8 +610,9 @@ export default function BankingCashPage() {
                             <button
                               type="button"
                               onClick={() => void postOrder(row.id)}
-                              className="rounded-md bg-action px-2 py-1 text-xs text-white hover:bg-action-hover"
+                              className="inline-flex items-center gap-1 rounded-md bg-action px-2 py-1 text-xs font-medium text-white hover:bg-action-hover"
                             >
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                               {t("banking.cash.postOrder")}
                             </button>
                           )}
@@ -525,9 +626,7 @@ export default function BankingCashPage() {
                 <p className="px-4 py-6 text-slate-500 text-sm">—</p>
               )}
             </div>
-          </div>
 
-          <aside className="w-full lg:w-[min(100%,20rem)] shrink-0 space-y-4">
             <div className={`${CARD_CONTAINER_CLASS} p-4`}>
               <h2 className="m-0 text-sm font-semibold text-[#34495E]">{t("banking.cash.sideAccountableTitle")}</h2>
               <p className="mb-3 mt-1 text-xs text-[#7F8C8D]">{t("banking.cash.accountableHint")}</p>
@@ -555,35 +654,116 @@ export default function BankingCashPage() {
                 <p className="text-xs text-slate-500 mt-2 mb-0">{t("banking.cash.accountableEmpty")}</p>
               )}
             </div>
+        </div>
+          </>
+        )}
 
-            <div id="cash-advance" className={`${CARD_CONTAINER_CLASS} scroll-mt-24 p-4`}>
-              <h2 className="m-0 text-sm font-semibold text-[#34495E]">{t("banking.cash.sideAdvanceTitle")}</h2>
-              <p className="mb-3 mt-1 text-xs text-[#7F8C8D]">{t("banking.cash.advanceHint")}</p>
-              <form className="space-y-3" onSubmit={submitAdvanceDraft}>
+        {quickOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+              <div>
+                <h3 className="text-lg font-semibold m-0">{t("banking.cash.quickCashOutTitle")}</h3>
+                <p className="mb-0 mt-1 text-xs text-slate-600">{t("banking.cash.quickCashOutHint")}</p>
+              </div>
+
+              <form className="space-y-3 mt-4" onSubmit={submitQuickCashOut}>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outAmount")}</p>
+                    <input
+                      className={FORM_INPUT_CLASS}
+                      value={quickAmount}
+                      onChange={(e) => setQuickAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outDate")}</p>
+                    <input
+                      type="date"
+                      className={FORM_INPUT_CLASS}
+                      value={quickDate}
+                      onChange={(e) => setQuickDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outDesc")}</p>
+                    <input
+                      className={FORM_INPUT_CLASS}
+                      value={quickPurpose}
+                      onChange={(e) => setQuickPurpose(e.target.value)}
+                      placeholder={t("banking.cash.outDescPh")}
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.cashFlowItem")}</p>
+                  <select
+                    className={FORM_INPUT_CLASS}
+                    value={quickCfId}
+                    onChange={(e) => setQuickCfId(e.target.value)}
+                    required
+                  >
+                    {cashFlowItems.map((cf) => (
+                      <option key={cf.id} value={cf.id}>
+                        {cf.code} — {cf.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2 justify-end pt-2">
+                  <button
+                    type="button"
+                    className={SECONDARY_BUTTON_CLASS}
+                    onClick={() => setQuickOpen(false)}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button type="submit" disabled={quickBusy} className={PRIMARY_BUTTON_CLASS}>
+                    {quickBusy ? "…" : t("banking.cash.quickCashOutSubmit")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {advOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+              <div>
+                <h3 className="text-lg font-semibold m-0">{t("banking.cash.btnAdvanceTop")}</h3>
+                <p className="mb-0 mt-1 text-xs text-slate-600">{t("banking.cash.advanceHint")}</p>
+              </div>
+
+              <form className="space-y-3 mt-4" onSubmit={submitAdvanceDraft}>
                 <div>
                   <label className="block text-xs font-medium text-[#34495E]">{t("banking.cash.advanceEmployee")}</label>
                   <select
-                    className={INPUT_BORDERED_CLASS}
+                    className={FORM_INPUT_CLASS}
                     value={advEmployeeId}
                     onChange={(e) => setAdvEmployeeId(e.target.value)}
                     required
                   >
                     <option value="">—</option>
-                    {(accountableOptions.length ? accountableOptions : employees.filter((e) => e.accountableAccountCode244?.trim())).map(
-                      (em) => (
-                        <option key={em.id} value={em.id}>
-                          {em.firstName} {em.lastName}
-                          {em.accountableAccountCode244 ? ` · ${em.accountableAccountCode244}` : ""}
-                        </option>
-                      ),
-                    )}
+                    {(accountableOptions.length
+                      ? accountableOptions
+                      : employees.filter((e) => e.accountableAccountCode244?.trim())
+                    ).map((em) => (
+                      <option key={em.id} value={em.id}>
+                        {em.firstName} {em.lastName}
+                        {em.accountableAccountCode244 ? ` · ${em.accountableAccountCode244}` : ""}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#34495E]">{t("banking.cash.advanceReportDate")}</label>
                   <input
                     type="date"
-                    className={INPUT_BORDERED_CLASS}
+                    className={FORM_INPUT_CLASS}
                     value={advDate}
                     onChange={(e) => setAdvDate(e.target.value)}
                     required
@@ -594,7 +774,7 @@ export default function BankingCashPage() {
                   {advLines.map((line, i) => (
                     <div key={i} className="flex flex-wrap gap-2 mb-2">
                       <input
-                        className={INPUT_BORDERED_CLASS + " max-w-[100px]"}
+                        className={FORM_INPUT_CLASS + " max-w-[100px]"}
                         placeholder={t("banking.cash.amount")}
                         value={line.amount}
                         onChange={(e) => {
@@ -604,7 +784,7 @@ export default function BankingCashPage() {
                         }}
                       />
                       <input
-                        className={INPUT_BORDERED_CLASS + " flex-1 min-w-0"}
+                        className={FORM_INPUT_CLASS + " flex-1 min-w-0"}
                         placeholder={t("banking.cash.description")}
                         value={line.description}
                         onChange={(e) => {
@@ -625,14 +805,22 @@ export default function BankingCashPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#34495E]">{t("banking.cash.purpose")}</label>
-                  <input className={INPUT_BORDERED_CLASS} value={advPurpose} onChange={(e) => setAdvPurpose(e.target.value)} />
+                  <input
+                    className={FORM_INPUT_CLASS}
+                    value={advPurpose}
+                    onChange={(e) => setAdvPurpose(e.target.value)}
+                  />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 justify-end pt-2">
                   <button
-                    type="submit"
+                    type="button"
+                    className={SECONDARY_BUTTON_CLASS}
+                    onClick={() => setAdvOpen(false)}
                     disabled={advSaving}
-                    className={PRIMARY_BUTTON_CLASS}
                   >
+                    {t("common.cancel")}
+                  </button>
+                  <button type="submit" disabled={advSaving} className={PRIMARY_BUTTON_CLASS}>
                     {t("banking.cash.advanceSubmitDraft")}
                   </button>
                   {advDraftId && (
@@ -648,9 +836,7 @@ export default function BankingCashPage() {
                 </div>
               </form>
             </div>
-          </aside>
-        </div>
-          </>
+          </div>
         )}
 
         {pkoOpen && (
@@ -706,7 +892,13 @@ export default function BankingCashPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashAccount")}</label>
-                  <input className={FORM_INPUT_CLASS} value={pkoCash} onChange={(e) => setPkoCash(e.target.value)} />
+                  <CashAccountSelect
+                    className={FORM_INPUT_CLASS}
+                    currency={pkoCurrency}
+                    catalog={cashCatalog}
+                    value={pkoCash}
+                    onChange={setPkoCash}
+                  />
                 </div>
                 {(pkoSubtype === "OTHER" || pkoSubtype === "RETURN_FROM_ACCOUNTABLE") && (
                   <div>
@@ -737,14 +929,48 @@ export default function BankingCashPage() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashFlowItem")}</label>
+                  <select
+                    className={FORM_INPUT_CLASS}
+                    value={pkoCfId}
+                    onChange={(e) => setPkoCfId(e.target.value)}
+                    required
+                  >
+                    {cashFlowItems.map((cf) => (
+                      <option key={cf.id} value={cf.id}>
+                        {cf.code} — {cf.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashDeskOptional")}</label>
+                  <select
+                    className={FORM_INPUT_CLASS}
+                    value={pkoDeskId}
+                    onChange={(e) => setPkoDeskId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {cashDesks.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.notes")}</label>
                   <textarea className={FORM_TEXTAREA_CLASS} value={pkoNotes} onChange={(e) => setPkoNotes(e.target.value)} rows={2} />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
-                  <button type="button" className="rounded-lg px-4 py-2 text-sm border border-slate-200" onClick={() => setPkoOpen(false)}>
+                  <button
+                    type="button"
+                    className={SECONDARY_BUTTON_CLASS}
+                    onClick={() => setPkoOpen(false)}
+                  >
                     {t("common.cancel")}
                   </button>
-                  <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white">
+                  <button type="submit" className={PRIMARY_BUTTON_CLASS}>
                     {t("banking.cash.saveDraft")}
                   </button>
                 </div>
@@ -802,12 +1028,28 @@ export default function BankingCashPage() {
                   </div>
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.withholdingTax")}</label>
+                  <input
+                    className={FORM_INPUT_CLASS}
+                    value={rkoWithholding}
+                    onChange={(e) => setRkoWithholding(e.target.value)}
+                    placeholder="0"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500 m-0">{t("banking.cash.withholdingHint")}</p>
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.purpose")}</label>
                   <input className={FORM_INPUT_CLASS} value={rkoPurpose} onChange={(e) => setRkoPurpose(e.target.value)} required />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashAccount")}</label>
-                  <input className={FORM_INPUT_CLASS} value={rkoCash} onChange={(e) => setRkoCash(e.target.value)} />
+                  <CashAccountSelect
+                    className={FORM_INPUT_CLASS}
+                    currency={rkoCurrency}
+                    catalog={cashCatalog}
+                    value={rkoCash}
+                    onChange={setRkoCash}
+                  />
                 </div>
                 {rkoSubtype === "OTHER" && (
                   <div>
@@ -838,14 +1080,48 @@ export default function BankingCashPage() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashFlowItem")}</label>
+                  <select
+                    className={FORM_INPUT_CLASS}
+                    value={rkoCfId}
+                    onChange={(e) => setRkoCfId(e.target.value)}
+                    required
+                  >
+                    {cashFlowItems.map((cf) => (
+                      <option key={cf.id} value={cf.id}>
+                        {cf.code} — {cf.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashDeskOptional")}</label>
+                  <select
+                    className={FORM_INPUT_CLASS}
+                    value={rkoDeskId}
+                    onChange={(e) => setRkoDeskId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {cashDesks.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.notes")}</label>
                   <textarea className={FORM_TEXTAREA_CLASS} value={rkoNotes} onChange={(e) => setRkoNotes(e.target.value)} rows={2} />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
-                  <button type="button" className="rounded-lg px-4 py-2 text-sm border border-slate-200" onClick={() => setRkoOpen(false)}>
+                  <button
+                    type="button"
+                    className={SECONDARY_BUTTON_CLASS}
+                    onClick={() => setRkoOpen(false)}
+                  >
                     {t("common.cancel")}
                   </button>
-                  <button type="submit" className="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white">
+                  <button type="submit" className={PRIMARY_BUTTON_CLASS}>
                     {t("banking.cash.saveDraft")}
                   </button>
                 </div>

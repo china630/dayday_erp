@@ -117,6 +117,12 @@ export class InventoryService {
     }
 
     for (const [productId, need] of byProduct) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: productId, organizationId },
+        select: { isService: true, name: true },
+      });
+      if (product?.isService) continue;
+
       const si = await this.prisma.stockItem.findUnique({
         where: {
           organizationId_warehouseId_productId: {
@@ -129,7 +135,7 @@ export class InventoryService {
       });
       const avail = si?.quantity ?? new Decimal(0);
       if (avail.lt(need)) {
-        const name = si?.product?.name ?? productId;
+        const name = si?.product?.name ?? product?.name ?? productId;
         warnings.push(
           `Недостаточно «${name}»: требуется ${need.toString()}, на складе ${avail.toString()}`,
         );
@@ -141,6 +147,7 @@ export class InventoryService {
   listWarehouses(organizationId: string) {
     return this.prisma.warehouse.findMany({
       where: { organizationId },
+      select: { id: true, name: true, inventoryAccountCode: true },
       orderBy: { name: "asc" },
     });
   }
@@ -469,6 +476,7 @@ export class InventoryService {
       });
       const avail = si?.quantity ?? new Decimal(0);
       const avg = si?.averageCost ?? new Decimal(0);
+      const unitCost = avg.gt(0) ? avg : line.unitPrice;
 
       if (avail.lt(need) && !allowNeg) {
         throw new BadRequestException(
@@ -476,7 +484,7 @@ export class InventoryService {
         );
       }
 
-      const lineCogs = need.mul(avg);
+      const lineCogs = need.mul(unitCost);
       totalCogs = totalCogs.add(lineCogs);
       const newQty = avail.sub(need);
 
@@ -493,7 +501,7 @@ export class InventoryService {
           warehouseId: whId,
           productId: pid,
           quantity: newQty,
-          averageCost: avg,
+          averageCost: unitCost,
         },
         update: {
           quantity: newQty,
@@ -508,7 +516,7 @@ export class InventoryService {
           type: StockMovementType.OUT,
           reason: StockMovementReason.SALE,
           quantity: need,
-          price: avg,
+          price: unitCost,
           invoiceId: inv.id,
         },
       });
