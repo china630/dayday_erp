@@ -26,18 +26,6 @@ BEGIN
   END IF;
 END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_enum e
-    JOIN pg_type t ON t.oid = e.enumtypid
-    WHERE t.typname = 'BankStatementLineOrigin'
-      AND e.enumlabel = 'MANUAL_BANK_ENTRY'
-  ) THEN
-    ALTER TYPE "BankStatementLineOrigin" ADD VALUE 'MANUAL_BANK_ENTRY';
-  END IF;
-END $$;
 
 
 -- AlterEnum
