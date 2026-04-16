@@ -1,7 +1,9 @@
 # Production stack: Postgres, Redis, Nest API, Next.js.
 # Build context: repository root. Copy `.env` from `.env.example` and set secrets before `up`.
 #
-# Справочные данные Postgres: docker-init (SQL) при первом создании тома; без Prisma CLI / prisma db seed на сервере.
+# ВАЖНО (Prisma): не монтируем `prisma/migrations` в `docker-entrypoint-initdb.d`.
+# Иначе SQL применяется в обход `prisma migrate deploy`, и Prisma получает "непустую БД без baseline" (P3005).
+# Миграции/сидинг выполняются через контейнер `api` (см. `npm run db:migrate:deploy`, `npm run db:prod-init`).
 
 services:
   db:
@@ -15,8 +17,6 @@ services:
       - "${POSTGRES_PUBLISH_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./packages/database/prisma/migrations:/dayday-prisma-migrations:ro
-      - ./packages/database/prisma/docker-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dayday} -d ${POSTGRES_DB:-dayday}"]
       interval: 5s
