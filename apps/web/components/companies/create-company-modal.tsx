@@ -108,7 +108,7 @@ export function CreateCompanyModal({
               <span className={FORM_LABEL_CLASS}>{t("auth.taxId")}</span>
               <input
                 required
-                pattern="\\d{10}"
+                pattern="[0-9]{10}"
                 maxLength={10}
                 inputMode="numeric"
                 value={taxId}

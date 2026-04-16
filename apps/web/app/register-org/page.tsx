@@ -97,7 +97,7 @@ export default function RegisterOrgPage() {
             {t("auth.taxId")}
             <input
               required
-              pattern="\d{10}"
+              pattern="[0-9]{10}"
               maxLength={10}
               value={taxId}
               onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 10))}

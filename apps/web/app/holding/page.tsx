@@ -4,13 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Building2, Plus, Wallet } from "lucide-react";
+import { Building2, Wallet } from "lucide-react";
 import { apiFetch } from "../../lib/api-client";
 import { useRequireAuth } from "../../lib/use-require-auth";
-import { CARD_CONTAINER_CLASS, PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
+import { CARD_CONTAINER_CLASS, LINK_ACCENT_CLASS, PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { EmptyState } from "../../components/empty-state";
 import { ModulePageLinks } from "../../components/module-page-links";
-import { CreateHoldingModal } from "../../components/holding/create-holding-modal";
 import { ledgerQueryParam, useLedger } from "../../lib/ledger-context";
 
 type HoldingListItem = {
@@ -49,7 +48,6 @@ export default function HoldingDashboardPage() {
   const [summary, setSummary] = useState<HoldingSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
 
   const loadHoldings = useCallback(async () => {
     const res = await apiFetch("/api/holdings");
@@ -149,14 +147,6 @@ export default function HoldingDashboardPage() {
           </label>
           <button
             type="button"
-            className={PRIMARY_BUTTON_CLASS}
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="h-4 w-4 shrink-0" aria-hidden />
-            {t("holdingCreate.openBtn")}
-          </button>
-          <button
-            type="button"
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-primary hover:bg-action/10"
             onClick={() => void load()}
             disabled={!holdingId || loading}
@@ -248,24 +238,21 @@ export default function HoldingDashboardPage() {
           </div>
         </div>
       ) : holdings.length === 0 ? (
-        <EmptyState
-          icon={<Building2 className="h-12 w-12 mx-auto stroke-[1.5]" aria-hidden />}
-          title={t("holdingReport.noHoldings", { defaultValue: "Holdinq yoxdur" })}
-          description={t("holdingReport.noOrgsHint", {
-            defaultValue: "Əvvəlcə holdinq yaradın və şirkətləri bağlayın.",
-          })}
-        />
+        <div className="space-y-3">
+          <EmptyState
+            icon={<Building2 className="h-12 w-12 mx-auto stroke-[1.5]" aria-hidden />}
+            title={t("holdingReport.noHoldings", { defaultValue: "Holdinq yoxdur" })}
+            description={t("holdingReport.noOrgsHint", {
+              defaultValue: "Əvvəlcə holdinq yaradın və şirkətləri bağlayın.",
+            })}
+          />
+          <p className="text-center text-sm text-[#7F8C8D]">
+            <Link href="/companies" className={LINK_ACCENT_CLASS}>
+              {t("companiesPage.title")}
+            </Link>
+          </p>
+        </div>
       ) : null}
-
-      <CreateHoldingModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(created) => {
-          void loadHoldings().then(() => {
-            setHoldingId(created.id);
-          });
-        }}
-      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Link2Off, Plus, Send, Unlink2 } from "lucide-react";
+import { Building2, ChevronRight, Link2Off, Plus, Send, Unlink2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../lib/api-client";
@@ -19,6 +19,7 @@ import { useRequireAuth } from "../../lib/use-require-auth";
 import { Badge } from "../../components/ui/badge";
 import { VoenRequestModal } from "../../components/companies/voen-request-modal";
 import { CreateCompanyModal } from "../../components/companies/create-company-modal";
+import { CreateHoldingModal } from "../../components/holding/create-holding-modal";
 
 type OrganizationsTree = {
   holdings: Array<{
@@ -55,6 +56,7 @@ export default function CompaniesPage() {
 
   const [voenModalOpen, setVoenModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createHoldingOpen, setCreateHoldingOpen] = useState(false);
 
   const [tree, setTree] = useState<OrganizationsTree | null>(null);
   const [holdings, setHoldings] = useState<HoldingListItem[]>([]);
@@ -190,7 +192,7 @@ export default function CompaniesPage() {
           </h1>
           <p className="text-gray-600 mt-2">{t("companiesPage.subtitle")}</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
           <button
             type="button"
             className={SECONDARY_BUTTON_CLASS}
@@ -198,6 +200,14 @@ export default function CompaniesPage() {
           >
             <Send className="h-4 w-4" aria-hidden />
             {t("companiesPage.joinTitle")}
+          </button>
+          <button
+            type="button"
+            className={SECONDARY_BUTTON_CLASS}
+            onClick={() => setCreateHoldingOpen(true)}
+          >
+            <Building2 className="h-4 w-4" aria-hidden />
+            {t("holdingCreate.openBtn")}
           </button>
           <button
             type="button"
@@ -468,6 +478,13 @@ export default function CompaniesPage() {
 
       <VoenRequestModal open={voenModalOpen} onClose={() => setVoenModalOpen(false)} />
       <CreateCompanyModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} />
+      <CreateHoldingModal
+        open={createHoldingOpen}
+        onClose={() => setCreateHoldingOpen(false)}
+        onCreated={() => {
+          void loadHoldingUi();
+        }}
+      />
     </div>
   );
 }

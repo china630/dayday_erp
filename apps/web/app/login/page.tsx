@@ -10,6 +10,36 @@ import { useAuth } from "../../lib/auth-context";
 import { LINK_ACCENT_CLASS, PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { LanguageSwitcher } from "../language-switcher";
 
+const LOGIN_RECENT_EMAILS_KEY = "dayday_login_recent_emails";
+const MAX_RECENT_EMAILS = 10;
+
+function loadRecentLoginEmails(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOGIN_RECENT_EMAILS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === "string" && x.trim().includes("@"));
+  } catch {
+    return [];
+  }
+}
+
+function rememberLoginEmail(email: string) {
+  const trimmed = email.trim();
+  if (!trimmed || !trimmed.includes("@")) return;
+  const lower = trimmed.toLowerCase();
+  const existing = loadRecentLoginEmails();
+  const without = existing.filter((e) => e.trim().toLowerCase() !== lower);
+  const next = [trimmed, ...without].slice(0, MAX_RECENT_EMAILS);
+  try {
+    localStorage.setItem(LOGIN_RECENT_EMAILS_KEY, JSON.stringify(next));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 export default function LoginPage() {
   const { t } = useTranslation();
   const { login, token, ready, user } = useAuth();
@@ -18,6 +48,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recentEmails, setRecentEmails] = useState<string[]>([]);
+
+  useEffect(() => {
+    const recent = loadRecentLoginEmails();
+    setRecentEmails(recent);
+    if (recent.length > 0) {
+      setEmail(recent[0]);
+    }
+  }, []);
 
   useEffect(() => {
     if (!ready || !token || !user) return;
@@ -50,6 +89,7 @@ export default function LoginPage() {
         organizations: OrgSummary[];
       };
       const orgs = data.organizations ?? [];
+      rememberLoginEmail(email);
       login(data.accessToken, data.user, orgs);
       const target =
         orgs.length === 0 ? "/companies" : orgs.length > 1 ? "/companies" : "/";
@@ -68,12 +108,20 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">{t("auth.loginTitle")}</h1>
-        <form onSubmit={(e) => void onSubmit(e)} className="grid gap-4">
+        <form onSubmit={(e) => void onSubmit(e)} className="grid gap-4" autoComplete="on">
+          <datalist id="dayday-login-recent-emails">
+            {recentEmails.map((e) => (
+              <option key={e} value={e} />
+            ))}
+          </datalist>
           <label className="block text-sm font-medium text-gray-700">
             {t("auth.email")}
             <input
               type="email"
+              name="email"
               required
+              autoComplete="username"
+              list="dayday-login-recent-emails"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="block w-full mt-1.5"
@@ -83,7 +131,9 @@ export default function LoginPage() {
             {t("auth.password")}
             <input
               type="password"
+              name="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="block w-full mt-1.5"
