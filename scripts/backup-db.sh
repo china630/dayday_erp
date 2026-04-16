@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="/opt/dayday_erp"
-COMPOSE_FILE="docker-compose.prod.yml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="${ROOT_DIR:-${REPO_ROOT}}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 BACKUP_DIR="${ROOT_DIR}/backups"
 TIMESTAMP="$(date +'%Y%m%d-%H%M%S')"
 BACKUP_FILE="${BACKUP_DIR}/db-${TIMESTAMP}.sql"
