@@ -12,7 +12,33 @@ CREATE TYPE "AbsencePayFormula" AS ENUM ('LABOR_LEAVE_304', 'SICK_LEAVE_STAJ', '
 CREATE TYPE "HoldingAccessRole" AS ENUM ('OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER');
 
 -- AlterEnum
-ALTER TYPE "BankStatementLineOrigin" ADD VALUE 'MANUAL_BANK_ENTRY';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'BankStatementLineOrigin') THEN
+    CREATE TYPE "BankStatementLineOrigin" AS ENUM (
+      'FILE_IMPORT',
+      'DIRECT_SYNC',
+      'WEBHOOK',
+      'INVOICE_PAYMENT_SYSTEM',
+      'MANUAL_CASH_OUT',
+      'MANUAL_BANK_ENTRY'
+    );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'BankStatementLineOrigin'
+      AND e.enumlabel = 'MANUAL_BANK_ENTRY'
+  ) THEN
+    ALTER TYPE "BankStatementLineOrigin" ADD VALUE 'MANUAL_BANK_ENTRY';
+  END IF;
+END $$;
+
 
 -- AlterEnum
 ALTER TYPE "CounterpartyRole" ADD VALUE 'OTHER';
