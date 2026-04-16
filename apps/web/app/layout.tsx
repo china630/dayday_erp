@@ -10,13 +10,15 @@ export const metadata: Metadata = {
   title: "DayDay ERP",
   description: "SaaS accounting for businesses in Azerbaijan",
 };
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const token = cookies().get("dayday_access_token")?.value;
-  const pathname = headers().get("x-dayday-pathname") ?? "";
+  const cookieStore = await cookies();
+  const headerStore = await headers();
+  const token = cookieStore.get("dayday_access_token")?.value;
+  const pathname = headerStore.get("x-dayday-pathname") ?? "";
   const publicPath =
     pathname === "/login" ||
     pathname === "/register" ||
