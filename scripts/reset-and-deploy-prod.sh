@@ -25,7 +25,7 @@ docker compose -f "${COMPOSE_FILE}" up -d --build
 
 echo "[reset-and-deploy-prod] Run full production initialization"
 docker compose -f "${COMPOSE_FILE}" exec -T api \
-  sh -lc "cd /opt/dayday_erp && npm run db:prod-init"
+  sh -lc "cd /app && npm run db:prod-init"
 
 echo "[reset-and-deploy-prod] Current service status"
 docker compose -f "${COMPOSE_FILE}" ps

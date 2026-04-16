@@ -17,7 +17,7 @@ docker compose -f "${COMPOSE_FILE}" up -d --build
 
 echo "[deploy-prod] Apply Prisma migrations"
 docker compose -f "${COMPOSE_FILE}" exec -T api \
-  sh -lc "cd /opt/dayday_erp && npm run db:migrate:deploy"
+  sh -lc "cd /app && npm run db:migrate:deploy"
 
 echo "[deploy-prod] Current service status"
 docker compose -f "${COMPOSE_FILE}" ps

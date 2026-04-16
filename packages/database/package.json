@@ -37,13 +37,13 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
-    "bcrypt": "^6.0.0"
-  },
-  "devDependencies": {
-    "@faker-js/faker": "^9.9.0",
+    "bcrypt": "^6.0.0",
     "dotenv": "^16.6.1",
     "prisma": "^6.19.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.9.0"
   }
 }
