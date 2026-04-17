@@ -61,16 +61,21 @@ git clone YOUR_GIT_URL .
 В корне репозитория:
 
 ```bash
-cp .env.example .env
+cp env.production.example .env
 nano .env
 ```
+
+Если в репозитории по-прежнему есть только `.env.example`, используйте его; актуальный шаблон для production — **`env.production.example`** в корне монорепо.
 
 ### Обязательно и настоятельно рекомендуется
 
 | Переменная / тема | Пояснение |
 |-------------------|-----------|
 | `POSTGRES_PASSWORD` | **Обязательна** для `docker-compose.prod.yml` (без неё Compose не запустит стек). |
+| `REDIS_URL` | **Обязательна в `.env`** для сервиса `api` (Compose не подставляет её сам). Для Redis из этого compose: `redis://redis:6379`. Не используйте URL read-replica для очередей Bull. |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | Длинные случайные значения; не повторяйте секреты из разработки. |
+| `COMPOSE_PROJECT_NAME` | Рекомендуется задать (например `dayday_prod`), чтобы имя сети Docker было предсказуемым и совпадало с шагом миграций ниже. |
+| `CORS_ORIGINS` | В production без подходящего origin браузер не сможет вызывать API с вашего сайта. |
 | `NODE_ENV` | Должно быть `production` и для API, и для web (Compose также выставляет это для сервисов приложений). |
 
 ### URL и порты (Compose)
@@ -82,7 +87,7 @@ nano .env
 ### Связка приложений
 
 - **`DATABASE_URL` в `.env`:** для сервиса `api` Compose **переопределяет** `DATABASE_URL` адресом сервиса `db` внутри сети Docker. В стандартной схеме править вручную не нужно.
-- **`REDIS_URL`:** Compose задаёт для `api` значение `redis://redis:6379`.
+- **`REDIS_URL`:** задаётся **только в `.env`** (Compose больше не переопределяет). Для Redis из этого же `docker-compose.prod.yml` укажите `REDIS_URL=redis://redis:6379` (хост `redis` — имя сервиса в сети Compose).
 - **`NEXT_PUBLIC_API_URL`:** по умолчанию в Compose — `http://api:4000`, чтобы сервер Next.js ходил в API по внутренней сети (rewrites и серверные запросы). Браузер ходит на тот же origin через `/api/...`; меняйте значение только если понимаете разницу серверных и клиентских URL.
 - **`CORS_ORIGINS`:** в production API разрешает origin из этого списка через запятую (плюс localhost по умолчанию). Укажите публичный адрес сайта, например `https://erp.example.com`.
 
@@ -95,7 +100,9 @@ nano .env
 
 ## 6. Миграции БД (до или сразу после первого старта API)
 
-В образе API нет CLI Prisma. Выполните миграции, когда сервис `db` в состоянии healthy, из каталога с репозиторием на сервере.
+Рекомендуемый путь на сервере: **`bash scripts/deploy-prod-db-migrate.sh`** (поднимает стек и выполняет `npm run db:migrate:deploy` внутри контейнера `api`).
+
+Альтернатива без скрипта: одноразовый контейнер `node` с примонтированным каталогом `prisma`, когда сервис `db` в состоянии healthy, из каталога с репозиторием на сервере.
 
 Задайте **фиксированное имя проекта Compose**, чтобы имя сети по умолчанию было предсказуемым (`${COMPOSE_PROJECT_NAME}_default`):
 
@@ -144,10 +151,22 @@ npm run db:dump-to-prod
 
 ## 8. Сборка и запуск всего стека
 
-Из корня репозитория (где лежит `docker-compose.prod.yml`). Если задавали `COMPOSE_PROJECT_NAME` на шаге с миграциями — используйте то же значение:
+### Скрипты в `scripts/` (сервер, из корня репозитория)
+
+| Скрипт | Когда использовать |
+|--------|--------------------|
+| `bash scripts/deploy-prod-code.sh` | Обновление кода/образов **без** миграций Prisma (схема БД не менялась). |
+| `bash scripts/deploy-prod-db-migrate.sh` | Релиз с **новыми миграциями**: `git pull`, бэкап БД, `up --build`, затем `prisma migrate deploy` внутри контейнера `api`. |
+| `bash scripts/deploy-prod-db-reset.sh` | **Только осознанно:** снимок тома Postgres (`down -v`), полный `db:prod-init` — все данные БД в compose-томе уничтожаются. |
+
+Перед первым запуском скриптов: `chmod +x scripts/*.sh` (по желанию). Убедитесь, что в `.env` заданы `REDIS_URL`, `POSTGRES_PASSWORD`, JWT и при необходимости `COMPOSE_PROJECT_NAME`.
+
+### Вручную через Compose
+
+Из корня репозитория (где лежит `docker-compose.prod.yml`). Имя проекта Compose должно совпадать с тем, что использовали для миграций (часто задаётся в `.env` как `COMPOSE_PROJECT_NAME`):
 
 ```bash
-export COMPOSE_PROJECT_NAME=dayday_prod   # по желанию, но рекомендуется
+export COMPOSE_PROJECT_NAME=dayday_prod   # или уже в .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 

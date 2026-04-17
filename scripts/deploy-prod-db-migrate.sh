@@ -10,6 +10,15 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 
 cd "${ROOT_DIR}"
 
+if [[ ! -f .env ]]; then
+  echo "[deploy-prod-db-migrate] ERROR: missing .env in ${ROOT_DIR}. Copy: cp env.production.example .env" >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*REDIS_URL=[^[:space:]]+' .env; then
+  echo "[deploy-prod-db-migrate] ERROR: set REDIS_URL in .env (e.g. redis://redis:6379)." >&2
+  exit 1
+fi
+
 echo "[deploy-prod-db-migrate] Pull latest changes"
 git pull
 
