@@ -23,7 +23,7 @@ echo "[deploy-prod-db-migrate] Pull latest changes"
 git pull
 
 echo "[deploy-prod-db-migrate] Backup database"
-"${ROOT_DIR}/scripts/backup-db.sh"
+bash "${ROOT_DIR}/scripts/backup-db.sh"
 
 echo "[deploy-prod-db-migrate] Build and start stack"
 docker compose -f "${COMPOSE_FILE}" up -d --build
@@ -31,6 +31,10 @@ docker compose -f "${COMPOSE_FILE}" up -d --build
 echo "[deploy-prod-db-migrate] Apply Prisma migrations"
 docker compose -f "${COMPOSE_FILE}" exec -T api \
   sh -lc "cd /app && npm run db:migrate:deploy"
+
+echo "[deploy-prod-db-migrate] Prod-init schema fixups (idempotent DDL)"
+docker compose -f "${COMPOSE_FILE}" exec -T api \
+  sh -lc "cd /app && npm run db:prod-init -w @dayday/database"
 
 echo "[deploy-prod-db-migrate] Service status"
 docker compose -f "${COMPOSE_FILE}" ps

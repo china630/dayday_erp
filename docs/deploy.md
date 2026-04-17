@@ -156,7 +156,7 @@ Super-admin bootstrap remains in **`02-super-admin-seed.sql`** (that file is **n
 | Script | When to use |
 |--------|-------------|
 | `bash scripts/deploy-prod-code.sh` | Code/image update **without** Prisma migrations (DB schema unchanged). |
-| `bash scripts/deploy-prod-db-migrate.sh` | Release **with** new migrations: `git pull`, DB backup, `up --build`, then `prisma migrate deploy` inside `api`. |
+| `bash scripts/deploy-prod-db-migrate.sh` | Release **with** new migrations: `git pull`, DB backup, `up --build`, `prisma migrate deploy`, then **`npm run db:prod-init -w @dayday/database`** (idempotent schema DDL from `prod-init.ts`, without re-running the full seed pipeline). |
 | `bash scripts/deploy-prod-db-reset.sh` | **Dangerous:** drops the Postgres compose volume and runs full `db:prod-init` — destroys DB data in that volume. |
 
 Before first use: `chmod +x scripts/*.sh` (optional). Ensure `.env` defines `REDIS_URL`, `POSTGRES_PASSWORD`, JWT secrets, and `COMPOSE_PROJECT_NAME` if you rely on it.

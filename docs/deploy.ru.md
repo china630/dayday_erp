@@ -156,7 +156,7 @@ npm run db:dump-to-prod
 | Скрипт | Когда использовать |
 |--------|--------------------|
 | `bash scripts/deploy-prod-code.sh` | Обновление кода/образов **без** миграций Prisma (схема БД не менялась). |
-| `bash scripts/deploy-prod-db-migrate.sh` | Релиз с **новыми миграциями**: `git pull`, бэкап БД, `up --build`, затем `prisma migrate deploy` внутри контейнера `api`. |
+| `bash scripts/deploy-prod-db-migrate.sh` | Релиз с **новыми миграциями**: `git pull`, бэкап БД, `up --build`, `prisma migrate deploy`, затем **`npm run db:prod-init -w @dayday/database`** (идемпотентные DDL-фиксы схемы из `prod-init.ts`, без полного повторного сида). |
 | `bash scripts/deploy-prod-db-reset.sh` | **Только осознанно:** снимок тома Postgres (`down -v`), полный `db:prod-init` — все данные БД в compose-томе уничтожаются. |
 
 Перед первым запуском скриптов: `chmod +x scripts/*.sh` (по желанию). Убедитесь, что в `.env` заданы `REDIS_URL`, `POSTGRES_PASSWORD`, JWT и при необходимости `COMPOSE_PROJECT_NAME`.

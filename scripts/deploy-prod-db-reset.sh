@@ -23,7 +23,7 @@ echo "[deploy-prod-db-reset] Pull latest changes"
 git pull
 
 echo "[deploy-prod-db-reset] Backup database before wipe"
-if ! "${ROOT_DIR}/scripts/backup-db.sh"; then
+if ! bash "${ROOT_DIR}/scripts/backup-db.sh"; then
   echo "[deploy-prod-db-reset] WARNING: backup failed, continuing with reset"
 fi
 
