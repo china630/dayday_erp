@@ -9,6 +9,7 @@ import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { ModulePageLinks } from "../../components/module-page-links";
 import { EmptyState } from "../../components/empty-state";
+import { CreateCounterpartyModal } from "../../components/sales/modals";
 
 type Row = {
   id: string;
@@ -27,6 +28,7 @@ export default function CounterpartiesPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -74,9 +76,9 @@ export default function CounterpartiesPage() {
           <h1 className="text-2xl font-semibold text-gray-900">{t("counterparties.title")}</h1>
           <p className="text-sm text-slate-600 mt-1">{t("counterparties.subtitle")}</p>
         </div>
-        <Link href="/counterparties/new" className={PRIMARY_BUTTON_CLASS}>
+        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
           + {t("counterparties.newBtn")}
-        </Link>
+        </button>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
@@ -91,9 +93,9 @@ export default function CounterpartiesPage() {
               <Users2 className="h-12 w-12 mx-auto stroke-[1.5] text-[#7F8C8D]" aria-hidden />
             }
             action={
-              <Link href="/counterparties/new" className={PRIMARY_BUTTON_CLASS}>
+            <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
                 + {t("counterparties.newBtn")}
-              </Link>
+            </button>
             }
           />
         )}
@@ -141,6 +143,12 @@ export default function CounterpartiesPage() {
           </div>
         )}
       </section>
+
+      <CreateCounterpartyModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => void load()}
+      />
     </div>
   );
 }

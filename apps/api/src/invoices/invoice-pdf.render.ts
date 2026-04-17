@@ -56,7 +56,7 @@ export async function renderInvoicePdf(
     doc.text("Lines:");
     invoice.items.forEach((line, i) => {
       const baseTitle = line.product?.name ?? line.description ?? `Line ${i + 1}`;
-      const kind = line.product?.isService ? "Xidmət" : "Məhsul";
+      const kind = line.product?.isService || line.product == null ? "Xidmət" : "Məhsul";
       const title = `${kind}: ${baseTitle}`;
       doc.text(
         `${title} | qty ${line.quantity.toString()} x ${line.unitPrice.toString()} | VAT ${line.vatRate.toString()}% | ${line.lineTotal.toString()} ${invoice.currency}`,

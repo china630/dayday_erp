@@ -11,6 +11,7 @@ import { formatMoneyAzn } from "../../lib/format-money";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { ModulePageLinks } from "../../components/module-page-links";
 import { EmptyState } from "../../components/empty-state";
+import { CreateInvoiceModal } from "../../components/sales/modals";
 
 type Row = {
   id: string;
@@ -30,6 +31,7 @@ export default function InvoicesPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
   const [payForId, setPayForId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState("");
@@ -153,9 +155,9 @@ export default function InvoicesPage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">{t("invoices.title")}</h1>
         </div>
-        <Link href="/invoices/new" className={PRIMARY_BUTTON_CLASS}>
+        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
           + {t("invoices.new")}
-        </Link>
+        </button>
       </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -168,9 +170,9 @@ export default function InvoicesPage() {
             <FileStack className="h-12 w-12 mx-auto stroke-[1.5] text-[#7F8C8D]" aria-hidden />
           }
           action={
-            <Link href="/invoices/new" className={PRIMARY_BUTTON_CLASS}>
+            <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
               + {t("invoices.new")}
-            </Link>
+            </button>
           }
         />
       )}
@@ -431,6 +433,12 @@ export default function InvoicesPage() {
         </div>
         </>
       )}
+
+      <CreateInvoiceModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => void load()}
+      />
     </div>
   );
 }

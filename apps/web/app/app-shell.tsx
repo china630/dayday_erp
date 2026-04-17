@@ -88,7 +88,7 @@ function QuickActionsMenuItems({
   return (
     <>
       <Link
-        href="/invoices/new"
+        href="/invoices"
         className={quickActionItemClass}
         role="menuitem"
         onClick={onNavigate}
