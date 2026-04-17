@@ -146,7 +146,25 @@ async function upsertSuperAdmins() {
   );
 }
 
+async function ensureCriticalSchemaFixups() {
+  // Keep prod-init resilient when migrations lag behind code.
+  // These are safe, idempotent DDL statements.
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "warehouses" ADD COLUMN IF NOT EXISTS "inventory_account_code" TEXT NOT NULL DEFAULT '201';`,
+  );
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TYPE "BankStatementLineOrigin" ADD VALUE 'MANUAL_BANK_ENTRY';
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  process.stdout.write("[prod-init] schema: ensured inventory_account_code + MANUAL_BANK_ENTRY enum\n");
+}
+
 async function main() {
+  await ensureCriticalSchemaFixups();
   await ensureMdmGlobalCounterpartiesSchema();
   await upsertSystemConfigDefaults();
   await seedTemplateIfrsMappings();
