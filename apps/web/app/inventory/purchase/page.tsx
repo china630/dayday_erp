@@ -9,6 +9,7 @@ import { apiFetch } from "../../../lib/api-client";
 import { inputFieldWideClass } from "../../../lib/form-classes";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { ModulePageLinks } from "../../../components/module-page-links";
+import { uuidV4 } from "../../../lib/uuid";
 import {
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
@@ -27,7 +28,7 @@ type LineRow = {
 
 function newLine(): LineRow {
   return {
-    key: crypto.randomUUID(),
+    key: uuidV4(),
     productId: "",
     quantity: "",
     unitPrice: "",

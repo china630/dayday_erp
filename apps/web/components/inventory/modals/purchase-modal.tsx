@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { inputFieldWideClass } from "../../../lib/form-classes";
 import { BORDER_MUTED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import { uuidV4 } from "../../../lib/uuid";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
 type Warehouse = { id: string; name: string };
@@ -21,7 +22,7 @@ type LineRow = {
 
 function newLine(): LineRow {
   return {
-    key: crypto.randomUUID(),
+    key: uuidV4(),
     productId: "",
     quantity: "",
     unitPrice: "",
