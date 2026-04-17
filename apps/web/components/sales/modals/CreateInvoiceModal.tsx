@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { inputFieldWideClass } from "../../../lib/form-classes";
 import { BORDER_MUTED_CLASS, INPUT_BORDERED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import { uuidV4 } from "../../../lib/uuid";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
 type Counterparty = { id: string; name: string; taxId: string };
@@ -22,7 +23,7 @@ type LineRow = {
 
 function newLine(): LineRow {
   return {
-    key: crypto.randomUUID(),
+    key: uuidV4(),
     productId: "",
     description: "",
     quantity: "1",
