@@ -94,12 +94,90 @@ export class InventoryAuditService {
     assertMayPostManualJournal(actingUserRole);
     return this.prisma.$transaction(async (tx) => {
       await this.applyApprovedAdjustmentsInTx(tx, organizationId, draft);
-      return tx.inventoryAudit.update({
+      await tx.inventoryAudit.update({
         where: { id },
         data: {
           status: InventoryAuditStatus.APPROVED,
         },
       });
+      return this.findOneInTx(tx, organizationId, id);
+    });
+  }
+
+  /**
+   * Черновик описи: подтянуть systemQty (и среднюю цену для справки в costPrice) из текущих StockItem.
+   */
+  async syncSystemFromStock(
+    organizationId: string,
+    auditId: string,
+    actingUserRole: UserRole,
+  ) {
+    assertMayPostManualJournal(actingUserRole);
+    const audit = await this.prisma.inventoryAudit.findFirst({
+      where: {
+        id: auditId,
+        organizationId,
+        status: InventoryAuditStatus.DRAFT,
+      },
+      include: {
+        lines: { select: { id: true, productId: true } },
+      },
+    });
+    if (!audit) {
+      throw new NotFoundException("Инвентаризационная опись не найдена");
+    }
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    const closed = getClosedPeriodKeys(org?.settings);
+    const key = monthKeyUtc(audit.date);
+    if (closed.includes(key)) {
+      throw new BadRequestException(
+        `Период ${key} закрыт: синхронизация недоступна`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const line of audit.lines) {
+        const stock = await tx.stockItem.findUnique({
+          where: {
+            organizationId_warehouseId_productId: {
+              organizationId,
+              warehouseId: audit.warehouseId,
+              productId: line.productId,
+            },
+          },
+          select: { quantity: true },
+        });
+        const systemQty = stock?.quantity ?? new Decimal(0);
+        await tx.inventoryAuditLine.update({
+          where: { id: line.id },
+          data: { systemQty },
+        });
+      }
+    });
+
+    return this.findOne(organizationId, auditId);
+  }
+
+  private findOneInTx(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    id: string,
+  ) {
+    return tx.inventoryAudit.findFirstOrThrow({
+      where: { id, organizationId },
+      include: {
+        warehouse: { select: { id: true, name: true, inventoryAccountCode: true } },
+        lines: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            product: { select: { id: true, name: true, sku: true, isService: true } },
+          },
+        },
+      },
     });
   }
 

@@ -1,20 +1,30 @@
 "use client";
 
-import Link from "next/link";
 import { Package } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import { formatMoneyAzn } from "../../lib/format-money";
-import { inputFieldWideClass } from "../../lib/form-classes";
 import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { ModulePageLinks } from "../../components/module-page-links";
 import { EmptyState } from "../../components/empty-state";
 import {
+  AdjustmentsModal,
+  AuditHistoryModal,
+  AuditModal,
+  NewWarehouseModal,
+  PurchaseModal,
+  SurplusModal,
+  TransferModal,
+  WriteOffModal,
+} from "../../components/inventory/modals";
+import {
   BORDER_MUTED_CLASS,
   CARD_CONTAINER_CLASS,
+  INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
@@ -42,6 +52,17 @@ type Movement = {
   invoice: { number: string } | null;
 };
 
+type InventoryModalKey =
+  | null
+  | "newWh"
+  | "purchase"
+  | "transfer"
+  | "adjustments"
+  | "surplus"
+  | "writeOff"
+  | "audit"
+  | "auditHistory";
+
 function fmtQty(v: unknown): string {
   if (v == null) return "—";
   if (typeof v === "object" && v !== null && "toString" in v) {
@@ -67,6 +88,7 @@ export default function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [activeModal, setActiveModal] = useState<InventoryModalKey>(null);
 
   const [allowNeg, setAllowNeg] = useState(false);
   const [defWh, setDefWh] = useState("");
@@ -122,12 +144,20 @@ export default function InventoryPage() {
           defaultWarehouseId: defWh.trim() ? defWh.trim() : null,
         }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        toast.error(t("common.saveErr"), { description: await res.text() });
+        return;
+      }
+      toast.success(t("common.save"));
       await load();
     } finally {
       setSettingsSaving(false);
     }
   }
+
+  const afterMutation = useCallback(() => {
+    void load();
+  }, [load]);
 
   if (!ready) {
     return (
@@ -153,45 +183,38 @@ export default function InventoryPage() {
           <h1 className="text-2xl font-semibold text-[#34495E]">{t("inventory.title")}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/inventory/warehouses/new" className={PRIMARY_BUTTON_CLASS}>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            onClick={() => setActiveModal("newWh")}
+          >
             + {t("inventory.newWhBtn")}
-          </Link>
-          <Link
-            href="/inventory/purchase"
-            className={SECONDARY_BUTTON_CLASS}
-          >
+          </button>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("purchase")}>
             + {t("inventory.newPurchaseBtn")}
-          </Link>
-          <Link
-            href="/inventory/transfer"
-            className={SECONDARY_BUTTON_CLASS}
-          >
+          </button>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("transfer")}>
             {t("inventory.transferNav")}
-          </Link>
-          <Link
-            href="/inventory/adjustments"
-            className={SECONDARY_BUTTON_CLASS}
-          >
+          </button>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("adjustments")}>
             {t("inventory.adjustNav")}
-          </Link>
-          <Link href="/inventory/surplus" className={SECONDARY_BUTTON_CLASS}>
+          </button>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("surplus")}>
             {t("inventory.surplusNav")}
-          </Link>
-          <Link href="/inventory/write-off" className={SECONDARY_BUTTON_CLASS}>
+          </button>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("writeOff")}>
             {t("inventory.writeOffNav")}
-          </Link>
-          <Link
-            href="/inventory/audit/new"
+          </button>
+          <button
+            type="button"
             className={`${SECONDARY_BUTTON_CLASS} border-[#2980B9]/40 bg-[#2980B9]/10 text-[#34495E]`}
+            onClick={() => setActiveModal("audit")}
           >
             {t("inventory.auditNav")}
-          </Link>
-          <Link
-            href="/inventory/audits"
-            className={SECONDARY_BUTTON_CLASS}
-          >
+          </button>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("auditHistory")}>
             {t("inventory.auditHistoryNav")}
-          </Link>
+          </button>
         </div>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -208,27 +231,27 @@ export default function InventoryPage() {
             />
             {t("inventory.allowNeg")}
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("inventory.defaultWhLabel")}
-            <select
-              value={defWh}
-              onChange={(e) => setDefWh(e.target.value)}
-              className={`mt-1 ${inputFieldWideClass} max-w-md`}
-            >
-              <option value="">{t("inventory.defaultWhAuto")}</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block min-w-0 max-w-xs flex-1 text-sm font-medium text-gray-700">
+              {t("inventory.defaultWhLabel")}
+              <select
+                value={defWh}
+                onChange={(e) => setDefWh(e.target.value)}
+                className={`mt-1 block w-full max-w-[16rem] ${INPUT_BORDERED_CLASS}`}
+              >
+                <option value="">{t("inventory.defaultWhAuto")}</option>
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               disabled={settingsSaving}
               onClick={() => void saveSettings()}
-              className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50 min-w-[7rem]`}
+              className={`${PRIMARY_BUTTON_CLASS} disabled:pointer-events-none disabled:opacity-50`}
             >
               {settingsSaving ? "…" : t("inventory.save")}
             </button>
@@ -246,7 +269,11 @@ export default function InventoryPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="block text-sm font-medium text-gray-700">
             {t("inventory.filterWh")}
-            <select value={filterWh} onChange={(e) => setFilterWh(e.target.value)} className={`mt-1 ${inputFieldWideClass}`}>
+            <select
+              value={filterWh}
+              onChange={(e) => setFilterWh(e.target.value)}
+              className={`mt-1 block max-w-md ${INPUT_BORDERED_CLASS}`}
+            >
               <option value="">{t("inventory.allWh")}</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -274,9 +301,9 @@ export default function InventoryPage() {
           title={t("inventory.emptyStock")}
           description={t("inventory.emptyStockHint")}
           action={
-            <Link href="/inventory/purchase" className={PRIMARY_BUTTON_CLASS}>
+            <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setActiveModal("purchase")}>
               + {t("inventory.newPurchaseBtn")}
-            </Link>
+            </button>
           }
         />
       )}
@@ -401,6 +428,43 @@ export default function InventoryPage() {
           </div>
         </>
       )}
+
+      <NewWarehouseModal
+        open={activeModal === "newWh"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <PurchaseModal
+        open={activeModal === "purchase"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <TransferModal
+        open={activeModal === "transfer"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <AdjustmentsModal
+        open={activeModal === "adjustments"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <SurplusModal
+        open={activeModal === "surplus"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <WriteOffModal
+        open={activeModal === "writeOff"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <AuditModal
+        open={activeModal === "audit"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={afterMutation}
+      />
+      <AuditHistoryModal open={activeModal === "auditHistory"} onClose={() => setActiveModal(null)} />
     </div>
   );
 }

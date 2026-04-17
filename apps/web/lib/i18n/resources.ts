@@ -846,6 +846,12 @@ export const resources = {
         auditHistoryBack: "К истории",
         auditStatusDraft: "Черновик",
         auditStatusApproved: "Проведена",
+        auditSyncSystem: "Синхронизировать с системой",
+        auditSyncModalBody:
+          "Колонка «Система» (systemQty) для всех строк будет перезаписана текущими остатками склада документа.",
+        auditConfirmApproveBody:
+          "Будут созданы проводки (излишки: Дт 201/204 — Кт 611; недостачи: Дт 731 — Кт 201/204), движения склада с причиной ADJUSTMENT, статус документа — «Проведена». Продолжить?",
+        auditPostDoc: "Провести",
       },
       fixedAssets: {
         title: "Основные средства",
@@ -2414,6 +2420,12 @@ export const resources = {
         auditHistoryBack: "Tarixçəyə",
         auditStatusDraft: "Qaralama",
         auditStatusApproved: "Təsdiqləndi",
+        auditSyncSystem: "Sistemlə sinxronlaşdır",
+        auditSyncModalBody:
+          "«Sistem» sütunu (systemQty) bütün sətirlər üçün sənədin anbarındakı cari qalıqlarla yenilənəcək.",
+        auditConfirmApproveBody:
+          "Artıqlar: Dt 201/204, Kt 611; çatışmazlıq: Dt 731, Kt 201/204 üzrə keçidlər, ADJUSTMENT anbar hərəkətləri və sənəd statusu «Təsdiqləndi» olacaq. Davam?",
+        auditPostDoc: "Təsdiqlə",
       },
       fixedAssets: {
         title: "Əsas vəsaitlər",

@@ -36,7 +36,7 @@
 | **Почта** | **Nodemailer (SMTP)** — счета, сброс пароля |
 | **Monorepo** | `apps/web` (Next.js), `apps/api` (NestJS), `packages/database` (Prisma и общие типы при необходимости) |
 | **Локаль** | БД: **UTC**; UI: **i18next**; язык по умолчанию **RU**, подготовка полных строк под **AZ**; форматирование дат и **AZN** — локаль Азербайджана |
-| **Локальная инфра (Windows)** | Тома Docker, загрузки API, **npm-кэш**, **TEMP/TMP** — только **D:** (`D:\DockerData\dayday_erp`); корневой `.npmrc`, `scripts/ensure-infra-d.ps1`. Образы Docker — **Disk image location** на D в Docker Desktop |
+| **Локальная инфра (Windows)** | Тома Docker, загрузки API, **npm-кэш**, **TEMP/TMP** — только **D:** (`D:\DockerData\dayday_erp`); корневой `.npmrc`. Образы Docker — **Disk image location** на D в Docker Desktop |
 
 ### 1.1. Архитектура холдинга: консолидация валют (Reporting Aggregator)
 

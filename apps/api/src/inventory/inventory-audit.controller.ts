@@ -63,6 +63,23 @@ export class InventoryAuditController {
     );
   }
 
+  @Post(":id/sync-system")
+  @ApiOperation({
+    summary:
+      "Черновик описи: обновить systemQty по фактическим остаткам StockItem на складе документа",
+  })
+  syncSystem(
+    @OrganizationId() organizationId: string,
+    @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.audits.syncSystemFromStock(
+      organizationId,
+      id,
+      requireOrgRole(user),
+    );
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Опись по id" })
   findOne(

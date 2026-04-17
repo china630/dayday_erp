@@ -14,8 +14,8 @@ alwaysApply: true
 
 ## Docker (Postgres + Redis)
 
-1. `npm run infra:d` — каталоги на `D:\DockerData\dayday_erp\`.
-2. `npm run docker:up` (или **`npm run infra:up`** = оба шага).
+1. При необходимости создайте каталоги на **`D:\DockerData\dayday_erp\`** (тома Docker, кэш npm и т.д.) — вручную или любым удобным способом.
+2. `npm run docker:up`.
 3. При необходимости: `npm run db:migrate` из корня.
 
 ## Запуск приложений
@@ -24,9 +24,9 @@ alwaysApply: true
 
 **Логин / регистрация** ходят на API (**по умолчанию http://127.0.0.1:4000**). Если запущен только фронт, в браузере будет «Failed to fetch» — поднимите API: **`npm run dev:api`** или сразу оба: **`npm run dev`** / **`START-ERP.bat`**.
 
-Перед **`dev`**, **`dev:api`**, **`dev:web`**, **`dev:web:clean`** автоматически вызывается **`scripts/free-dev-ports.mjs`** (пакет `kill-port`): освобождаются **3000** и **4000**, чтобы не было **EADDRINUSE** после старого Next/Nest.
+Чтобы не ловить **EADDRINUSE** на **3000** / **4000**, перед полным стартом используйте **`START-ERP.bat`** (освобождает порты через PowerShell) или вручную: **`npm run stop:next`** / **`npm run stop:api`** (`kill-port`).
 
-`npm run dev:web` вызывает **`scripts/run-dev-web.mjs`**: если есть корневой **`.env`**, подмешивает его через `dotenv-cli`; если нет — стартует Next всё равно (с предупреждением).
+**`npm run dev:web`** подмешивает корневой **`.env`** через **`dotenv-cli`**.
 
 Next слушает **`0.0.0.0:3000`** — доступны и `localhost`, и `127.0.0.1`, и LAN.
 
@@ -45,11 +45,10 @@ Next слушает **`0.0.0.0:3000`** — доступны и `localhost`, и `
 
 Файлы подключаются в порядке: **корень монорепо** → **`apps/api/.env`**. Последний перекрывает предыдущий.
 
-## Windows: остановка процессов (точечно)
+## Windows: освобождение портов
 
-- **`npm run stop:next`** — только Next.js по путям `dayday_erp` (Nest не трогать).
-- **`npm run stop:api`** — только Nest API по тем же путям.
-- Не использовать общий фильтр «все node с dayday_erp» — убьёт и API, и Web.
+- **`npm run stop:next`** — освободить порт **3000** (`npx kill-port 3000`).
+- **`npm run stop:api`** — освободить порт **4000** (`npx kill-port 4000`).
 
 ## Next.js и папка `.next`
 
