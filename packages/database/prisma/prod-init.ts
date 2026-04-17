@@ -168,13 +168,16 @@ async function ensureCriticalSchemaFixups() {
  * Prisma падает на GET /api/inventory/audits. См. prisma/migration-inventory-audit-lines.sql.
  */
 async function ensureInventoryAuditSchema() {
+  // Важно: ADD COLUMN и ADD CONSTRAINT не держать в одном DO — при ошибке FK откатится и колонка пропадёт.
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE IF EXISTS "inventory_audits" ADD COLUMN IF NOT EXISTS "warehouse_id" UUID;`,
+  );
   await prisma.$executeRawUnsafe(`
     DO $$
     BEGIN
       IF to_regclass('public.inventory_audits') IS NULL THEN
         RETURN;
       END IF;
-      ALTER TABLE "inventory_audits" ADD COLUMN IF NOT EXISTS "warehouse_id" UUID;
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'inventory_audits_warehouse_id_fkey'
       ) THEN
@@ -182,10 +185,13 @@ async function ensureInventoryAuditSchema() {
           ADD CONSTRAINT "inventory_audits_warehouse_id_fkey"
           FOREIGN KEY ("warehouse_id") REFERENCES "warehouses"("id") ON DELETE CASCADE;
       END IF;
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+      WHEN foreign_key_violation THEN NULL;
     END $$;
   `);
   await prisma.$executeRawUnsafe(
-    `ALTER TABLE "inventory_audits" DROP COLUMN IF EXISTS "items";`,
+    `ALTER TABLE IF EXISTS "inventory_audits" DROP COLUMN IF EXISTS "items";`,
   );
   await prisma.$executeRawUnsafe(
     `CREATE INDEX IF NOT EXISTS "inventory_audits_org_wh_date_idx" ON "inventory_audits" ("organization_id", "warehouse_id", "date");`,
