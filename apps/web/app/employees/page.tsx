@@ -546,20 +546,7 @@ export default function EmployeesPage() {
         </>
       )}
       {!loading && rows.length === 0 && !error && (
-        <EmptyState
-          title={t("employees.none")}
-          description={t("employees.emptyHint")}
-          action={
-            <button
-              type="button"
-              className="inline-flex items-center justify-center bg-action text-white px-4 py-2 rounded-lg hover:bg-action-hover text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
-              disabled={subReady && Boolean(snapshot?.quotas.employees.atLimit)}
-              onClick={() => setCreateOpen(true)}
-            >
-              + {t("employees.newTitle")}
-            </button>
-          }
-        />
+        <EmptyState title={t("employees.none")} description={t("employees.emptyHint")} />
       )}
 
       <EmployeeModal

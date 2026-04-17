@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { FORM_INPUT_CLASS } from "../../../lib/form-styles";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
@@ -44,11 +45,9 @@ function toNum(v: string): number {
 export function AuditModal({
   open,
   onClose,
-  onSuccess,
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
 }) {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
@@ -116,6 +115,7 @@ export function AuditModal({
     }
     setAudit((await res.json()) as AuditDetail);
     toast.success(t("common.save"));
+    notifyListRefresh("inventory-audits");
   }
 
   async function approveDraft() {
@@ -135,7 +135,8 @@ export function AuditModal({
     const updated = await apiFetch(`/api/inventory/audits/${encodeURIComponent(audit.id)}`);
     if (updated.ok) setAudit((await updated.json()) as AuditDetail);
     toast.success(t("common.save"));
-    onSuccess();
+    notifyListRefresh("inventory-audits");
+    notifyListRefresh("inventory-hub");
     onClose();
   }
 

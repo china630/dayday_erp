@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Users2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { subscribeListRefresh } from "../../lib/list-refresh-bus";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../lib/api-client";
 import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
@@ -51,6 +52,11 @@ export default function CounterpartiesPage() {
   useEffect(() => {
     if (!ready || !token) return;
     void load();
+  }, [load, ready, token]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    return subscribeListRefresh("counterparties", () => void load());
   }, [load, ready, token]);
 
   if (!ready) {
@@ -144,11 +150,7 @@ export default function CounterpartiesPage() {
         )}
       </section>
 
-      <CreateCounterpartyModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={() => void load()}
-      />
+      <CreateCounterpartyModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }

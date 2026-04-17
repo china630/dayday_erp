@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AuditDetailConfirmModal } from "../../../../components/inventory/modals";
 import { ModulePageLinks } from "../../../../components/module-page-links";
 import { apiFetch } from "../../../../lib/api-client";
+import { notifyListRefresh } from "../../../../lib/list-refresh-bus";
 import { useAuth } from "../../../../lib/auth-context";
 import {
   BORDER_MUTED_CLASS,
@@ -152,7 +153,7 @@ export default function InventoryAuditDetailPage() {
     setSyncOpen(false);
   }
 
-  async function runApprove() {
+  async function handleApprove() {
     if (!token || !id) return;
     setApproveBusy(true);
     const res = await apiFetch(`/api/inventory/audits/${encodeURIComponent(id)}/approve`, {
@@ -165,6 +166,7 @@ export default function InventoryAuditDetailPage() {
     }
     setRow((await res.json()) as AuditDetail);
     toast.success(t("inventory.auditOkApproved"));
+    notifyListRefresh("inventory-audits");
     setApproveOpen(false);
   }
 
@@ -316,7 +318,7 @@ export default function InventoryAuditDetailPage() {
         title={t("inventory.auditPostDoc")}
         onClose={() => setApproveOpen(false)}
         busy={approveBusy}
-        onConfirm={() => void runApprove()}
+        onConfirm={() => void handleApprove()}
       >
         <p className="m-0">{t("inventory.auditConfirmApproveBody")}</p>
       </AuditDetailConfirmModal>

@@ -12,7 +12,11 @@ import { isRestrictedUserRole } from "../../lib/role-utils";
 import { EmptyState } from "../../components/empty-state";
 import { ModulePageLinks } from "../../components/module-page-links";
 import { SubscriptionPaywall } from "../../components/subscription-paywall";
-import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
+import {
+  BORDER_MUTED_CLASS,
+  CARD_CONTAINER_CLASS,
+  PRIMARY_BUTTON_CLASS,
+} from "../../lib/design-system";
 
 type Fa = {
   id: string;
@@ -112,14 +116,18 @@ function FixedAssetsPageContent() {
 
       {loading && <p className="text-gray-600">{t("common.loading")}</p>}
       {!loading && rows.length === 0 && !err && (
-        <div className="flex min-h-[280px] items-center justify-center">
-          <div className="w-full max-w-lg">
-            <EmptyState
-              icon={<Building2 className="h-12 w-12 mx-auto stroke-[1.5]" aria-hidden />}
-              title={t("fixedAssets.emptyTitle")}
-              description={t("fixedAssets.emptyHint")}
-            />
-          </div>
+        <div className="flex min-h-[320px] w-full flex-col items-center justify-center py-8">
+          <EmptyState
+            className="max-w-lg w-full border-[#D5DADF] bg-white"
+            icon={
+              <Building2
+                className="mx-auto h-12 w-12 stroke-[1.5] text-[#7F8C8D]"
+                aria-hidden
+              />
+            }
+            title={t("fixedAssets.emptyTitle")}
+            description={t("fixedAssets.emptyHint")}
+          />
         </div>
       )}
 
@@ -129,9 +137,9 @@ function FixedAssetsPageContent() {
             {rows.map((r) => (
               <div
                 key={r.id}
-                className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm text-sm space-y-1"
+                className={`${CARD_CONTAINER_CLASS} space-y-1 p-4 text-sm`}
               >
-                <div className="font-medium text-gray-900">{r.name}</div>
+                <div className="font-medium text-[#34495E]">{r.name}</div>
                 <div>
                   {t("fixedAssets.invNo")}: {r.inventoryNumber}
                 </div>
@@ -153,22 +161,38 @@ function FixedAssetsPageContent() {
               </div>
             ))}
           </div>
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="text-sm min-w-[640px]">
+          <div
+            className={`hidden overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white shadow-sm md:block`}
+          >
+            <table className="min-w-[640px] text-sm">
               <thead>
-                <tr>
-                  <th>{t("fixedAssets.thName")}</th>
-                  <th>{t("fixedAssets.thInv")}</th>
-                  <th>{t("fixedAssets.commission")}</th>
-                  <th>{t("fixedAssets.initial")}</th>
-                  <th>{t("fixedAssets.life")}</th>
-                  <th>{t("fixedAssets.thBooked")}</th>
-                  {!hideDestructive && <th />}
+                <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.thName")}
+                  </th>
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.thInv")}
+                  </th>
+                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.commission")}
+                  </th>
+                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.initial")}
+                  </th>
+                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.life")}
+                  </th>
+                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.thBooked")}
+                  </th>
+                  {!hideDestructive ? (
+                    <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" />
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
                     <td>{r.name}</td>
                     <td>{r.inventoryNumber}</td>
                     <td>{String(r.commissioningDate).slice(0, 10)}</td>

@@ -8,8 +8,8 @@ import { apiFetch } from "../../../lib/api-client";
 import { parseHrEmployeesResponse } from "../../../lib/hr-employees-list";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import {
+  BORDER_MUTED_CLASS,
   CARD_CONTAINER_CLASS,
-  SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 
 type EmpOpt = { id: string; firstName: string; lastName: string };
@@ -34,6 +34,15 @@ function parseIsoDayUtc(s: string): number {
     Number(x.slice(5, 7)) - 1,
     Number(x.slice(8, 10)),
   );
+}
+
+function parseMonthValue(v: string): { year: number; month: number } | null {
+  const s = v.trim();
+  if (!/^\d{4}-\d{2}$/.test(s)) return null;
+  const y = Number(s.slice(0, 4));
+  const m = Number(s.slice(5, 7));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return null;
+  return { year: y, month: m };
 }
 
 function absenceCellKinds(
@@ -67,9 +76,13 @@ export default function HrAnalyticsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
+  const [monthValue, setMonthValue] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const parsedMonth = useMemo(() => parseMonthValue(monthValue), [monthValue]);
+  const calYear = parsedMonth?.year ?? new Date().getFullYear();
+  const calMonth = parsedMonth?.month ?? new Date().getMonth() + 1;
 
   const pollAbortRef = useRef(false);
 
@@ -137,42 +150,22 @@ export default function HrAnalyticsPage() {
         ]}
       />
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-[#34495E]">İnfoqrafika</h1>
           <p className="mt-1 text-[13px] text-[#7F8C8D]">
             Məzuniyyət və xəstəlik təqvimi
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => {
-              if (calMonth <= 1) {
-                setCalMonth(12);
-                setCalYear((y) => y - 1);
-              } else setCalMonth((m) => m - 1);
-            }}
-          >
-            {t("payroll.calendarPrev")}
-          </button>
-          <span className="min-w-[8rem] text-center text-[13px] font-medium tabular-nums text-[#34495E]">
-            {calMonth}.{calYear}
-          </span>
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => {
-              if (calMonth >= 12) {
-                setCalMonth(1);
-                setCalYear((y) => y + 1);
-              } else setCalMonth((m) => m + 1);
-            }}
-          >
-            {t("payroll.calendarNext")}
-          </button>
-        </div>
+        <label className="block shrink-0 text-[13px] font-medium text-[#34495E]">
+          Ay
+          <input
+            type="month"
+            value={monthValue}
+            onChange={(e) => setMonthValue(e.target.value)}
+            className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
+          />
+        </label>
       </div>
 
       {err ? <p className="text-red-600 text-sm">{err}</p> : null}
@@ -182,7 +175,7 @@ export default function HrAnalyticsPage() {
         <EmptyState title={t("payroll.calendarTitle")} description={t("payroll.calendarHint")} />
       ) : (
         <section className={`${CARD_CONTAINER_CLASS} p-4`}>
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-500 mb-1">
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-[#7F8C8D]">
             {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
               <div key={w}>{w}</div>
             ))}
@@ -217,7 +210,7 @@ export default function HrAnalyticsPage() {
                   <div
                     key={d}
                     title={labels.length ? labels.join(", ") : undefined}
-                    className={`aspect-square rounded-md flex flex-col items-center justify-center text-xs font-medium text-slate-800 border border-slate-100 ${bg}`}
+                    className={`aspect-square rounded-[2px] border ${BORDER_MUTED_CLASS} flex flex-col items-center justify-center text-xs font-medium text-[#34495E] ${bg}`}
                   >
                     {d}
                   </div>,
@@ -227,10 +220,10 @@ export default function HrAnalyticsPage() {
             })()}
           </div>
 
-          <div className="flex flex-wrap gap-4 mt-4 text-xs text-slate-600">
+          <div className="mt-4 flex flex-wrap gap-4 text-xs text-[#7F8C8D]">
             {legend.map((it) => (
               <span key={it.label} className="inline-flex items-center gap-2">
-                <span className={`h-3 w-3 rounded border border-slate-200 ${it.color}`} />
+                <span className={`h-3 w-3 rounded border ${BORDER_MUTED_CLASS} ${it.color}`} />
                 {it.label}
               </span>
             ))}

@@ -82,6 +82,19 @@
   }
 }
 
+/* App main: full viewport width on narrow screens; horizontal scroll for wide tables (DESIGN v8.9) */
+.app-shell-main {
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+
+.app-shell-main :where(table) {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
 /* Thin scrollbars — all scrollable overflow (v8.6) */
 .overflow-y-auto,
 .overflow-x-auto,

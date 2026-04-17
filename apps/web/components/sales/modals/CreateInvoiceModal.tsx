@@ -5,8 +5,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { formatMoneyAzn } from "../../../lib/format-money";
 import { inputFieldWideClass } from "../../../lib/form-classes";
 import { BORDER_MUTED_CLASS, INPUT_BORDERED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import { useLedger } from "../../../lib/ledger-context";
+import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { uuidV4 } from "../../../lib/uuid";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
@@ -31,16 +34,40 @@ function newLine(): LineRow {
   };
 }
 
+/** VAT split for one line; unitPrice is per the vatInclusive flag (gross vs net per unit). */
+function vatSplitForLine(
+  qty: number,
+  unitPrice: number,
+  vatRatePct: number,
+  vatInclusive: boolean,
+): { net: number; vat: number; gross: number } {
+  const v = vatRatePct / 100;
+  if (vatInclusive) {
+    const gross = qty * unitPrice;
+    const net = v <= 0 ? gross : gross / (1 + v);
+    return { net, vat: gross - net, gross };
+  }
+  const net = qty * unitPrice;
+  const vat = net * v;
+  return { net, vat, gross: net + vat };
+}
+
+type NettingPreview = {
+  payable531: string;
+  receivable: string;
+  suggestedAmount: string;
+  canNet: boolean;
+};
+
 export function CreateInvoiceModal({
   open,
   onClose,
-  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
 }) {
   const { t } = useTranslation();
+  const { ledgerType, ready: ledgerReady } = useLedger();
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [counterpartyId, setCounterpartyId] = useState("");
@@ -52,6 +79,7 @@ export function CreateInvoiceModal({
   const [isService, setIsService] = useState(false);
   const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
   const [busy, setBusy] = useState(false);
+  const [netting, setNetting] = useState<NettingPreview | null>(null);
 
   const fieldClass = `mt-1 ${inputFieldWideClass.replace("max-w-xl", "max-w-2xl")}`;
 
@@ -133,6 +161,54 @@ export function CreateInvoiceModal({
     );
   }, [isService, open, products]);
 
+  useEffect(() => {
+    if (!open) {
+      setNetting(null);
+      return;
+    }
+    if (!ledgerReady || !counterpartyId) {
+      setNetting(null);
+      return;
+    }
+    let cancelled = false;
+    const h = window.setTimeout(() => {
+      void (async () => {
+        const res = await apiFetch(
+          `/api/reporting/netting/preview?counterpartyId=${encodeURIComponent(counterpartyId)}&ledgerType=${encodeURIComponent(ledgerType)}`,
+        );
+        if (cancelled) return;
+        if (!res.ok) {
+          setNetting(null);
+          return;
+        }
+        setNetting((await res.json()) as NettingPreview);
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(h);
+    };
+  }, [open, counterpartyId, ledgerType, ledgerReady]);
+
+  const vatTotals = useMemo(() => {
+    let net = 0;
+    let vat = 0;
+    let gross = 0;
+    for (const row of lines) {
+      const q = Number(String(row.quantity).replace(",", "."));
+      const u = Number(String(row.unitPrice).replace(",", "."));
+      if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(u) || u < 0) continue;
+      if (isService) {
+        if (!row.description.trim()) continue;
+      } else if (!row.productId) continue;
+      const s = vatSplitForLine(q, u, vatRate, vatInclusive);
+      net += s.net;
+      vat += s.vat;
+      gross += s.gross;
+    }
+    return { net, vat, gross };
+  }, [lines, vatRate, vatInclusive, isService]);
+
   const canSubmit = useMemo(() => {
     if (!counterpartyId) return false;
     const parsed = lines
@@ -203,7 +279,7 @@ export function CreateInvoiceModal({
       });
     }
     toast.success(t("common.save"));
-    onCreated();
+    notifyListRefresh("invoices");
     onClose();
   }
 
@@ -257,6 +333,19 @@ export function CreateInvoiceModal({
             </select>
           </label>
         </div>
+
+        {netting?.canNet ? (
+          <div className="rounded-[2px] border border-[#2980B9]/35 bg-[#EBEDF0] px-3 py-2.5 text-[13px] text-[#34495E]">
+            <p className="m-0 font-semibold">{t("invoiceNew.nettingAvailable")}</p>
+            <p className="mb-0 mt-1 text-[12px] leading-snug text-[#7F8C8D]">
+              {t("invoiceNew.nettingDetail", {
+                pay531: netting.payable531,
+                rec: netting.receivable,
+                suggested: netting.suggestedAmount,
+              })}
+            </p>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -371,6 +460,23 @@ export function CreateInvoiceModal({
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div
+          className={`flex flex-wrap items-center justify-end gap-x-6 gap-y-2 rounded-[2px] border ${BORDER_MUTED_CLASS} bg-[#F8F9FA] px-4 py-3 text-[13px] text-[#34495E]`}
+        >
+          <span>
+            {t("invoiceNew.totalsNet")}:{" "}
+            <strong className="tabular-nums">{formatMoneyAzn(vatTotals.net)}</strong>
+          </span>
+          <span>
+            {t("invoiceNew.totalsVat")}:{" "}
+            <strong className="tabular-nums">{formatMoneyAzn(vatTotals.vat)}</strong>
+          </span>
+          <span>
+            {t("invoiceNew.totalsGross")}:{" "}
+            <strong className="tabular-nums">{formatMoneyAzn(vatTotals.gross)}</strong>
+          </span>
         </div>
 
         <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setLines((prev) => [...prev, newLine()])}>

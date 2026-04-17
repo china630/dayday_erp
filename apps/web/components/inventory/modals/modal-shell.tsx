@@ -83,15 +83,20 @@ export function InventoryModalFooter({
   formId?: string;
 }) {
   return (
-    <div className="flex items-center justify-end gap-2">
-      <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onCancel} disabled={!!busy}>
+    <div className="flex w-full flex-col-reverse gap-2 lg:flex-row lg:w-auto lg:justify-end">
+      <button
+        type="button"
+        className={`${SECONDARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
+        onClick={onCancel}
+        disabled={!!busy}
+      >
         {INVENTORY_MODAL_CANCEL_AZ}
       </button>
       {formId ? (
         <button
           type="submit"
           form={formId}
-          className={PRIMARY_BUTTON_CLASS}
+          className={`${PRIMARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
           disabled={!!busy || !!saveDisabled}
         >
           {busy ? "…" : INVENTORY_MODAL_SAVE_AZ}
@@ -99,7 +104,7 @@ export function InventoryModalFooter({
       ) : (
         <button
           type="button"
-          className={PRIMARY_BUTTON_CLASS}
+          className={`${PRIMARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
           disabled={!!busy || !!saveDisabled}
           onClick={() => void onSave?.()}
         >

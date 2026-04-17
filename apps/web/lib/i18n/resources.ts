@@ -447,6 +447,12 @@ export const resources = {
         noProductsOption: "— сначала создайте товар —",
         noAuth: "Войдите в систему.",
         stockWarningsTitle: "Предупреждения по складу",
+        nettingAvailable: "Доступен взаимозачёт",
+        nettingDetail:
+          "Кредиторка 531: {{pay531}} AZN · дебиторка: {{rec}} AZN · макс. зачёт: {{suggested}} AZN",
+        totalsNet: "Нетто",
+        totalsVat: "НДС",
+        totalsGross: "Брутто",
       },
       dashboard: {
         title: "Дашборд",
@@ -870,7 +876,8 @@ export const resources = {
         loadErr: "Ошибка",
         none: "Нет записей.",
         emptyTitle: "Список пуст",
-        emptyHint: "Добавьте объект ОС кнопкой «Новое ОС» выше.",
+        emptyHint:
+          "Добавьте объект ОС кнопкой «+ Новое ОС» в правом верхнем углу страницы.",
         newBtn: "Новое ОС",
         backList: "К списку ОС",
       },
@@ -914,7 +921,8 @@ export const resources = {
         thGross: "Gross",
         loadErr: "Ошибка",
         none: "Нет сотрудников.",
-        emptyHint: "Добавьте сотрудника и назначьте штатную должность.",
+        emptyHint:
+          "Добавьте сотрудника кнопкой «+ Новый сотрудник» в правом верхнем углу и назначьте штатную должность.",
         finInvalid: "ФИН должен быть ровно 7 символов",
         finInvalidStrict: "ФИН: 7 символов (латиница и цифры), без букв I и O",
         fillRequired: "Заполните все обязательные поля.",
@@ -2022,6 +2030,12 @@ export const resources = {
         noProductsOption: "— əvvəlcə məhsul yaradın —",
         noAuth: "Sistemə daxil olun.",
         stockWarningsTitle: "Anbar xəbərdarlıqları",
+        nettingAvailable: "Qarşılıqlı hesablaşma mövcuddur",
+        nettingDetail:
+          "531 kreditor: {{pay531}} AZN · debitor: {{rec}} AZN · maks. offset: {{suggested}} AZN",
+        totalsNet: "Netto cəmi",
+        totalsVat: "ƏDV",
+        totalsGross: "Brüt cəmi",
       },
       dashboard: {
         title: "Panel",
@@ -2444,7 +2458,8 @@ export const resources = {
         loadErr: "Xəta",
         none: "Qeyd yoxdur.",
         emptyTitle: "Siyahı boşdur",
-        emptyHint: "Əvvəlcə yuxarıdakı «Yeni ƏV» ilə qeyd əlavə edin.",
+        emptyHint:
+          "Qeyd əlavə etmək üçün səhifənin sağ yuxarı küncündəki «+ Yeni ƏV» düyməsindən istifadə edin.",
         newBtn: "Yeni ƏV",
         backList: "ƏV siyahısına",
       },
@@ -2488,7 +2503,8 @@ export const resources = {
         thGross: "Brüt",
         loadErr: "Xəta",
         none: "İşçi yoxdur.",
-        emptyHint: "İşçi əlavə edin və ştat vəzifəsi təyin edin.",
+        emptyHint:
+          "Sağ yuxarı küncdəki «+ Yeni işçi» ilə işçi əlavə edin və ştat vəzifəsi təyin edin.",
         finInvalid: "FİN dəqiq 7 simvol olmalıdır",
         finInvalidStrict: "FİN: 7 simvol (latın və rəqəm), I və O hərfləri olmadan",
         fillRequired: "Məcburi sahələri doldurun.",

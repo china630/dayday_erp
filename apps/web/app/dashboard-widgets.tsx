@@ -406,11 +406,11 @@ export function DashboardWidgets() {
         <p className="text-xs text-gray-500 mb-3">{t("dashboard.fxHint")}</p>
         {fxErr && <p className="text-red-600 text-sm mb-2">{fxErr}</p>}
         {fxRates && !fxErr && (
-          <div className="flex flex-wrap gap-3 justify-start">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:justify-start">
             {fxRates.rates.map((r) => (
               <div
                 key={r.currencyCode}
-                className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2.5 min-w-[108px] flex-1 sm:flex-none sm:min-w-[120px]"
+                className="w-full min-w-0 rounded-lg border border-[#D5DADF] bg-[#F8F9FA] px-3 py-2.5 lg:w-auto lg:min-w-[120px] lg:flex-none"
               >
                 <div className="text-gray-600 mb-1 text-xs flex items-center gap-1.5">
                   <span className="text-base leading-none" aria-hidden>
@@ -439,7 +439,7 @@ export function DashboardWidgets() {
       {error && <p className="text-red-400">{error}</p>}
       {data && !loading && (
         <>
-          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3 md:items-stretch">
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-stretch">
             <div className={`${CARD_CONTAINER_CLASS} flex min-h-[148px] flex-col p-5`}>
               <div className="flex flex-1 flex-col justify-between gap-2">
                 <div className="text-[13px] text-[#7F8C8D] flex items-center gap-2">
@@ -545,11 +545,12 @@ export function DashboardWidgets() {
           )}
 
           <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className={`${CARD_CONTAINER_CLASS} p-5`}>
+            <div className={`${CARD_CONTAINER_CLASS} min-w-0 p-5`}>
               <h3 className="mb-1 text-lg font-semibold text-[#34495E]">
                 {t("dashboard.topDebtors")}
               </h3>
               <p className="mb-3 text-[13px] text-[#7F8C8D]">{t("dashboard.topDebtorsHint")}</p>
+              <div className="-mx-1 overflow-x-auto px-1">
               <table className="w-full text-[13px] text-[#34495E]">
                 <thead>
                   <tr>
@@ -580,12 +581,14 @@ export function DashboardWidgets() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
-            <div className={`${CARD_CONTAINER_CLASS} p-5`}>
+            <div className={`${CARD_CONTAINER_CLASS} min-w-0 p-5`}>
               <h3 className="mb-1 text-lg font-semibold text-[#34495E]">
                 {t("dashboard.topCreditors")}
               </h3>
               <p className="mb-3 text-[13px] text-[#7F8C8D]">{t("dashboard.topCreditorsHint")}</p>
+              <div className="-mx-1 overflow-x-auto px-1">
               <table className="w-full text-[13px] text-[#34495E]">
                 <thead>
                   <tr>
@@ -616,10 +619,11 @@ export function DashboardWidgets() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 
-          <div className={`${CARD_CONTAINER_CLASS} mb-6 p-5`}>
+          <div className={`${CARD_CONTAINER_CLASS} mb-6 min-w-0 p-5`}>
             <h3 className="mb-2 text-lg font-semibold text-[#34495E]">
               {t("dashboard.revenue")}
             </h3>
@@ -669,13 +673,14 @@ export function DashboardWidgets() {
             </div>
           </div>
 
-          <div className={`${CARD_CONTAINER_CLASS} mb-6 p-5`}>
+          <div className={`${CARD_CONTAINER_CLASS} mb-6 min-w-0 p-5`}>
             <h3 className="mb-2 text-lg font-semibold text-[#34495E]">
               {t("dashboard.topProducts")}
             </h3>
             <p className="mb-4 text-[13px] text-[#7F8C8D]">
               {t("dashboard.topProductsHint")}
             </p>
+            <div className="-mx-1 overflow-x-auto px-1">
             <table className="w-full text-[13px]">
               <thead>
                 <tr>
@@ -708,6 +713,7 @@ export function DashboardWidgets() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
@@ -45,6 +46,11 @@ export default function InventoryAuditsHistoryPage() {
   useEffect(() => {
     if (!ready || !token) return;
     void load();
+  }, [load, ready, token]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    return subscribeListRefresh("inventory-audits", () => void load());
   }, [load, ready, token]);
 
   if (!ready) {

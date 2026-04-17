@@ -9,6 +9,7 @@ import { formatMoneyAzn } from "../../lib/format-money";
 import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { useRequireAuth } from "../../lib/use-require-auth";
+import { subscribeListRefresh } from "../../lib/list-refresh-bus";
 import { ModulePageLinks } from "../../components/module-page-links";
 import { EmptyState } from "../../components/empty-state";
 import {
@@ -133,6 +134,11 @@ export default function InventoryPage() {
     void load();
   }, [load, ready, token]);
 
+  useEffect(() => {
+    if (!ready || !token) return;
+    return subscribeListRefresh("inventory-hub", () => void load());
+  }, [load, ready, token]);
+
   async function saveSettings() {
     setSettingsSaving(true);
     try {
@@ -154,10 +160,6 @@ export default function InventoryPage() {
       setSettingsSaving(false);
     }
   }
-
-  const afterMutation = useCallback(() => {
-    void load();
-  }, [load]);
 
   if (!ready) {
     return (
@@ -429,41 +431,13 @@ export default function InventoryPage() {
         </>
       )}
 
-      <NewWarehouseModal
-        open={activeModal === "newWh"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
-      <PurchaseModal
-        open={activeModal === "purchase"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
-      <TransferModal
-        open={activeModal === "transfer"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
-      <AdjustmentsModal
-        open={activeModal === "adjustments"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
-      <SurplusModal
-        open={activeModal === "surplus"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
-      <WriteOffModal
-        open={activeModal === "writeOff"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
-      <AuditModal
-        open={activeModal === "audit"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={afterMutation}
-      />
+      <NewWarehouseModal open={activeModal === "newWh"} onClose={() => setActiveModal(null)} />
+      <PurchaseModal open={activeModal === "purchase"} onClose={() => setActiveModal(null)} />
+      <TransferModal open={activeModal === "transfer"} onClose={() => setActiveModal(null)} />
+      <AdjustmentsModal open={activeModal === "adjustments"} onClose={() => setActiveModal(null)} />
+      <SurplusModal open={activeModal === "surplus"} onClose={() => setActiveModal(null)} />
+      <WriteOffModal open={activeModal === "writeOff"} onClose={() => setActiveModal(null)} />
+      <AuditModal open={activeModal === "audit"} onClose={() => setActiveModal(null)} />
       <AuditHistoryModal open={activeModal === "auditHistory"} onClose={() => setActiveModal(null)} />
     </div>
   );

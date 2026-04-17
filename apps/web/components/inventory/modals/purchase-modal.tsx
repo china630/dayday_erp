@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { inputFieldWideClass } from "../../../lib/form-classes";
 import { BORDER_MUTED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
 import { uuidV4 } from "../../../lib/uuid";
@@ -34,11 +35,9 @@ const FORM_ID = "inventory-modal-purchase-form";
 export function PurchaseModal({
   open,
   onClose,
-  onSuccess,
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
 }) {
   const { t } = useTranslation();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -114,7 +113,7 @@ export function PurchaseModal({
       return;
     }
     toast.success(t("common.save"));
-    onSuccess();
+    notifyListRefresh("inventory-hub");
     onClose();
   }
 

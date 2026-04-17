@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { subscribeListRefresh } from "../../lib/list-refresh-bus";
 import { FileStack } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "next/navigation";
@@ -59,6 +60,11 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (!ready || !token) return;
     void load();
+  }, [load, ready, token]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    return subscribeListRefresh("invoices", () => void load());
   }, [load, ready, token]);
 
   useEffect(() => {
@@ -434,11 +440,7 @@ export default function InvoicesPage() {
         </>
       )}
 
-      <CreateInvoiceModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={() => void load()}
-      />
+      <CreateInvoiceModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }

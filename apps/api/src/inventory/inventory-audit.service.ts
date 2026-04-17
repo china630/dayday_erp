@@ -92,6 +92,19 @@ export class InventoryAuditService {
       throw new NotFoundException("Инвентаризационная опись не найдена");
     }
     assertMayPostManualJournal(actingUserRole);
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    const closed = getClosedPeriodKeys(org?.settings);
+    const periodKey = monthKeyUtc(draft.date);
+    if (closed.includes(periodKey)) {
+      throw new BadRequestException(
+        `Период ${periodKey} закрыт: проведение описи недоступно`,
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await this.applyApprovedAdjustmentsInTx(tx, organizationId, draft);
       await tx.inventoryAudit.update({

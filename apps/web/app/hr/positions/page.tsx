@@ -84,9 +84,19 @@ export default function HrPositionsPage() {
           { href: "/employees", labelKey: "nav.employees" },
         ]}
       />
-      <div>
-        <h1 className="text-2xl font-semibold text-[#34495E]">{t("hrPositions.title")}</h1>
-        <p className="text-sm text-[#7F8C8D] mt-1">{t("hrPositions.subtitle")}</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-[#34495E]">{t("hrPositions.title")}</h1>
+          <p className="mt-1 text-sm text-[#7F8C8D]">{t("hrPositions.subtitle")}</p>
+        </div>
+        <button
+          type="button"
+          className={PRIMARY_BUTTON_CLASS}
+          onClick={() => setCreateOpen(true)}
+          disabled={flat.length === 0}
+        >
+          + {t("hrStructure.addPosition")}
+        </button>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
@@ -125,12 +135,6 @@ export default function HrPositionsPage() {
           </div>
         )}
       </section>
-
-      <div className="flex justify-end">
-        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)} disabled={flat.length === 0}>
-          + {t("hrStructure.addPosition")}
-        </button>
-      </div>
 
       <JobPositionModal
         open={createOpen}

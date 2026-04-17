@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { inputFieldWideClass } from "../../../lib/form-classes";
 import { FORM_LABEL_CLASS } from "../../../lib/form-styles";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
@@ -11,11 +12,9 @@ import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 export function NewWarehouseModal({
   open,
   onClose,
-  onSuccess,
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
 }) {
   const { t } = useTranslation();
   const formId = "inventory-modal-new-warehouse";
@@ -48,7 +47,7 @@ export function NewWarehouseModal({
       return;
     }
     toast.success(t("common.save"));
-    onSuccess();
+    notifyListRefresh("inventory-hub");
     onClose();
   }
 

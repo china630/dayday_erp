@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { INPUT_BORDERED_CLASS } from "../../../lib/design-system";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
@@ -15,11 +16,9 @@ const FORM_ID = "inventory-modal-adjustments-form";
 export function AdjustmentsModal({
   open,
   onClose,
-  onSuccess,
 }: {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
 }) {
   const { t } = useTranslation();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -91,7 +90,7 @@ export function AdjustmentsModal({
       return;
     }
     toast.success(t("common.save"));
-    onSuccess();
+    notifyListRefresh("inventory-hub");
     onClose();
   }
 

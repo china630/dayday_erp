@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { inputFieldClass } from "../../../lib/form-classes";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
@@ -12,11 +13,9 @@ const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1
 export function CreateCounterpartyModal({
   open,
   onClose,
-  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
@@ -136,7 +135,7 @@ export function CreateCounterpartyModal({
       return;
     }
     toast.success(t("common.save"));
-    onCreated();
+    notifyListRefresh("counterparties");
     onClose();
   }
 

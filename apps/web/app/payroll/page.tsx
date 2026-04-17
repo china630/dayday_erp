@@ -32,7 +32,7 @@ import {
   EmployeeAbsencesModal,
   type EmployeeAbsenceRow,
 } from "../../components/payroll/employee-absences-modal";
-import { Filter, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 type RunRow = {
   id: string;
@@ -496,8 +496,26 @@ function PayrollPageInner() {
           { href: "/employees", labelKey: "nav.employees" },
         ]}
       />
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-4">
+      <h1 className="text-xl font-semibold text-[#34495E]">Məzuniyyət və Əmək haqqı</h1>
+
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="block shrink-0 text-[13px] font-medium text-[#34495E]">
+            Ay
+            <input
+              type="month"
+              value={monthValue}
+              onChange={(e) => setMonthValue(e.target.value)}
+              className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
+            />
+          </label>
+          <DepartmentSelect
+            value={departmentId}
+            onChange={setDepartmentId}
+            className="mt-1 block h-8 min-w-[200px] rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px] sm:min-w-[220px]"
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             className={SECONDARY_BUTTON_CLASS}
@@ -531,11 +549,6 @@ function PayrollPageInner() {
             Yeni hesab
           </button>
         </div>
-        <div className="flex items-start gap-4">
-          <h1 className="text-xl font-semibold text-[#34495E]">
-            Məzuniyyət və Əmək haqqı
-          </h1>
-        </div>
       </div>
 
       {payrollJob && (
@@ -558,31 +571,14 @@ function PayrollPageInner() {
       )}
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-gray-900 inline-flex items-center gap-2">
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
+          <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-[#34495E]">
             <Users className="h-5 w-5 text-[#7F8C8D]" aria-hidden />
             {t("payroll.slipsTitle")}
           </h2>
-          <div className="flex flex-wrap items-end justify-end gap-4">
-            <Filter className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
-            <label className="block text-[13px] font-medium text-[#34495E]">
-              Ay
-              <input
-                type="month"
-                value={monthValue}
-                onChange={(e) => setMonthValue(e.target.value)}
-                className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
-              />
-            </label>
-            <DepartmentSelect
-              value={departmentId}
-              onChange={setDepartmentId}
-              className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px] min-w-[220px]"
-            />
-          </div>
           {currentRun ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-[#34495E] bg-[#EBEDF0] px-2 py-1 rounded-[2px] border border-[#D5DADF]">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="rounded-[2px] border border-[#D5DADF] bg-[#EBEDF0] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[#34495E]">
                 {currentRun.status}
               </span>
               {currentRun.status === "DRAFT" ? (
