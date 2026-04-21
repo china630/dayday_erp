@@ -52,6 +52,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-dayday}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dayday}
       API_PORT: ${API_PORT:-4000}
       SENTRY_DSN_API: ${SENTRY_DSN_API:-}
+    # Локальное хранилище: на хосте см. DAYDAY_STORAGE_HOST_PATH; в контейнере путь = STORAGE_LOCAL_ROOT из .env (по умолчанию /var/lib/dayday/storage).
+    volumes:
+      - ${DAYDAY_STORAGE_HOST_PATH:-/var/lib/dayday/storage}:/var/lib/dayday/storage
     ports:
       - "${API_PUBLISH_PORT:-4000}:${API_PORT:-4000}"
     depends_on:
