@@ -189,6 +189,8 @@ sudo nginx -t && sudo systemctl reload nginx
 docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
 ```
 
+`DATABASE_URL` и остальные переменные из `.env` на хосте попадают в контейнер через `env_file` в `docker-compose.prod.yml`; отдельный `dotenv-cli` в образе для этих команд не требуется.
+
 ### 7.2. Идемпотентная “доводка” платформенных данных (рекомендуется)
 
 ```bash
