@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -7,7 +15,10 @@ import {
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { requireOrgRole } from "../auth/require-org-role";
 import type { AuthUser } from "../auth/types/auth-user";
+import { CheckQuota } from "../common/decorators/check-quota.decorator";
+import { QuotaGuard } from "../common/guards/quota.guard";
 import { OrganizationId } from "../common/org-id.decorator";
+import { QuotaResource } from "../quota/quota-resource";
 import { CreateInvoiceDto } from "./dto/create-invoice.dto";
 import { RecordInvoicePaymentDto } from "./dto/record-invoice-payment.dto";
 import { UpdateInvoiceStatusDto } from "./dto/update-invoice-status.dto";
@@ -48,6 +59,15 @@ export class InvoicesController {
     );
   }
 
+  @Get(":id/portal-link")
+  @ApiOperation({
+    summary:
+      "Публичная ссылка на портал счёта для клиента (без логина); создаёт token при первом запросе",
+  })
+  portalLink(@OrganizationId() orgId: string, @Param("id") id: string) {
+    return this.invoices.ensurePortalShareLink(orgId, id);
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Инвойс с позициями" })
   getOne(@OrganizationId() orgId: string, @Param("id") id: string) {
@@ -55,6 +75,8 @@ export class InvoicesController {
   }
 
   @Post()
+  @UseGuards(QuotaGuard)
+  @CheckQuota(QuotaResource.INVOICES_PER_MONTH)
   @ApiOperation({ summary: "Создать инвойс (DRAFT), поставить PDF в очередь" })
   create(@OrganizationId() orgId: string, @Body() dto: CreateInvoiceDto) {
     return this.invoices.create(orgId, dto);

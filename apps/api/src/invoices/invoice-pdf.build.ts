@@ -56,3 +56,52 @@ export async function buildInvoicePdfModelFromIds(
     signature,
   };
 }
+
+/** Guest PDF: same layout as internal invoice PDF, resolved by invoice id only (token already verified). */
+export async function buildInvoicePdfModelByInvoiceIdPublic(
+  prisma: PrismaService,
+  config: ConfigService,
+  invoiceId: string,
+): Promise<InvoicePdfModel | null> {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId },
+    include: {
+      counterparty: true,
+      items: { include: { product: true } },
+    },
+  });
+  if (!invoice) return null;
+
+  const sig = await prisma.digitalSignatureLog.findFirst({
+    where: {
+      organizationId: invoice.organizationId,
+      documentId: invoiceId,
+      documentKind: SignedDocumentKind.INVOICE,
+      status: DigitalSignatureStatus.COMPLETED,
+    },
+    orderBy: [{ signedAt: "desc" }, { createdAt: "desc" }],
+  });
+
+  const base = verifyQrPublicBase(config);
+  const signature =
+    sig?.signedAt != null
+      ? {
+          verifyUrl: `${base}/verify/${sig.id}`,
+          signedAt: sig.signedAt,
+          providerLabel:
+            sig.provider === SignatureProvider.ASAN_IMZA ? "ASAN İmza" : "SİMA",
+          certificateSubject: sig.certificateSubject,
+        }
+      : undefined;
+
+  return {
+    number: invoice.number,
+    status: invoice.status,
+    dueDate: invoice.dueDate,
+    totalAmount: invoice.totalAmount,
+    currency: invoice.currency,
+    counterparty: invoice.counterparty,
+    items: invoice.items,
+    signature,
+  };
+}

@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { GlobalCompanyDirectoryService } from "../global-directory/global-company-directory.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 /**
@@ -8,7 +9,10 @@ import { PrismaService } from "../prisma/prisma.service";
  */
 @Injectable()
 export class CounterpartiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly directory: GlobalCompanyDirectoryService,
+  ) {}
 
   async findOrCreateByVoen(params: {
     organizationId: string;
@@ -39,6 +43,14 @@ export class CounterpartiesService {
         ...(params.legalAddressFallback != null ? {} : {}),
         ...(params.vatStatusFallback != null ? {} : {}),
       },
+    });
+
+    this.directory.scheduleUpsert({
+      taxId,
+      name: global.name.trim() || taxId,
+      legalAddress: global.legalAddress ?? params.legalAddressFallback ?? null,
+      phone: null,
+      directorName: null,
     });
 
     // Create or attach local record inside the organization
@@ -87,6 +99,27 @@ export class CounterpartiesService {
     });
     if (!row) throw new NotFoundException("Counterparty not found");
     return row;
+  }
+
+  /** Refresh global directory row from local counterparty + MDM global. */
+  async syncDirectoryAfterLocalSave(organizationId: string, id: string): Promise<void> {
+    const row = await this.prisma.counterparty.findFirst({
+      where: { id, organizationId },
+      include: { global: true },
+    });
+    if (!row) {
+      return;
+    }
+    const name =
+      row.global?.name?.trim() || row.name.trim() || row.taxId.trim();
+    const legalAddress = row.global?.legalAddress ?? row.address ?? null;
+    this.directory.scheduleUpsert({
+      taxId: row.taxId.trim(),
+      name,
+      legalAddress,
+      phone: null,
+      directorName: null,
+    });
   }
 }
 

@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Organization {
@@ -12,6 +11,21 @@ model Organization {
   name                         String
   taxId                        String                        @map("tax_id")
   currency                     String                        @default("AZN")
+  /// *
+  ///    * Юридический адрес (профиль организации, v19.0).
+  legalAddress                 String?                       @map("legal_address")
+  /// *
+  ///    * Контактный телефон организации.
+  phone                        String?
+  /// *
+  ///    * Руководитель (ФИО / должность в свободной форме для печати).
+  directorName                 String?                       @map("director_name")
+  /// *
+  ///    * Логотип (URL в объектном хранилище после upload).
+  logoUrl                      String?                       @map("logo_url")
+  /// *
+  ///    * Метод оценки запасов для COGS: средневзвешенная (AVCO) или FIFO по движениям.
+  valuationMethod              InventoryValuationMethod      @default(AVCO) @map("valuation_method")
   settings                     Json                          @default("{}")
   subscriptionPlan             String?                       @map("subscription_plan")
   createdAt                    DateTime                      @default(now()) @map("created_at")
@@ -26,6 +40,9 @@ model Organization {
   ///    * Включённые модули (slug) на уровне организации — денормализация для биллинга v10.2;
   ///    * источник правды для гейтинга остаётся OrganizationSubscription.customConfig / activeModules.
   activeModules                String[]                      @default([]) @map("active_modules")
+  /// *
+  ///    * Bytes stored in object storage for this org (logos, PDFs); quota STORAGE (v23.0).
+  storageUsedBytes             BigInt                        @default(0) @map("storage_used_bytes")
   deletedAt                    DateTime?                     @map("deleted_at") @db.Timestamptz(6)
   holdingId                    String?                       @map("holding_id") @db.Uuid
   isDeleted                    Boolean                       @default(false) @map("is_deleted")
@@ -44,6 +61,7 @@ model Organization {
   cashOrders                   CashOrder[]
   counterparties               Counterparty[]
   departments                  Department[]
+  bankAccountsOrg              OrganizationBankAccount[]
   digitalSignatureLogs         DigitalSignatureLog[]
   employees                    Employee[]
   fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
@@ -75,6 +93,39 @@ model Organization {
   @@index([holdingId, id])
   @@index([holdingId])
   @@map("organizations")
+}
+
+/// *
+///  * Банковские счета организации (реквизиты для документов и интеграций), 1:N к Organization.
+model OrganizationBankAccount {
+  id             String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  bankName       String                 @map("bank_name")
+  accountNumber  String                 @map("account_number")
+  currency       OrgBankAccountCurrency
+  iban           String?
+  swift          String?
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("organization_bank_accounts")
+}
+
+/// *
+///  * Глобальный справочник компаний по VÖEN: асинхронно наполняется из профиля организации и карточек контрагентов (Smart-fill).
+model GlobalCompanyDirectory {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  taxId        String   @unique @map("tax_id")
+  name         String
+  legalAddress String?  @map("legal_address")
+  phone        String?  @map("phone")
+  directorName String?  @map("director_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("global_company_directory")
 }
 
 /// *
@@ -233,6 +284,7 @@ model Department {
   parent         Department?   @relation("DepartmentHierarchy", fields: [parentId], references: [id])
   children       Department[]  @relation("DepartmentHierarchy")
   jobPositions   JobPosition[]
+  transactions   Transaction[]
 
   @@index([organizationId])
   @@index([parentId])
@@ -365,16 +417,16 @@ model TranslationOverride {
 /// *
 ///  * Инвентаризационная опись: строки в `items` (JSON) — warehouseId, productId, factQty, inventoryAccountCode и др.
 model InventoryAudit {
-  id                    String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId        String                  @map("organization_id") @db.Uuid
-  date                  DateTime                @db.Date
-  status                InventoryAuditStatus
-  createdAt             DateTime                @default(now()) @map("created_at")
-  updatedAt             DateTime                @updatedAt @map("updated_at")
-  warehouseId           String                  @map("warehouse_id") @db.Uuid
-  lines                 InventoryAuditLine[]
-  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  warehouse             Warehouse               @relation(fields: [warehouseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  date           DateTime             @db.Date
+  status         InventoryAuditStatus
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  warehouseId    String               @map("warehouse_id") @db.Uuid
+  lines          InventoryAuditLine[]
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse      Warehouse            @relation(fields: [warehouseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([organizationId])
   @@index([organizationId, warehouseId, date], map: "inventory_audits_org_wh_date_idx")
@@ -382,19 +434,19 @@ model InventoryAudit {
 }
 
 model Warehouse {
-  id                     String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId         String           @map("organization_id") @db.Uuid
-  name                   String
-  location               String           @default("")
-  createdAt              DateTime         @default(now()) @map("created_at")
-  updatedAt              DateTime         @updatedAt @map("updated_at")
-  inventoryAccountCode   String           @default("201") @map("inventory_account_code")
-  inventory_audits       InventoryAudit[]
-  invoices               Invoice[]
-  stockItems             StockItem[]
-  stockMovements         StockMovement[]
-  users                  User[]
-  organization           Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId       String           @map("organization_id") @db.Uuid
+  name                 String
+  location             String           @default("")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  inventoryAccountCode String           @default("201") @map("inventory_account_code")
+  inventory_audits     InventoryAudit[]
+  invoices             Invoice[]
+  stockItems           StockItem[]
+  stockMovements       StockMovement[]
+  users                User[]
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("warehouses")
@@ -434,14 +486,16 @@ model StockMovement {
   note            String?
   invoiceId       String?             @map("invoice_id") @db.Uuid
   transferBatchId String?             @map("transfer_batch_id") @db.Uuid
+  /// Business document date for FIFO layer ordering; tie-breaker: createdAt.
+  documentDate    DateTime            @map("document_date")
   createdAt       DateTime            @default(now()) @map("created_at")
   invoice         Invoice?            @relation(fields: [invoiceId], references: [id])
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product         Product             @relation(fields: [productId], references: [id])
   warehouse       Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId, warehouseId, createdAt])
-  @@index([organizationId, productId, createdAt])
+  @@index([organizationId, warehouseId, documentDate, createdAt])
+  @@index([organizationId, productId, documentDate, createdAt])
   @@map("stock_movements")
 }
 
@@ -491,6 +545,9 @@ model Employee {
   ///    * Фиксированные соц. удержания с выплаты подрядчику в месяц (AZN), опционально.
   ///    * Учитываются при расчёте net вместе с 5% подоходного налога.
   contractorMonthlySocialAzn Decimal?         @map("contractor_monthly_social_azn") @db.Decimal(19, 4)
+  /// *
+  ///    * Initial balance for average salary calculations (pre-ERP payroll history), AZN.
+  initialSalaryBalance       Decimal          @default(0) @map("initial_salary_balance") @db.Decimal(19, 4)
   positionId                 String           @map("position_id") @db.Uuid
   /// *
   ///    * Субсчёт 244.x для подотчёта (если задан).
@@ -498,7 +555,7 @@ model Employee {
   patronymic                 String?
   absences                   Absence[]
   advanceReports             AdvanceReport[]
-  cashDesks                 CashDesk[]
+  cashDesks                  CashDesk[]
   cashOrders                 CashOrder[]      @relation("CashOrderEmployee")
   managedDepartments         Department[]     @relation("DepartmentManager")
   organization               Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -571,21 +628,21 @@ model PayrollSlip {
 /// *
 ///  * Отпуск / больничный (справочник периодов отсутствия).
 model Absence {
-  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId  String        @map("organization_id") @db.Uuid
-  employeeId      String        @map("employee_id") @db.Uuid
-  startDate       DateTime      @map("start_date") @db.Date
-  endDate         DateTime      @map("end_date") @db.Date
-  note            String        @default("")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  employeeId     String       @map("employee_id") @db.Uuid
+  startDate      DateTime     @map("start_date") @db.Date
+  endDate        DateTime     @map("end_date") @db.Date
+  note           String       @default("")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
   /// *
   ///    * Учитывается в табеле (синхронизация M/X).
-  approved        Boolean       @default(true) @map("approved")
-  absenceTypeId   String        @map("absence_type_id") @db.Uuid
-  absenceType     AbsenceType   @relation(fields: [absenceTypeId], references: [id])
-  employee        Employee      @relation(fields: [employeeId], references: [id])
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  approved       Boolean      @default(true) @map("approved")
+  absenceTypeId  String       @map("absence_type_id") @db.Uuid
+  absenceType    AbsenceType  @relation(fields: [absenceTypeId], references: [id])
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, employeeId])
   @@index([organizationId, startDate])
@@ -666,28 +723,28 @@ model User {
 }
 
 model Account {
-  id                        String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId            String                     @map("organization_id") @db.Uuid
-  code                      String
-  name                      String
-  type                      AccountType
-  parentId                  String?                    @map("parent_id") @db.Uuid
-  createdAt                 DateTime                   @default(now()) @map("created_at")
-  updatedAt                 DateTime                   @updatedAt @map("updated_at")
+  id             String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  type           AccountType
+  parentId       String?               @map("parent_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
   /// *
   ///    * Валюта учёта остатка по счёту (AZN, USD, EUR). Для переоценки — не-AZN.
-  currency                  String                     @default("AZN")
+  currency       String                @default("AZN")
   /// *
   ///    * Книга: NAS (основной план) или IFRS (параллельный учёт).
-  ledgerType                LedgerType                 @default(NAS) @map("ledger_type")
-  chartEntryId              String?                    @map("chart_entry_id") @db.Uuid
-  mappingsAsIfrs            AccountMapping[]           @relation("AccountMappingIfrs")
-  mappingsAsNas             AccountMapping[]           @relation("AccountMappingNas")
-  chartEntry                ChartOfAccountsEntry?      @relation(fields: [chartEntryId], references: [id])
-  organization              Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent                    Account?                   @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children                  Account[]                  @relation("AccountHierarchy")
-  journalEntries            JournalEntry[]
+  ledgerType     LedgerType            @default(NAS) @map("ledger_type")
+  chartEntryId   String?               @map("chart_entry_id") @db.Uuid
+  mappingsAsIfrs AccountMapping[]      @relation("AccountMappingIfrs")
+  mappingsAsNas  AccountMapping[]      @relation("AccountMappingNas")
+  chartEntry     ChartOfAccountsEntry? @relation(fields: [chartEntryId], references: [id])
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         Account?              @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children       Account[]             @relation("AccountHierarchy")
+  journalEntries JournalEntry[]
 
   @@unique([organizationId, code, ledgerType])
   @@index([organizationId, createdAt])
@@ -753,6 +810,8 @@ model Transaction {
   ///    * Закрытый период: транзакция не должна корректироваться задним числом
   isLocked                     Boolean                       @default(false) @map("is_locked")
   counterpartyId               String?                       @map("counterparty_id") @db.Uuid
+  /// Аналитика ЦФО: расходы/прочие проводки, привязанные к департаменту.
+  departmentId                 String?                       @map("department_id") @db.Uuid
   advanceReportsPosted         AdvanceReport?                @relation("AdvanceReportPostedTx")
   cashOrdersLinked             CashOrder[]                   @relation("CashOrderLinkedTx")
   cashOrdersPosted             CashOrder[]                   @relation("CashOrderPostedTx")
@@ -761,12 +820,14 @@ model Transaction {
   journalEntries               JournalEntry[]
   payrollRuns                  PayrollRun[]
   counterparty                 Counterparty?                 @relation(fields: [counterpartyId], references: [id])
+  department                   Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   organization                 Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, date])
   @@index([counterpartyId])
   @@index([organizationId, createdAt])
   @@index([organizationId, date, isLocked])
+  @@index([departmentId])
   @@map("transactions")
 }
 
@@ -792,26 +853,29 @@ model JournalEntry {
 }
 
 model Counterparty {
-  id                    String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId        String                 @map("organization_id") @db.Uuid
-  name                  String
-  taxId                 String                 @map("tax_id")
-  kind                  CounterpartyKind
-  role                  CounterpartyRole       @default(CUSTOMER)
-  address               String?
-  bankAccounts          Json                   @default("[]") @map("bank_accounts")
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @updatedAt @map("updated_at")
-  email                 String?
+  id             String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  name           String
+  taxId          String              @map("tax_id")
+  kind           CounterpartyKind
+  role           CounterpartyRole    @default(CUSTOMER)
+  address        String?
+  bankAccounts   Json                @default("[]") @map("bank_accounts")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  email          String?
   /// *
   ///    * Статус плательщика НДС по данным VÖEN lookup (e-taxes), null — не проверяли
-  isVatPayer            Boolean?               @map("is_vat_payer")
-  globalId              String?                @map("global_id") @db.Uuid
-  cashOrders            CashOrder[]
-  global                GlobalCounterparty?    @relation(fields: [globalId], references: [id])
-  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoices              Invoice[]
-  transactions          Transaction[]
+  isVatPayer     Boolean?            @map("is_vat_payer")
+  globalId       String?             @map("global_id") @db.Uuid
+  /// *
+  ///    * Предпочитаемый язык портала счёта для клиента: `az` | `ru` | `en` (nullable).
+  portalLocale   String?             @map("portal_locale")
+  cashOrders     CashOrder[]
+  global         GlobalCounterparty? @relation(fields: [globalId], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices       Invoice[]
+  transactions   Transaction[]
 
   @@index([organizationId, taxId])
   @@index([organizationId, createdAt])
@@ -849,20 +913,20 @@ model DigitalSignatureLog {
 }
 
 model Product {
-  id                     String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId         String                  @map("organization_id") @db.Uuid
+  id                     String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId         String               @map("organization_id") @db.Uuid
   name                   String
   sku                    String
-  price                  Decimal                 @db.Decimal(19, 4)
-  vatRate                Decimal                 @map("vat_rate") @db.Decimal(5, 2)
-  createdAt              DateTime                @default(now()) @map("created_at")
-  updatedAt              DateTime                @updatedAt @map("updated_at")
-  isService              Boolean                 @default(false) @map("is_service")
+  price                  Decimal              @db.Decimal(19, 4)
+  vatRate                Decimal              @map("vat_rate") @db.Decimal(5, 2)
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  isService              Boolean              @default(false) @map("is_service")
   inventoryAuditLines    InventoryAuditLine[]
   invoiceItems           InvoiceItem[]
-  recipeLinesAsComponent ProductRecipeLine[]     @relation("RecipeComponentProduct")
-  recipeFinished         ProductRecipe?          @relation("RecipeFinishedProduct")
-  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recipeLinesAsComponent ProductRecipeLine[]  @relation("RecipeComponentProduct")
+  recipeFinished         ProductRecipe?       @relation("RecipeFinishedProduct")
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stockItems             StockItem[]
   stockMovements         StockMovement[]
 
@@ -898,7 +962,7 @@ model ProductRecipeLine {
   quantityPerUnit    Decimal       @map("quantity_per_unit") @db.Decimal(19, 4)
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
-  wasteFactor       Decimal       @default(0) @map("waste_factor") @db.Decimal(19, 6)
+  wasteFactor        Decimal       @default(0) @map("waste_factor") @db.Decimal(19, 6)
   component          Product       @relation("RecipeComponentProduct", fields: [componentProductId], references: [id])
   recipe             ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
@@ -978,6 +1042,9 @@ model Invoice {
   /// *
   ///    * Момент первого проведения Дт 211 — Кт 601 (для акта сверки и сальдо)
   recognizedAt      DateTime?           @map("recognized_at")
+  /// *
+  ///    * Гостевая ссылка на портал счёта (opaque token); выдаётся менеджеру, без JWT.
+  publicToken       String?             @unique @map("public_token") @db.VarChar(200)
   matchedBankLines  BankStatementLine[] @relation("InvoiceBankMatch")
   cashOrders        CashOrder[]
   items             InvoiceItem[]
@@ -1095,11 +1162,11 @@ model CashOrder {
   postedTransactionId    String?              @map("posted_transaction_id") @db.Uuid
   createdAt              DateTime             @default(now()) @map("created_at")
   updatedAt              DateTime             @updatedAt @map("updated_at")
-  cashDeskId            String?               @map("cash_desk_id") @db.Uuid
-  cashFlowItemId        String?               @map("cash_flow_item_id") @db.Uuid
-  withholdingTaxAmount  Decimal?              @map("withholding_tax_amount") @db.Decimal(19, 4)
-  cashDesk              CashDesk?             @relation(fields: [cashDeskId], references: [id])
-  cashFlowItem          CashFlowItem?         @relation(fields: [cashFlowItemId], references: [id])
+  cashDeskId             String?              @map("cash_desk_id") @db.Uuid
+  cashFlowItemId         String?              @map("cash_flow_item_id") @db.Uuid
+  withholdingTaxAmount   Decimal?             @map("withholding_tax_amount") @db.Decimal(19, 4)
+  cashDesk               CashDesk?            @relation(fields: [cashDeskId], references: [id])
+  cashFlowItem           CashFlowItem?        @relation(fields: [cashFlowItemId], references: [id])
   counterparty           Counterparty?        @relation(fields: [counterpartyId], references: [id])
   employee               Employee?            @relation("CashOrderEmployee", fields: [employeeId], references: [id])
   linkedTransaction      Transaction?         @relation("CashOrderLinkedTx", fields: [linkedTransactionId], references: [id])
@@ -1261,7 +1328,7 @@ model CashFlowItem {
 
   bankStatementLines BankStatementLine[]
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  cashOrders          CashOrder[]
+  cashOrders         CashOrder[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -1269,15 +1336,17 @@ model CashFlowItem {
 }
 
 model ChartOfAccountsEntry {
-  id            String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  code          String      @unique
-  name          String
-  accountType   AccountType @map("account_type")
-  cashProfile   String?     @map("cash_profile")
-  sortOrder     Int         @default(0) @map("sort_order")
-  isDeprecated  Boolean     @default(false) @map("is_deprecated")
-  createdAt     DateTime    @default(now()) @map("created_at")
-  accounts      Account[]
+  id           String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code         String      @unique
+  name         String
+  accountType  AccountType @map("account_type")
+  /// Код родителя в том же справочнике (иерархия NAS); null — корень.
+  parentCode   String?     @map("parent_code")
+  cashProfile  String?     @map("cash_profile")
+  sortOrder    Int         @default(0) @map("sort_order")
+  isDeprecated Boolean     @default(false) @map("is_deprecated")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  accounts     Account[]
 
   @@map("chart_of_accounts_entries")
 }
@@ -1309,17 +1378,17 @@ model HoldingMembership {
 }
 
 model Holding {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name         String   @unique
-  ownerId      String   @map("owner_id") @db.Uuid
-  baseCurrency String   @default("AZN") @map("base_currency")
-  isDeleted    Boolean  @default(false) @map("is_deleted")
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name         String    @unique
+  ownerId      String    @map("owner_id") @db.Uuid
+  baseCurrency String    @default("AZN") @map("base_currency")
+  isDeleted    Boolean   @default(false) @map("is_deleted")
   deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  memberships  HoldingMembership[]
-  owner        User                 @relation(fields: [ownerId], references: [id])
+  memberships   HoldingMembership[]
+  owner         User                @relation(fields: [ownerId], references: [id])
   organizations Organization[]
 
   @@index([ownerId])
@@ -1327,15 +1396,15 @@ model Holding {
 }
 
 model InventoryAuditLine {
-  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId  String        @map("organization_id") @db.Uuid
-  inventoryAuditId String       @map("inventory_audit_id") @db.Uuid
-  productId       String        @map("product_id") @db.Uuid
-  systemQty       Decimal       @map("system_qty") @db.Decimal(19, 4)
-  factQty         Decimal       @map("fact_qty") @db.Decimal(19, 4)
-  costPrice       Decimal       @map("cost_price") @db.Decimal(19, 4)
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  inventoryAuditId String   @map("inventory_audit_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  systemQty        Decimal  @map("system_qty") @db.Decimal(19, 4)
+  factQty          Decimal  @map("fact_qty") @db.Decimal(19, 4)
+  costPrice        Decimal  @map("cost_price") @db.Decimal(19, 4)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   inventoryAudit InventoryAudit @relation(fields: [inventoryAuditId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "inventory_audit_lines_audit_fkey")
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "inventory_audit_lines_org_fkey")
@@ -1345,6 +1414,21 @@ model InventoryAuditLine {
   @@index([organizationId, inventoryAuditId], map: "inventory_audit_lines_org_audit_idx")
   @@index([organizationId, productId], map: "inventory_audit_lines_org_product_idx")
   @@map("inventory_audit_lines")
+}
+
+/// *
+///  * Оценка себестоимости списания запасов (см. PRD §11.0, TZ §14.0).
+enum InventoryValuationMethod {
+  AVCO
+  FIFO
+}
+
+/// *
+///  * Валюта банковского счёта организации (справочник реквизитов).
+enum OrgBankAccountCurrency {
+  AZN
+  USD
+  EUR
 }
 
 enum UserRole {
@@ -1537,8 +1621,8 @@ enum PaymentOrderStatus {
 /// *
 ///  * Приходный / расходный кассовый ордер (PKO / RKO), см. PRD §4.5–4.6.
 enum CashOrderKind {
-  MKO
-  MXO
+  KMO
+  KXO
 }
 
 enum CashOrderStatus {

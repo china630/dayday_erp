@@ -45,6 +45,50 @@ export function getClosedPeriodKeys(settingsJson: unknown): string[] {
   return cp.filter((x): x is string => typeof x === "string");
 }
 
+/** YYYY-MM-DD по UTC-календарю (для API отчётов). */
+export function dateToIsoYmdUtc(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Нарезка периода [dateFrom, dateTo] по календарным месяцам (UTC).
+ * Для каждого куска — границы включительно и дата курса (конец куска).
+ */
+export function accrualMonthSlices(
+  dateFrom: Date,
+  dateTo: Date,
+): Array<{ fromStr: string; toStr: string; fxAsOf: Date }> {
+  if (dateFrom.getTime() > dateTo.getTime()) {
+    return [];
+  }
+  const out: Array<{ fromStr: string; toStr: string; fxAsOf: Date }> = [];
+  let y = dateFrom.getUTCFullYear();
+  let m = dateFrom.getUTCMonth();
+  let cursor = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
+  while (cursor.getTime() <= dateTo.getTime()) {
+    const y0 = cursor.getUTCFullYear();
+    const m0 = cursor.getUTCMonth();
+    const lastDay = new Date(Date.UTC(y0, m0 + 1, 0, 0, 0, 0, 0)).getUTCDate();
+    const monthStart = new Date(Date.UTC(y0, m0, 1, 0, 0, 0, 0));
+    const monthEnd = new Date(Date.UTC(y0, m0, lastDay, 0, 0, 0, 0));
+    const sliceFrom =
+      dateFrom.getTime() > monthStart.getTime() ? dateFrom : monthStart;
+    const sliceTo = dateTo.getTime() < monthEnd.getTime() ? dateTo : monthEnd;
+    if (sliceFrom.getTime() <= sliceTo.getTime()) {
+      out.push({
+        fromStr: dateToIsoYmdUtc(sliceFrom),
+        toStr: dateToIsoYmdUtc(sliceTo),
+        fxAsOf: sliceTo,
+      });
+    }
+    cursor = new Date(Date.UTC(y0, m0 + 1, 1, 0, 0, 0, 0));
+  }
+  return out;
+}
+
 export function mergeClosedPeriod(
   settingsJson: unknown,
   key: string,

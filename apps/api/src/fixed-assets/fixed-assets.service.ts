@@ -3,10 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Decimal, Prisma } from "@dayday/database";
+import { Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateFixedAssetDto } from "./dto/create-fixed-asset.dto";
 import { UpdateFixedAssetDto } from "./dto/update-fixed-asset.dto";
+
+const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class FixedAssetsService {

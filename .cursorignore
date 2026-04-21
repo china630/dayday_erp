@@ -52,17 +52,17 @@ lerna-debug.log*
 # 5. Secrets (never index real env files)
 # =============================================================================
 
-.env
+#.env
 .env.*
 !.env.example
-**/.env
-**/.env.*
+# **/.env
+# **/.env.*
 
 # =============================================================================
 # 6. Database — Prisma migration history (large SQL history; open on demand)
 # =============================================================================
 
-**/prisma/migrations/
+# **/prisma/migrations/
 
 # =============================================================================
 # 7. System files

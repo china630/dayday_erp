@@ -1,15 +1,16 @@
-import { PrismaClient, PricingKind } from "@prisma/client";
+import { PricingKind } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import {
   loadChartJson,
   seedChartOfAccountsCatalogEntries,
-  seedChartOfAccountsForOrganization,
+  syncAzChartForOrganization,
 } from "./chart-seed";
 import {
   PRICING_MODULE_SEED_DEFAULTS,
   seedPricingModuleIfEmpty,
 } from "./pricing-module-seed";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 const PRICING_QUOTA_ROWS: ReadonlyArray<{
   key: string;
@@ -125,7 +126,7 @@ async function main() {
       select: { id: true, name: true },
     });
     for (const o of orgs) {
-      await seedChartOfAccountsForOrganization(prisma, o.id, accounts);
+      await syncAzChartForOrganization(prisma, o.id);
       console.info(
         `[seed] Chart of accounts upserted for org "${o.name}" (${o.id}), ${accounts.length} rows`,
       );
@@ -136,7 +137,7 @@ async function main() {
   const demo = process.env.SEED_DEMO_ORG === "1";
   if (!demo) {
     console.info(
-      "[seed] Задайте SEED_DEMO_ORG=1 (демо-организация) или SEED_SYNC_CHART_ALL=1 (все организации). Для новой организации в коде вызывайте syncAzChartForOrganization(db, organizationId).",
+      "[seed] Set SEED_DEMO_ORG=1 (demo org) or SEED_SYNC_CHART_ALL=1 (all orgs). Runtime onboarding uses OrganizationService.provisionChartOfAccountsFromTemplate (same as syncAzChartForOrganization).",
     );
     return;
   }
@@ -153,7 +154,7 @@ async function main() {
     update: { name: "Demo LLC" },
   });
 
-  await seedChartOfAccountsForOrganization(prisma, org.id, accounts);
+  await syncAzChartForOrganization(prisma, org.id);
   console.info(
     `[seed] Chart of accounts loaded for org ${org.id} (${accounts.length} accounts)`,
   );
@@ -166,4 +167,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });

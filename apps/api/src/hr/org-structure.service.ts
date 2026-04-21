@@ -3,12 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Decimal, Prisma } from "@dayday/database";
+import { Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateDepartmentDto } from "./dto/create-department.dto";
 import { CreateJobPositionDto } from "./dto/create-job-position.dto";
 import { UpdateDepartmentDto } from "./dto/update-department.dto";
 import { UpdateJobPositionDto } from "./dto/update-job-position.dto";
+
+const Decimal = Prisma.Decimal;
 
 export type DepartmentTreeNode = {
   id: string;

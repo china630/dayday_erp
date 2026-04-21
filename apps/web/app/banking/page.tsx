@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Landmark, Wallet } from "lucide-react";
+import { Building2, Landmark, Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { ModulePageLinks } from "../../components/module-page-links";
 import { EmptyState } from "../../components/empty-state";
@@ -88,6 +88,7 @@ function BankingQuickExpenseModal({
   const [cfId, setCfId] = useState("");
   const [desc, setDesc] = useState("");
   const [busy, setBusy] = useState(false);
+  const [createAccOpen, setCreateAccOpen] = useState(false);
 
   const loadCf = useCallback(async () => {
     if (!token) return;
@@ -189,12 +190,22 @@ function BankingQuickExpenseModal({
             </label>
             <label className="block text-sm font-medium text-gray-700 md:col-span-2">
               {t("banking.manualEntryBankAcc")}
-              <input
-                className={FORM_INPUT_CLASS}
-                value={bankAcc}
-                onChange={(e) => setBankAcc(e.target.value)}
-                required
-              />
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  className={`flex-1 ${FORM_INPUT_CLASS}`}
+                  value={bankAcc}
+                  onChange={(e) => setBankAcc(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[2px] border border-[#D5DADF] bg-white text-[#2980B9] hover:bg-[#F4F5F7]"
+                  onClick={() => setCreateAccOpen(true)}
+                  title={t("banking.newBankAccountBtn")}
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
             </label>
             <label className="block text-sm font-medium text-gray-700 md:col-span-2">
               {t("banking.manualEntryDesc")}
@@ -208,6 +219,88 @@ function BankingQuickExpenseModal({
           </div>
           <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}>
             {busy ? t("banking.uploadHint") : t("banking.manualEntrySubmit")}
+          </button>
+        </form>
+      </div>
+      {createAccOpen ? (
+        <CreateBankAccountModal
+          onClose={() => setCreateAccOpen(false)}
+          onCreated={(code) => {
+            setBankAcc(code);
+            setCreateAccOpen(false);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function CreateBankAccountModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (code: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { token } = useRequireAuth();
+  const [code, setCode] = useState("221.01");
+  const [name, setName] = useState("");
+  const [currency, setCurrency] = useState<"AZN" | "USD" | "EUR">("AZN");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setBusy(true);
+    const res = await apiFetch("/api/accounts/bank-accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, name, currency }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(t("banking.createBankAccountErr"));
+      return;
+    }
+    const created = (await res.json()) as { code?: string };
+    toast.success(t("banking.createBankAccountOk"));
+    onCreated(created.code || code);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-md p-6 bg-white`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 m-0">
+              {t("banking.createBankAccountTitle")}
+            </h3>
+          </div>
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose}>
+            {t("common.cancel")}
+          </button>
+        </div>
+
+        <form className="mt-4 space-y-4" onSubmit={(e) => void submit(e)}>
+          <label className="block text-sm font-medium text-gray-700">
+            {t("banking.createBankAccountCode")}
+            <input className={FORM_INPUT_CLASS} value={code} onChange={(e) => setCode(e.target.value)} required />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t("banking.createBankAccountName")}
+            <input className={FORM_INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t("banking.createBankAccountCurrency")}
+            <select className={FORM_INPUT_CLASS} value={currency} onChange={(e) => setCurrency(e.target.value as any)}>
+              <option value="AZN">AZN</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </label>
+          <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}>
+            {busy ? t("common.loading") : t("banking.createBankAccountSubmit")}
           </button>
         </form>
       </div>
@@ -268,6 +361,7 @@ function CashAccountCards({
   const [data, setData] = useState<AccountCardsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [createBankOpen, setCreateBankOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!token || !ledgerReady) return;
@@ -293,6 +387,13 @@ function CashAccountCards({
   }, [load, ready, token, refreshKey]);
 
   if (!ready || !token) return null;
+
+  const accounts =
+    !loading && !error && data
+      ? segmentFilter === "ALL"
+        ? data.accounts
+        : data.accounts.filter((a) => a.segment === segmentFilter)
+      : [];
 
   return (
     <section className="space-y-4">
@@ -323,12 +424,24 @@ function CashAccountCards({
           icon={<Landmark className="h-10 w-10" aria-hidden />}
         />
       )}
-      {!loading && !error && data && (
+      {!loading && !error && data && accounts.length === 0 && (
+        <EmptyState
+          title={t("banking.accountsEmpty")}
+          icon={<Landmark className="h-10 w-10" aria-hidden />}
+          action={
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => setCreateBankOpen(true)}
+            >
+              {t("banking.newBankAccountBtn")}
+            </button>
+          }
+        />
+      )}
+      {!loading && !error && data && accounts.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {(segmentFilter === "ALL"
-            ? data.accounts
-            : data.accounts.filter((a) => a.segment === segmentFilter)
-          ).map((acc) => {
+          {accounts.map((acc) => {
             const Icon = segmentIcon(acc.segment);
             const segTitle =
               acc.segment === "CASH" ? t("banking.segmentCash") : t("banking.segmentBank");
@@ -368,6 +481,15 @@ function CashAccountCards({
           })}
         </div>
       )}
+      {createBankOpen ? (
+        <CreateBankAccountModal
+          onClose={() => setCreateBankOpen(false)}
+          onCreated={() => {
+            setCreateBankOpen(false);
+            void load();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

@@ -37,6 +37,11 @@ export type SubscriptionSnapshot = {
       max: number | null;
       atLimit: boolean;
     };
+    storage: {
+      currentBytes: string;
+      maxGb: number | null;
+      atLimit: boolean;
+    };
   };
   expiresAt: string | null;
   isTrial: boolean;
@@ -75,6 +80,7 @@ function enterpriseBypassSnapshot(): SubscriptionSnapshot {
     quotas: {
       employees: { current: 0, max: null, atLimit: false },
       invoicesThisMonth: { current: 0, max: null, atLimit: false },
+      storage: { currentBytes: "0", maxGb: null, atLimit: false },
     },
     expiresAt: null,
     isTrial: false,

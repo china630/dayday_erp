@@ -13,8 +13,8 @@ import { S3StorageService } from "./s3-storage.service";
       provide: STORAGE_SERVICE,
       inject: [ConfigService, LocalStorageService],
       useFactory: (config: ConfigService, local: LocalStorageService): StorageService => {
-        const driver = (config.get<string>("STORAGE_DRIVER") ?? "local").toLowerCase();
-        if (driver !== "s3") {
+        const driver = (config.get<string>("STORAGE_DRIVER") ?? "s3").toLowerCase();
+        if (driver === "local") {
           return local;
         }
         const s3 = new S3StorageService(config);

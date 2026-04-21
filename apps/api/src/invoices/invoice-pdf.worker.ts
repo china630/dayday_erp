@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { DigitalSignatureStatus, SignedDocumentKind } from "@dayday/database";
 import { Job, Worker } from "bullmq";
 import { PrismaService } from "../prisma/prisma.service";
+import { QuotaService } from "../quota/quota.service";
 import { connectionFromRedisUrl } from "../queue/bullmq.config";
 import { STORAGE_SERVICE, type StorageService } from "../storage/storage.interface";
 import {
@@ -21,6 +22,7 @@ export class InvoicePdfWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly quota: QuotaService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
@@ -55,8 +57,10 @@ export class InvoicePdfWorker implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const pdf = await renderInvoicePdf(model);
+    await this.quota.assertStorageQuota(organizationId, pdf.length);
     const key = `orgs/${organizationId}/invoices/${invoiceId}.pdf`;
     await this.storage.putObject(key, pdf, { contentType: "application/pdf" });
+    await this.quota.addStorageUsage(organizationId, pdf.length);
     this.logger.log(`Stored invoice PDF: ${key}`);
 
     const hashHex = createHash("sha256").update(pdf).digest("hex");

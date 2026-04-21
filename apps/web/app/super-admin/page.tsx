@@ -13,7 +13,14 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 
-type Tab = "dashboard" | "orgs" | "users" | "subs" | "i18n" | "logs";
+type Tab =
+  | "dashboard"
+  | "orgs"
+  | "users"
+  | "subs"
+  | "i18n"
+  | "logs"
+  | "chartTemplate";
 
 type SubsSubTab = "pricing" | "quotas" | "bundles";
 
@@ -256,6 +263,27 @@ export default function SuperAdminPage() {
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  const [chartTpl, setChartTpl] = useState<
+    Array<{
+      id: string;
+      code: string;
+      name: string;
+      accountType: string;
+      parentCode: string | null;
+      cashProfile: string | null;
+      sortOrder: number;
+      isDeprecated: boolean;
+    }>
+  | null>(null);
+  const [chartTplBusy, setChartTplBusy] = useState(false);
+  const [newTpl, setNewTpl] = useState({
+    code: "",
+    name: "",
+    accountType: "EXPENSE",
+    parentCode: "",
+    sortOrder: 0,
+  });
+
   const [subModalOrg, setSubModalOrg] = useState<OrgRow | null>(null);
   const [subTier, setSubTier] = useState<"STARTER" | "BUSINESS" | "ENTERPRISE">(
     "STARTER",
@@ -428,6 +456,63 @@ export default function SuperAdminPage() {
     setLogs(await res.json());
   }, [token, logOrg]);
 
+  const loadChartTemplate = useCallback(async () => {
+    if (!token) return;
+    setErr(null);
+    setChartTplBusy(true);
+    const res = await apiFetch("/api/admin/chart-template");
+    setChartTplBusy(false);
+    if (!res.ok) {
+      setErr(`${res.status}`);
+      return;
+    }
+    setChartTpl(
+      (await res.json()) as Array<{
+        id: string;
+        code: string;
+        name: string;
+        accountType: string;
+        parentCode: string | null;
+        cashProfile: string | null;
+        sortOrder: number;
+        isDeprecated: boolean;
+      }>,
+    );
+  }, [token]);
+
+  const saveChartTemplateRow = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!token) return;
+      setErr(null);
+      const res = await apiFetch("/api/admin/chart-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: newTpl.code.trim(),
+          name: newTpl.name.trim(),
+          accountType: newTpl.accountType,
+          parentCode: newTpl.parentCode.trim() || null,
+          sortOrder: Number(newTpl.sortOrder) || 0,
+          isDeprecated: false,
+        }),
+      });
+      if (!res.ok) {
+        setErr(`${res.status}: ${await res.text()}`);
+        return;
+      }
+      setNewTpl({
+        code: "",
+        name: "",
+        accountType: "EXPENSE",
+        parentCode: "",
+        sortOrder: 0,
+      });
+      void loadChartTemplate();
+    },
+    [token, newTpl, loadChartTemplate],
+  );
+
   const openSubModal = useCallback((o: OrgRow) => {
     setSubModalOrg(o);
     const sub = o.subscription;
@@ -548,6 +633,11 @@ export default function SuperAdminPage() {
     if (tab === "logs") void loadLogs();
   }, [ready, token, user?.isSuperAdmin, tab, loadLogs]);
 
+  useEffect(() => {
+    if (!ready || !token || !user?.isSuperAdmin) return;
+    if (tab === "chartTemplate") void loadChartTemplate();
+  }, [ready, token, user?.isSuperAdmin, tab, loadChartTemplate]);
+
   if (!ready) {
     return (
       <div className="text-sm text-gray-500 py-12 text-center">
@@ -609,6 +699,7 @@ export default function SuperAdminPage() {
         {tabBtn("subs", t("superAdmin.tabSubscriptions"))}
         {tabBtn("i18n", t("superAdmin.tabLocalization"))}
         {tabBtn("logs", t("superAdmin.tabLogs"))}
+        {tabBtn("chartTemplate", t("superAdmin.tabChartTemplate"))}
       </div>
 
       {err ? (
@@ -1579,6 +1670,126 @@ export default function SuperAdminPage() {
               <div className="px-2 py-2 text-gray-500">
                 {t("superAdmin.logsTotal", { count: logs.total })}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "chartTemplate" && (
+        <div className="space-y-4">
+          <p className="text-[13px] text-[#7F8C8D] max-w-3xl">
+            {t("superAdmin.chartTemplateIntro")}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={SECONDARY_BUTTON_CLASS}
+              onClick={() => void loadChartTemplate()}
+              disabled={chartTplBusy}
+            >
+              {t("superAdmin.chartTemplateRefresh")}
+            </button>
+          </div>
+          <form
+            onSubmit={(e) => void saveChartTemplateRow(e)}
+            className={`${CARD_CONTAINER_CLASS} p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6`}
+          >
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColCode")}
+              <input
+                required
+                value={newTpl.code}
+                onChange={(e) => setNewTpl((s) => ({ ...s, code: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-[#34495E] sm:col-span-2">
+              {t("superAdmin.chartColName")}
+              <input
+                required
+                value={newTpl.name}
+                onChange={(e) => setNewTpl((s) => ({ ...s, name: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColType")}
+              <select
+                value={newTpl.accountType}
+                onChange={(e) =>
+                  setNewTpl((s) => ({ ...s, accountType: e.target.value }))
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              >
+                {(["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"] as const).map(
+                  (k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColParent")}
+              <input
+                value={newTpl.parentCode}
+                onChange={(e) =>
+                  setNewTpl((s) => ({ ...s, parentCode: e.target.value }))
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                placeholder="101"
+              />
+            </label>
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColSort")}
+              <input
+                type="number"
+                value={newTpl.sortOrder}
+                onChange={(e) =>
+                  setNewTpl((s) => ({
+                    ...s,
+                    sortOrder: Number.parseInt(e.target.value, 10) || 0,
+                  }))
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              />
+            </label>
+            <div className="flex items-end">
+              <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={chartTplBusy}>
+                {t("superAdmin.chartSaveRow")}
+              </button>
+            </div>
+          </form>
+          {chartTplBusy && !chartTpl ? (
+            <p className="text-sm text-[#7F8C8D]">{t("common.loading")}</p>
+          ) : null}
+          {chartTpl && (
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white text-xs max-h-[60vh] overflow-y-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50 text-left text-gray-600 sticky top-0">
+                  <tr>
+                    <th className="px-2 py-2">{t("superAdmin.chartColCode")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColName")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColType")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColParent")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColSort")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColDepr")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chartTpl.map((r) => (
+                    <tr key={r.id} className="border-t border-gray-100">
+                      <td className="px-2 py-1 font-mono whitespace-nowrap">{r.code}</td>
+                      <td className="px-2 py-1">{r.name}</td>
+                      <td className="px-2 py-1">{r.accountType}</td>
+                      <td className="px-2 py-1 font-mono">{r.parentCode ?? "—"}</td>
+                      <td className="px-2 py-1">{r.sortOrder}</td>
+                      <td className="px-2 py-1">{r.isDeprecated ? "✓" : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

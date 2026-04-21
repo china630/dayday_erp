@@ -10,9 +10,9 @@
  * После очистки у супер-админа не будет членства в организациях — обычный POST /api/auth/login
  * вернёт «No organization access», пока не будет создана новая организация (регистрация / seed).
  */
-import { PrismaClient } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   if (!process.argv.includes("--yes")) {
@@ -57,4 +57,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });

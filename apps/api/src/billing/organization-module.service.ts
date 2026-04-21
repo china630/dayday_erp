@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Decimal, Prisma } from "@dayday/database";
+import { Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { SubscriptionAccessService } from "../subscription/subscription-access.service";
 import { catalogModuleKeyToPatch } from "./billing-module-toggle.helpers";
@@ -24,7 +24,7 @@ export class OrganizationModuleService {
     tx: Prisma.TransactionClient,
     organizationId: string,
     moduleKey: string,
-    pricePerMonth: Decimal,
+    pricePerMonth: Prisma.Decimal,
   ): Promise<void> {
     await tx.organizationModule.upsert({
       where: {
@@ -54,7 +54,7 @@ export class OrganizationModuleService {
     tx: Prisma.TransactionClient,
     organizationId: string,
     moduleKey: string,
-    pricePerMonth: Decimal,
+    pricePerMonth: Prisma.Decimal,
   ): Promise<void> {
     const accessUntil = endOfUtcMonth(new Date());
     await tx.organizationModule.upsert({

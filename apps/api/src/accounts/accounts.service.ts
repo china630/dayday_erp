@@ -3,12 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, Decimal, LedgerType, Prisma } from "@dayday/database";
+import { AccountType, LedgerType, Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CreateAccountMappingDto } from "./dto/create-account-mapping.dto";
+import type { CreateBankAccountDto } from "./dto/create-bank-account.dto";
 
 /** Клиент БД для операций счетов внутри `prisma.$transaction`. */
 export type AccountsDb = PrismaService | Prisma.TransactionClient;
+
+const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class AccountsService {
@@ -279,5 +282,47 @@ export class AccountsService {
       throw new NotFoundException("Mapping not found");
     }
     await this.prisma.accountMapping.delete({ where: { id } });
+  }
+
+  async createBankAccount(organizationId: string, dto: CreateBankAccountDto) {
+    const code = dto.code.trim();
+    const name = dto.name.trim();
+    if (!code || !name) {
+      throw new BadRequestException("code and name are required");
+    }
+    if (!code.startsWith("221.")) {
+      throw new BadRequestException("code must start with 221.");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const exists = await tx.account.findFirst({
+        where: { organizationId, ledgerType: LedgerType.NAS, code },
+        select: { id: true },
+      });
+      if (exists) {
+        throw new BadRequestException("Account code already exists");
+      }
+
+      const parent = await tx.account.findFirst({
+        where: { organizationId, ledgerType: LedgerType.NAS, code: "221" },
+        select: { id: true },
+      });
+      if (!parent) {
+        throw new NotFoundException("Parent bank account 221 not found");
+      }
+
+      return tx.account.create({
+        data: {
+          organizationId,
+          ledgerType: LedgerType.NAS,
+          code,
+          name,
+          type: AccountType.ASSET,
+          currency: dto.currency ?? "AZN",
+          parentId: parent.id,
+        },
+        select: { id: true, code: true, name: true, currency: true, ledgerType: true },
+      });
+    });
   }
 }

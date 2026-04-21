@@ -7,7 +7,8 @@ export type StoredObjectMeta = {
 };
 
 /**
- * Абстракция хранилища файлов: локальный том (MVP) или S3-compatible (Spaces, AWS S3, MinIO).
+ * S3-compatible object storage port: local disk (dev) or AWS S3 / Spaces / MinIO (prod).
+ * Tenant keys: `orgs/{organizationId}/…`, logos `org-logos/{organizationId}/…`.
  */
 export interface StorageService {
   putObject(
@@ -20,8 +21,11 @@ export interface StorageService {
 
   deleteObject(key: string): Promise<void>;
 
-  /** Публичный или presigned URL — зависит от драйвера; для локального MVP можно вернуть API path. */
+  /** Public or presigned URL — driver-specific; local driver may return an API path. */
   getPublicUrl?(key: string): string;
 }
+
+/** Alias for {@link StorageService} (object / bucket API). */
+export type ObjectStoragePort = StorageService;
 
 export const STORAGE_SERVICE = Symbol("STORAGE_SERVICE");

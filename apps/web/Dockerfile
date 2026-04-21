@@ -2,7 +2,7 @@
 # Build from repository root: docker build -f apps/web/Dockerfile .
 # NEXT_PUBLIC_API_URL is baked into the client bundle at build time when used in client code.
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -46,7 +46,7 @@ RUN set -eux; \
 
 RUN npm prune --omit=dev
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 

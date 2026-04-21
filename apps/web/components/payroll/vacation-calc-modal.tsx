@@ -16,6 +16,18 @@ import { formatMoneyAzn } from "../../lib/format-money";
 type EmpOpt = { id: string; firstName: string; lastName: string };
 type AbsenceTypeOpt = { id: string; nameAz: string; formula: string };
 
+type VacationCalcOut = {
+  calendarDays: number | string;
+  averageMonthlyGross: string;
+  averageDailyGross: string;
+  vacationPayAmount: string;
+  divisor304?: string;
+  totalGrossInWindow?: string;
+  monthsInAverage?: number | string;
+  monthsWithData?: number | string;
+  monthsExpected?: number | string;
+};
+
 export function VacationCalcModal({
   open,
   onClose,
@@ -35,7 +47,7 @@ export function VacationCalcModal({
   const [absenceTypeId, setAbsenceTypeId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [out, setOut] = useState<Record<string, string> | null>(null);
+  const [out, setOut] = useState<VacationCalcOut | null>(null);
 
   const laborTypes = useMemo(
     () => absenceTypes.filter((x) => x.formula === "LABOR_LEAVE_304"),
@@ -78,7 +90,7 @@ export function VacationCalcModal({
       toast.error(t("common.loadErr"), { description: await res.text() });
       return;
     }
-    setOut((await res.json()) as Record<string, string>);
+    setOut((await res.json()) as VacationCalcOut);
   }
 
   if (!open) return null;
@@ -139,8 +151,14 @@ export function VacationCalcModal({
                 {formatMoneyAzn(out.vacationPayAmount)} AZN ({Number(out.calendarDays)}{" "}
                 {t("payroll.absenceThPeriod").toLowerCase()})
               </div>
+              {"monthsExpected" in out ? (
+                <div className="text-slate-700 text-xs">
+                  {t("payroll.calcMonths", { n: Number((out as any).monthsExpected) || 0 })}
+                </div>
+              ) : null}
               <div className="text-slate-600 text-xs">
-                Ø мес.: {out.averageMonthlyGross} · Ø gün: {out.averageDailyGross} · ay sayı: {out.monthsInAverage}
+                Ø mes.: {out.averageMonthlyGross} · Ø gün: {out.averageDailyGross} · 12 ay:{" "}
+                {out.totalGrossInWindow} · ay sayı: {out.monthsWithData ?? out.monthsInAverage}
                 {out.divisor304 ? ` · ÷ ${out.divisor304}` : ""}
               </div>
             </div>

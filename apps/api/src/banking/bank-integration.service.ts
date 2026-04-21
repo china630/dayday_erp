@@ -10,7 +10,7 @@ import {
   BankStatementLineOrigin,
   type BankStatementLineType,
   type Prisma,
-  Decimal,
+  Prisma as DbPrisma,
 } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { BankMatchService } from "./bank-match.service";
@@ -23,12 +23,15 @@ export type DirectSyncTrigger = "manual" | "cron" | "webhook";
 
 export type InboundBankTransaction = {
   integrationKey: string;
-  amount: Decimal;
+  amount: DbPrisma.Decimal;
   type: BankStatementLineType;
   counterpartyTaxId: string | null;
   valueDate: Date;
   description: string | null;
 };
+
+type Decimal = DbPrisma.Decimal;
+const Decimal = DbPrisma.Decimal;
 
 function asSettingsRecord(v: unknown): Record<string, unknown> {
   if (typeof v === "object" && v !== null && !Array.isArray(v)) {

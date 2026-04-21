@@ -26,6 +26,12 @@ export class TierQuotasDto {
   @IsInt()
   @Min(0)
   maxInvoicesPerMonth?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxStorageGb?: number | null;
 }
 
 export class SetTierQuotasDto {

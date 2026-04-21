@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
-  Decimal,
   LedgerType,
   Prisma,
   UserRole,
@@ -16,6 +15,9 @@ import {
   getClosedPeriodKeys,
   monthKeyUtc,
 } from "../reporting/reporting-period.util";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 export type PostTransactionLine = {
   accountCode: string;
@@ -65,11 +67,21 @@ export class AccountingService {
       isFinal?: boolean;
       /** Аналитика: контрагент (закупки, взаимозачёт и т.д.) */
       counterpartyId?: string | null;
+      /** ЦФО: фильтр P&L по департаменту для расходных/прочих проводок. */
+      departmentId?: string | null;
       lines: PostTransactionLine[];
     },
   ): Promise<{ transactionId: string }> {
-    const { organizationId, date, reference, description, isFinal, counterpartyId, lines } =
-      params;
+    const {
+      organizationId,
+      date,
+      reference,
+      description,
+      isFinal,
+      counterpartyId,
+      departmentId,
+      lines,
+    } = params;
     this.validateLines(lines);
 
     const org = await tx.organization.findUnique({
@@ -102,6 +114,15 @@ export class AccountingService {
       }
     }
 
+    if (departmentId != null && departmentId !== "") {
+      const dept = await tx.department.findFirst({
+        where: { id: departmentId, organizationId },
+      });
+      if (!dept) {
+        throw new NotFoundException("Department not found for organization");
+      }
+    }
+
     const transaction = await tx.transaction.create({
       data: {
         organizationId,
@@ -110,6 +131,8 @@ export class AccountingService {
         description: description ?? null,
         isFinal: isFinal ?? false,
         counterpartyId: counterpartyId ?? null,
+        departmentId:
+          departmentId != null && departmentId !== "" ? departmentId : null,
       },
     });
 
@@ -199,6 +222,7 @@ export class AccountingService {
     description?: string;
     isFinal?: boolean;
     counterpartyId?: string | null;
+    departmentId?: string | null;
     lines: PostTransactionLine[];
     /** Ручная проводка (UI): проверка политики USER. */
     actingUserRole?: UserRole;

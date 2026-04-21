@@ -1,4 +1,4 @@
-import { Decimal } from "@dayday/database";
+import { Prisma } from "@dayday/database";
 import { InvoiceStatus, LedgerType } from "@dayday/database";
 import { AccountingService } from "../../src/accounting/accounting.service";
 import { NettingService } from "../../src/accounting/netting.service";
@@ -7,6 +7,9 @@ import {
   RECEIVABLE_ACCOUNT_CODE,
 } from "../../src/ledger.constants";
 import type { PrismaService } from "../../src/prisma/prisma.service";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 describe("NettingService.createNetting (взаимозачёт)", () => {
   const orgId = "00000000-0000-0000-0000-000000000001";
@@ -78,6 +81,9 @@ describe("NettingService.createNetting (взаимозачёт)", () => {
     };
 
     const prisma = {
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({ settings: {} }),
+      },
       counterparty: {
         findFirst: jest.fn().mockResolvedValue({ id: cpId, name: "Test CP" }),
       },

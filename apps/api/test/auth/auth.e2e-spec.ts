@@ -8,6 +8,7 @@ import { AccountsService } from "../../src/accounts/accounts.service";
 import { OrgStructureService } from "../../src/hr/org-structure.service";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { QuotaService } from "../../src/quota/quota.service";
+import { OrganizationsService } from "../../src/organizations/organizations.service";
 
 describe("AuthService (JWT: login + switch-org)", () => {
   const orgA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -35,6 +36,7 @@ describe("AuthService (JWT: login + switch-org)", () => {
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: AccountsService, useValue: {} },
+        { provide: OrganizationsService, useValue: {} },
         { provide: OrgStructureService, useValue: {} },
         { provide: QuotaService, useValue: {} },
       ],
@@ -80,6 +82,9 @@ describe("AuthService (JWT: login + switch-org)", () => {
       organizationMembership: {
         findMany: jest.fn().mockResolvedValue([orgRow]),
         findUnique: jest.fn().mockResolvedValue({ role: UserRole.OWNER }),
+      },
+      holding: {
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
 
@@ -137,6 +142,9 @@ describe("AuthService (JWT: login + switch-org)", () => {
             },
           },
         ]),
+      },
+      holding: {
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
 

@@ -1,8 +1,10 @@
 export * from "@prisma/client";
-export { Decimal } from "@prisma/client/runtime/library";
+export { Prisma } from "@prisma/client";
+export declare const Decimal: typeof Prisma.Decimal;
 export {
   chartOfAccountsAzJsonPath,
   loadChartJson,
+  loadChartTemplateFromDb,
   seedChartOfAccountsForOrganization,
   syncAzChartForOrganization,
   type ChartAccountSeed,

@@ -7,9 +7,10 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
+  Logger,
   NestInterceptor,
 } from "@nestjs/common";
-import { Observable, from } from "rxjs";
+import { Observable, from, of } from "rxjs";
 import { mergeMap } from "rxjs/operators";
 import type { AuthUser } from "../auth/types/auth-user";
 import { AuditService } from "./audit.service";
@@ -18,6 +19,8 @@ const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 @Injectable()
 export class AuditMutationInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(AuditMutationInterceptor.name);
+
   constructor(private readonly audit: AuditService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -41,7 +44,8 @@ export class AuditMutationInterceptor implements NestInterceptor {
       pathRaw.includes("/auth/login") ||
       pathRaw.includes("/auth/register-user") ||
       pathRaw.includes("/auth/register") ||
-      pathRaw.includes("/auth/refresh")
+      pathRaw.includes("/auth/refresh") ||
+      pathRaw.includes("/billing/webhooks")
     ) {
       return next.handle();
     }
@@ -49,13 +53,19 @@ export class AuditMutationInterceptor implements NestInterceptor {
     return from(this.audit.loadOldSnapshot(req)).pipe(
       mergeMap((oldSnapshot) =>
         next.handle().pipe(
-          mergeMap(async (responseBody: unknown) => {
-            await this.audit.persistAfterMutation({
-              req,
-              responseBody,
-              oldSnapshot,
-            });
-            return responseBody;
+          mergeMap((responseBody: unknown) => {
+            void this.audit
+              .persistAfterMutation({
+                req,
+                responseBody,
+                oldSnapshot,
+              })
+              .catch((err: unknown) => {
+                const msg =
+                  err instanceof Error ? err.message : String(err);
+                this.logger.error(`persistAfterMutation failed: ${msg}`);
+              });
+            return of(responseBody);
           }),
         ),
       ),

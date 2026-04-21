@@ -29,6 +29,9 @@ function toAccountType(value: string): AccountType {
 }
 
 /**
+ * Platform template rows live in `chart_of_accounts_entries` (NAS catalog); this copies them
+ * into tenant `accounts` for one organization (used by API onboarding, not by ad-hoc seed).
+ *
  * Идемпотентно создаёт/обновляет счета организации из массива (сначала корни, затем дочерние).
  */
 export async function seedChartOfAccountsForOrganization(
@@ -148,6 +151,7 @@ export async function seedChartOfAccountsCatalogEntries(
         code: row.code,
         name: row.name,
         accountType: type,
+        parentCode: row.parentCode?.trim() || null,
         cashProfile,
         sortOrder: 0,
         isDeprecated: false,
@@ -155,17 +159,43 @@ export async function seedChartOfAccountsCatalogEntries(
       update: {
         name: row.name,
         accountType: type,
+        parentCode: row.parentCode?.trim() || null,
         cashProfile,
       },
     });
   }
 }
 
+/**
+ * Платформенный шаблон NAS из `chart_of_accounts_entries` (супер-админ UI).
+ * Только строки без isDeprecated; порядок — sortOrder, затем code.
+ */
+export async function loadChartTemplateFromDb(
+  db: PrismaClient | Prisma.TransactionClient,
+): Promise<ChartAccountSeed[]> {
+  const rows = await db.chartOfAccountsEntry.findMany({
+    where: { isDeprecated: false },
+    orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+  });
+  return rows.map((r) => ({
+    code: r.code,
+    name: r.name,
+    type: r.accountType,
+    parentCode: r.parentCode?.trim() || null,
+  }));
+}
+
 export async function syncAzChartForOrganization(
   db: PrismaClient | Prisma.TransactionClient,
   organizationId: string,
 ): Promise<void> {
-  const accounts = await loadChartJson();
-  await seedChartOfAccountsCatalogEntries(db, accounts);
+  const catalogCount = await db.chartOfAccountsEntry.count();
+  let accounts: ChartAccountSeed[];
+  if (catalogCount > 0) {
+    accounts = await loadChartTemplateFromDb(db);
+  } else {
+    accounts = await loadChartJson();
+    await seedChartOfAccountsCatalogEntries(db, accounts);
+  }
   await seedChartOfAccountsForOrganization(db, organizationId, accounts);
 }

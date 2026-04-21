@@ -47,6 +47,7 @@ export class AccountingController {
       description: desc,
       isFinal: true,
       actingUserRole: requireOrgRole(user),
+      departmentId: dto.departmentId ?? null,
       lines: [
         {
           accountCode: MISC_OPERATING_EXPENSE_ACCOUNT_CODE,

@@ -5,11 +5,11 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
-  Decimal,
   PaymentOrderStatus,
   Prisma,
   SubscriptionTier,
 } from "@dayday/database";
+import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BillingService } from "./billing.service";
 import { SystemConfigService } from "../system-config/system-config.service";
@@ -36,6 +36,7 @@ export class PaymentProviderService {
     private readonly pasha: PashaBankPaymentProvider,
     private readonly config: ConfigService,
     private readonly systemConfig: SystemConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -62,7 +63,7 @@ export class PaymentProviderService {
     const order = await this.prisma.paymentOrder.create({
       data: {
         organizationId,
-        amountAzn: new Decimal(amountAzn),
+        amountAzn: new Prisma.Decimal(amountAzn),
         monthsApplied: months,
         description: `Subscription renewal (${months} mo.)`,
         idempotencyKey: dto.idempotencyKey ?? null,
@@ -73,7 +74,7 @@ export class PaymentProviderService {
     });
 
     const returnUrl = `${webApp}/billing/success?orderId=${encodeURIComponent(order.id)}`;
-    const callbackUrl = `${apiPublic}/api/public/billing/webhook`;
+    const callbackUrl = `${apiPublic}/api/billing/webhooks/pasha_bank`;
 
     const session = await this.pasha.createPaymentSession({
       internalOrderId: order.id,
@@ -125,7 +126,7 @@ export class PaymentProviderService {
     const order = await this.prisma.paymentOrder.create({
       data: {
         organizationId,
-        amountAzn: new Decimal(amountAzn),
+        amountAzn: new Prisma.Decimal(amountAzn),
         monthsApplied: 0,
         description: `Pro-rata: enable module ${moduleKey} until month end`,
         idempotencyKey: null,
@@ -140,7 +141,7 @@ export class PaymentProviderService {
     });
 
     const returnUrl = `${webApp}/billing/success?orderId=${encodeURIComponent(order.id)}`;
-    const callbackUrl = `${apiPublic}/api/public/billing/webhook`;
+    const callbackUrl = `${apiPublic}/api/billing/webhooks/pasha_bank`;
 
     const session = await this.pasha.createPaymentSession({
       internalOrderId: order.id,
@@ -251,13 +252,22 @@ export class PaymentProviderService {
         });
       }
 
-      await tx.paymentOrder.update({
-        where: { id: orderId },
+      const marked = await tx.paymentOrder.updateMany({
+        where: { id: orderId, status: PaymentOrderStatus.PENDING },
         data: {
           status: PaymentOrderStatus.PAID,
           paidAt: new Date(),
         },
       });
+
+      if (marked.count === 0) {
+        const again = await tx.paymentOrder.findUnique({ where: { id: orderId } });
+        if (again?.status === PaymentOrderStatus.PAID) {
+          await this.billingPlatform.recordPaidOrderInvoice(tx, orderId);
+          return;
+        }
+        throw new BadRequestException("Payment order cannot be completed");
+      }
 
       const toggleMeta = parseToggleModuleMetadata(current.metadata);
       if (
@@ -289,6 +299,13 @@ export class PaymentProviderService {
           { clearTrial: true },
         );
       }
+
+      await this.audit.logPlatformBillingPaymentApplied(tx, orderId, {
+        organizationId: current.organizationId,
+        amountAzn: current.amountAzn.toString(),
+        monthsApplied: current.monthsApplied,
+        ownerUserId,
+      });
 
       await this.billingPlatform.recordPaidOrderInvoice(tx, orderId);
     });

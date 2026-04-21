@@ -19,17 +19,25 @@ export default async function RootLayout({
   const headerStore = await headers();
   const token = cookieStore.get("dayday_access_token")?.value;
   const pathname = headerStore.get("x-dayday-pathname") ?? "";
+  const portalPath = pathname.startsWith("/portal");
   const publicPath =
     pathname === "/login" ||
     pathname === "/register" ||
     pathname === "/register-org" ||
-    pathname.startsWith("/verify/");
+    pathname.startsWith("/verify/") ||
+    portalPath;
 
   return (
     <html lang="ru" suppressHydrationWarning>
       <body style={{ fontFamily: "system-ui", margin: 0 }}>
         <Providers>
-          {!token && !publicPath ? <LoginPage /> : <AppShell>{children}</AppShell>}
+          {!token && !publicPath ? (
+            <LoginPage />
+          ) : portalPath ? (
+            children
+          ) : (
+            <AppShell>{children}</AppShell>
+          )}
         </Providers>
       </body>
     </html>

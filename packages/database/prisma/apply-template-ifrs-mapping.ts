@@ -4,10 +4,11 @@
  * Stores per-org applied version in OrganizationSubscription.customConfig:
  *   { templates: { ifrsMapping: { version: number } } }
  */
-import { PrismaClient, LedgerType, AccountType } from "@prisma/client";
+import { LedgerType, AccountType } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import { loadTemplateIfrsMappingPackage } from "./template-ifrs";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type TemplatesConfig = {
   templates?: {
@@ -165,5 +166,6 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });
 

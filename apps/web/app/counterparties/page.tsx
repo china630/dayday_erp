@@ -27,9 +27,20 @@ export default function CounterpartiesPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
   const [rows, setRows] = useState<Row[]>([]);
+  const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+
+  const filtered = useCallback(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((r) => {
+      const name = String(r.name ?? "").toLowerCase();
+      const voen = String(r.taxId ?? "").toLowerCase();
+      return name.includes(term) || voen.includes(term);
+    });
+  }, [q, rows]);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -90,6 +101,14 @@ export default function CounterpartiesPage() {
 
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-3">{t("counterparties.list")}</h2>
+        <div className="mb-3">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("counterparties.search", { defaultValue: "Поиск по имени или VÖEN…" })}
+            className="w-full max-w-md rounded-[2px] border border-[#D5DADF] px-3 py-2 text-sm outline-none focus:border-[#2980B9]"
+          />
+        </div>
         {loading && <p className="text-gray-600">{t("common.loading")}</p>}
         {!loading && rows.length === 0 && !error && (
           <EmptyState
@@ -105,7 +124,16 @@ export default function CounterpartiesPage() {
             }
           />
         )}
-        {!loading && rows.length > 0 && (
+        {!loading && rows.length > 0 && filtered().length === 0 && !error && (
+          <EmptyState
+            title={t("counterparties.none", { defaultValue: "Нет контрагентов" })}
+            description={t("counterparties.emptyHint", { defaultValue: "Попробуйте изменить запрос поиска." })}
+            icon={
+              <Users2 className="h-12 w-12 mx-auto stroke-[1.5] text-[#7F8C8D]" aria-hidden />
+            }
+          />
+        )}
+        {!loading && filtered().length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
             <table className="text-sm">
               <thead>
@@ -120,7 +148,7 @@ export default function CounterpartiesPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {filtered().map((r) => (
                   <tr key={r.id} className="border-t border-slate-100">
                     <td className="p-2 font-medium text-gray-900">{r.name}</td>
                     <td className="p-2">{r.taxId}</td>

@@ -1,7 +1,7 @@
 # Monorepo-aware production image: @dayday/database + @dayday/api.
 # Build from repository root: docker build -f apps/api/Dockerfile .
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 RUN apk add --no-cache python3 make g++
 
@@ -23,7 +23,7 @@ RUN npm run build -w @dayday/database && npm run build -w @dayday/api
 
 RUN npm prune --omit=dev
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 

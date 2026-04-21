@@ -8,9 +8,10 @@ import { AuthProvider } from "../lib/auth-context";
 import { LedgerProvider } from "../lib/ledger-context";
 import { SubscriptionProvider } from "../lib/subscription-context";
 import { Toaster } from "sonner";
-import { UpgradeRequiredModalHost } from "../components/upgrade-required-modal";
+import { UpgradePlanModalHost } from "../components/upgrade-required-modal";
 import { I18nOverridesLoader } from "../components/i18n-overrides-loader";
 import { ApiErrorToaster } from "../components/api-error-toaster";
+import { NetworkErrorToaster } from "../components/network-error-toaster";
 
 function HtmlLangSync() {
   const { i18n } = useTranslation();
@@ -69,8 +70,9 @@ export function Providers({ children }: { children: ReactNode }) {
       <I18nOverridesLoader />
       <AuthProvider>
         <SubscriptionProvider>
-          <UpgradeRequiredModalHost />
+          <UpgradePlanModalHost />
           <ApiErrorToaster />
+          <NetworkErrorToaster />
           <Toaster richColors position="top-right" closeButton />
           <LedgerProvider>{children}</LedgerProvider>
         </SubscriptionProvider>

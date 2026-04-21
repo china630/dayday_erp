@@ -23,6 +23,7 @@ import type { PatchYearlyDiscountDto } from "./dto/patch-yearly-discount.dto";
 import type { SetBillingPriceDto } from "./dto/set-billing-price.dto";
 import type { SetTierQuotasDto } from "./dto/set-tier-quotas.dto";
 import type { TranslationUpsertDto } from "./dto/translation-upsert.dto";
+import type { UpsertChartTemplateEntryDto } from "./dto/upsert-chart-template-entry.dto";
 import { getDefaultFlatTranslations } from "./i18n-default-catalog";
 import { PricingService } from "./pricing.service";
 
@@ -422,6 +423,10 @@ export class AdminService {
         dto.quotas.maxInvoicesPerMonth !== undefined
           ? dto.quotas.maxInvoicesPerMonth
           : current.maxInvoicesPerMonth,
+      maxStorageGb:
+        dto.quotas.maxStorageGb !== undefined
+          ? dto.quotas.maxStorageGb
+          : current.maxStorageGb,
     };
     await this.systemConfig.setTierQuotas(dto.tier, merged);
     return { ok: true, tier: dto.tier, quotas: merged };
@@ -584,6 +589,64 @@ export class AdminService {
         createdAt: a.createdAt.toISOString(),
       })),
     };
+  }
+
+  /**
+   * Глобальный шаблон NAS (`chart_of_accounts_entries`) — источник для новых организаций
+   * (`syncAzChartForOrganization` читает БД, если в каталоге есть строки).
+   */
+  listChartTemplateEntries() {
+    return this.prisma.chartOfAccountsEntry.findMany({
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+    });
+  }
+
+  async upsertChartTemplateEntry(dto: UpsertChartTemplateEntryDto) {
+    const code = dto.code.trim();
+    const name = dto.name.trim();
+    const parentRaw = dto.parentCode?.trim();
+    const parentCode = parentRaw && parentRaw.length > 0 ? parentRaw : null;
+    if (parentCode === code) {
+      throw new BadRequestException("parentCode не может совпадать с code");
+    }
+    if (parentCode) {
+      const parent = await this.prisma.chartOfAccountsEntry.findUnique({
+        where: { code: parentCode },
+      });
+      if (!parent) {
+        throw new BadRequestException(`Неизвестный parentCode: ${parentCode}`);
+      }
+    }
+    let cashProfile = dto.cashProfile?.trim() || null;
+    if (!cashProfile) {
+      if (code === "101" || code.startsWith("101.")) {
+        cashProfile = "AZN";
+      } else if (code === "102" || code.startsWith("102.")) {
+        cashProfile = "FX";
+      }
+    }
+    const sortOrder = dto.sortOrder ?? 0;
+    const isDeprecated = dto.isDeprecated ?? false;
+    return this.prisma.chartOfAccountsEntry.upsert({
+      where: { code },
+      create: {
+        code,
+        name,
+        accountType: dto.accountType,
+        parentCode,
+        cashProfile,
+        sortOrder,
+        isDeprecated,
+      },
+      update: {
+        name,
+        accountType: dto.accountType,
+        parentCode,
+        cashProfile,
+        sortOrder,
+        isDeprecated,
+      },
+    });
   }
 }
 

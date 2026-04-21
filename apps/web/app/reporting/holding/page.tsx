@@ -39,11 +39,16 @@ type OrgPnlRow = {
 type ConsolidatedPayload = {
   holdingId: string;
   holdingName: string;
+  holdingBaseCurrency?: string;
   dateFrom: string;
   dateTo: string;
   ledgerType?: string;
   organizations: OrgPnlRow[];
   consolidatedNetProfitByCurrency: Record<string, string>;
+  consolidatedNetProfitInHoldingBase?: string | null;
+  consolidationNote?: string | null;
+  consolidationFxMode?: string;
+  consolidationFxSlices?: number;
 };
 
 export default function HoldingConsolidatedReportingPage() {
@@ -234,6 +239,17 @@ export default function HoldingConsolidatedReportingPage() {
                 {amt} {cur}
               </p>
             ))}
+            {report.consolidatedNetProfitInHoldingBase != null &&
+            report.holdingBaseCurrency ? (
+              <p className="text-[13px] font-medium tabular-nums text-[#34495E] pt-1">
+                Σ → {report.holdingBaseCurrency}: {report.consolidatedNetProfitInHoldingBase}
+              </p>
+            ) : null}
+            {report.consolidationNote ? (
+              <p className="text-[11px] text-[#7F8C8D] pt-1 leading-snug">
+                {report.consolidationNote}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

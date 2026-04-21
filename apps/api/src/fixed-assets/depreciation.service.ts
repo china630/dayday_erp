@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Decimal, Prisma } from "@dayday/database";
+import { Prisma } from "@dayday/database";
 import { AccountingService } from "../accounting/accounting.service";
 import {
   ACCUMULATED_DEPRECIATION_ACCOUNT_CODE,
@@ -7,6 +7,8 @@ import {
 } from "../ledger.constants";
 import { monthRangeUtc } from "../reporting/reporting-period.util";
 import { roundMoney2 } from "./decimal-round";
+
+const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class DepreciationService {
@@ -31,7 +33,7 @@ export class DepreciationService {
       where: { organizationId },
     });
 
-    type Row = { assetId: string; amount: Decimal };
+    type Row = { assetId: string; amount: Prisma.Decimal };
     const rows: Row[] = [];
 
     for (const a of assets) {

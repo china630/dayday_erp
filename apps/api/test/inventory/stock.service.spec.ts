@@ -1,4 +1,4 @@
-import { Decimal } from "@dayday/database";
+import { Prisma } from "@dayday/database";
 import {
   INVENTORY_GOODS_ACCOUNT_CODE,
   MISC_OPERATING_EXPENSE_ACCOUNT_CODE,
@@ -6,6 +6,10 @@ import {
 import { InventoryService } from "../../src/inventory/inventory.service";
 import type { AccountingService } from "../../src/accounting/accounting.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
+import type { StockService } from "../../src/stock/stock.service";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 describe("InventoryService (stock / adjust)", () => {
   const orgId = "00000000-0000-0000-0000-000000000001";
@@ -32,6 +36,23 @@ describe("InventoryService (stock / adjust)", () => {
     } as unknown as AccountingService;
 
     const tx = {
+      warehouse: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: whId,
+          organizationId: orgId,
+          inventoryAccountCode: "201",
+        }),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: prodId,
+          organizationId: orgId,
+          isService: false,
+        }),
+      },
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({ settings: {} }),
+      },
       stockItem: {
         findUnique: jest.fn().mockResolvedValue({
           quantity: new Decimal(10),
@@ -45,21 +66,15 @@ describe("InventoryService (stock / adjust)", () => {
     };
 
     const prisma = {
-      warehouse: {
-        findFirst: jest.fn().mockResolvedValue({ id: whId, organizationId: orgId }),
-      },
-      product: {
-        findFirst: jest.fn().mockResolvedValue({ id: prodId, organizationId: orgId }),
-      },
-      organization: {
-        findUnique: jest.fn().mockResolvedValue({ settings: {} }),
-      },
       $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
         fn(tx),
       ),
     } as unknown as PrismaService;
 
-    const svc = new InventoryService(prisma, accounting);
+    const stock = {
+      computeIssueUnitCost: jest.fn().mockResolvedValue(new Decimal(5)),
+    } as unknown as StockService;
+    const svc = new InventoryService(prisma, accounting, stock);
 
     await svc.adjustStock(orgId, {
       warehouseId: whId,

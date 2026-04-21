@@ -74,7 +74,18 @@ export class UpdateEmployeeDto {
   contractorMonthlySocialAzn?: number | null;
 
   @ApiPropertyOptional({
-    description: "Субсчёт подотчётного лица (244.xx) для кассы MXO",
+    description:
+      "Initial salary balance (AZN) for average salary calculations (pre-ERP payroll history).",
+    example: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  initialSalaryBalance?: number | null;
+
+  @ApiPropertyOptional({
+    description: "Субсчёт подотчётного лица (244.xx) для кассы KXO",
     example: "244.01",
   })
   @IsOptional()

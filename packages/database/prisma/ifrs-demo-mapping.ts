@@ -8,10 +8,10 @@
 import {
   AccountType,
   LedgerType,
-  PrismaClient,
 } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   const orgIdEnv = process.env.ORG_ID?.trim();
@@ -136,4 +136,7 @@ main()
     console.error(e);
     process.exit(1);
   })
-  .finally(() => void prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    await closePrismaPool();
+  });

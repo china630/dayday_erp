@@ -85,7 +85,7 @@ export class CounterpartiesController {
         vatStatusFallback: dto.isVatPayer ?? null,
       });
       // allow local overrides of kind/role/email if provided
-      return this.prisma.counterparty.update({
+      const updated = await this.prisma.counterparty.update({
         where: { id: linked.id },
         data: {
           kind: dto.kind,
@@ -93,13 +93,18 @@ export class CounterpartiesController {
           address: dto.address ?? null,
           email: dto.email?.trim() || null,
           isVatPayer: dto.isVatPayer ?? linked.isVatPayer ?? null,
+          ...(dto.portalLocale !== undefined && {
+            portalLocale: dto.portalLocale,
+          }),
         },
         include: { global: true },
       });
+      await this.svc.syncDirectoryAfterLocalSave(orgId, updated.id);
+      return updated;
     } catch {
       // fallback to legacy local-only create
     }
-    return this.prisma.counterparty.create({
+    const created = await this.prisma.counterparty.create({
       data: {
         organizationId: orgId,
         name,
@@ -109,9 +114,14 @@ export class CounterpartiesController {
         address: dto.address ?? null,
         email: dto.email?.trim() || null,
         isVatPayer: dto.isVatPayer ?? null,
+        ...(dto.portalLocale !== undefined && {
+          portalLocale: dto.portalLocale,
+        }),
       },
       include: { global: true },
     });
+    await this.svc.syncDirectoryAfterLocalSave(orgId, created.id);
+    return created;
   }
 
   @Patch(":id")
@@ -141,7 +151,7 @@ export class CounterpartiesController {
         );
       }
     }
-    return this.prisma.counterparty.update({
+    const updated = await this.prisma.counterparty.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name.trim() }),
@@ -151,8 +161,13 @@ export class CounterpartiesController {
         ...(dto.address !== undefined && { address: dto.address || null }),
         ...(dto.email !== undefined && { email: dto.email?.trim() || null }),
         ...(dto.isVatPayer !== undefined && { isVatPayer: dto.isVatPayer }),
+        ...(dto.portalLocale !== undefined && {
+          portalLocale: dto.portalLocale,
+        }),
       },
       include: { global: true },
     });
+    await this.svc.syncDirectoryAfterLocalSave(orgId, updated.id);
+    return updated;
   }
 }

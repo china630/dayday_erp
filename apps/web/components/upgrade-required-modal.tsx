@@ -1,45 +1,76 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-/**
- * Показывает модалку при 403 SUBSCRIPTION_READ_ONLY и при 402 QUOTA_EXCEEDED (см. apiFetch).
- */
-export function UpgradeRequiredModalHost() {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+type ModalReason = "quota" | "read_only";
 
-  useEffect(() => {
-    const onEv = () => setOpen(true);
-    window.addEventListener("dayday:subscription-read-only", onEv);
-    window.addEventListener("dayday:quota-upgrade", onEv);
-    return () => {
-      window.removeEventListener("dayday:subscription-read-only", onEv);
-      window.removeEventListener("dayday:quota-upgrade", onEv);
-    };
+/**
+ * Shown on 402 QUOTA_EXCEEDED: upgrade / subscription (PRD §7.12).
+ */
+export function UpgradePlanModalHost() {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState<ModalReason>("quota");
+  const [quotaDetail, setQuotaDetail] = useState<unknown>(null);
+
+  const onQuota = useCallback((ev: Event) => {
+    const ce = ev as CustomEvent<unknown>;
+    setQuotaDetail(ce.detail ?? null);
+    setReason("quota");
+    setOpen(true);
   }, []);
 
+  const onReadOnly = useCallback(() => {
+    setReason("read_only");
+    setOpen(true);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("dayday:subscription-read-only", onReadOnly);
+    window.addEventListener("dayday:quota-upgrade", onQuota);
+    return () => {
+      window.removeEventListener("dayday:subscription-read-only", onReadOnly);
+      window.removeEventListener("dayday:quota-upgrade", onQuota);
+    };
+  }, [onQuota, onReadOnly]);
+
   if (!open) return null;
+
+  const lang = i18n.language.startsWith("az") ? "az" : "ru";
+  const quotaMsg =
+    quotaDetail &&
+    typeof quotaDetail === "object" &&
+    quotaDetail !== null &&
+    "message" in quotaDetail &&
+    typeof (quotaDetail as { message?: { az?: string; ru?: string } }).message ===
+      "object"
+      ? (quotaDetail as { message: { az?: string; ru?: string } }).message[
+          lang === "az" ? "az" : "ru"
+        ]
+      : null;
+
+  const body =
+    reason === "quota"
+      ? quotaMsg || t("upgradeModal.quotaBody")
+      : t("upgradeModal.body");
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="upgrade-required-title"
+      aria-labelledby="upgrade-plan-modal-title"
     >
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
         <h2
-          id="upgrade-required-title"
+          id="upgrade-plan-modal-title"
           className="text-lg font-semibold text-slate-900"
         >
-          {t("upgradeModal.title")}
+          {reason === "quota" ? t("upgradeModal.quotaTitle") : t("upgradeModal.title")}
         </h2>
-        <p className="text-sm text-slate-600 leading-relaxed">
-          {t("upgradeModal.body")}
-        </p>
+        <p className="text-sm text-slate-600 leading-relaxed">{body}</p>
         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
           <button
             type="button"
@@ -49,14 +80,17 @@ export function UpgradeRequiredModalHost() {
             {t("upgradeModal.close")}
           </button>
           <Link
-            href="/admin/billing"
+            href="/settings/subscription"
             onClick={() => setOpen(false)}
             className="inline-flex justify-center rounded-xl bg-action px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-action-hover"
           >
-            {t("upgradeModal.subscribe")}
+            {t("upgradeModal.openSubscription")}
           </Link>
         </div>
       </div>
     </div>
   );
 }
+
+/** @deprecated Use {@link UpgradePlanModalHost} */
+export const UpgradeRequiredModalHost = UpgradePlanModalHost;

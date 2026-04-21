@@ -23,7 +23,7 @@ export const ModuleEntitlement = {
   IFRS_MAPPING: "ifrs_mapping",
   /** Direct Banking API, реестр — slug `banking_pro` */
   BANKING_PRO: "banking_pro",
-  /** Касса MKO/MXO, журнал, авансы — v8.2 (конструктор; ENTERPRISE — полный доступ) */
+  /** Касса KMO/KXO, журнал, авансы — v8.2 (конструктор; ENTERPRISE — полный доступ) */
   KASSA_PRO: "kassa_pro",
   /** Расширенный HR (полный пакет) — v8.1 конструктор */
   HR_FULL: "hr_full",

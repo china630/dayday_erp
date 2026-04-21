@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -10,6 +10,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { parseLedgerTypeQuery } from "../common/ledger-type.util";
 import { AccountsService } from "./accounts.service";
+import { CreateBankAccountDto } from "./dto/create-bank-account.dto";
 
 @ApiTags("accounts")
 @ApiBearerAuth("bearer")
@@ -47,5 +48,16 @@ export class AccountsController {
   })
   mirrorIfrs(@OrganizationId() organizationId: string) {
     return this.accounts.mirrorNasToIfrs(organizationId);
+  }
+
+  @Post("bank-accounts")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Create a bank ledger account (221.xx)" })
+  createBankAccount(
+    @OrganizationId() organizationId: string,
+    @Body() dto: CreateBankAccountDto,
+  ) {
+    return this.accounts.createBankAccount(organizationId, dto);
   }
 }

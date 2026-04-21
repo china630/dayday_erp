@@ -17,7 +17,10 @@ import {
 import { UserRole } from "@dayday/database";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { CheckQuota } from "../common/decorators/check-quota.decorator";
+import { QuotaGuard } from "../common/guards/quota.guard";
 import { OrganizationId } from "../common/org-id.decorator";
+import { QuotaResource } from "../quota/quota-resource";
 import { CreateEmployeeDto } from "./dto/create-employee.dto";
 import { UpdateEmployeeDto } from "./dto/update-employee.dto";
 import { EmployeesService } from "./employees.service";
@@ -51,7 +54,8 @@ export class EmployeesController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(QuotaGuard, RolesGuard)
+  @CheckQuota(QuotaResource.USERS)
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: "Создать сотрудника" })
   create(

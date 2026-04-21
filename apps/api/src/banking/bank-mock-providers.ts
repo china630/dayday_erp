@@ -1,4 +1,7 @@
-import { BankStatementLineType, Decimal } from "@dayday/database";
+import { BankStatementLineType, Prisma } from "@dayday/database";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 export type MockBankTransaction = {
   integrationKey: string;

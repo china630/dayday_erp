@@ -1,5 +1,7 @@
-import { BankStatementLineType } from "@dayday/database";
-import { Decimal } from "@dayday/database";
+import { BankStatementLineType, Prisma } from "@dayday/database";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 export type ParsedBankRow = {
   valueDate: Date | null;

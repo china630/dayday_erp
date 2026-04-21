@@ -103,6 +103,50 @@ export class QuotaService {
     }
   }
 
+  async assertStorageQuota(
+    organizationId: string,
+    additionalBytes: number,
+  ): Promise<void> {
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      throw new NotFoundException("Organization subscription not found");
+    }
+    if (additionalBytes <= 0) {
+      return;
+    }
+    const tier = await this.getTier(organizationId);
+    const { maxStorageGb } = await this.quotasForTier(tier);
+    if (maxStorageGb == null) {
+      return;
+    }
+    const maxBytes = BigInt(maxStorageGb) * 1024n ** 3n;
+    const org = await this.prisma.organization.findFirst({
+      where: { id: orgId, isDeleted: false },
+      select: { storageUsedBytes: true },
+    });
+    const used = org?.storageUsedBytes ?? 0n;
+    const add = BigInt(additionalBytes);
+    if (used + add > maxBytes) {
+      const limitGb = maxStorageGb;
+      const usedGb = Number(used) / (1024 * 1024 * 1024);
+      const usedRounded = Math.round(usedGb * 100) / 100;
+      throw new QuotaExceededException("maxStorageGb", limitGb, usedRounded);
+    }
+  }
+
+  async addStorageUsage(organizationId: string, deltaBytes: number): Promise<void> {
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId || deltaBytes <= 0) {
+      return;
+    }
+    await this.prisma.organization.update({
+      where: { id: orgId },
+      data: {
+        storageUsedBytes: { increment: BigInt(deltaBytes) },
+      },
+    });
+  }
+
   async assertInvoiceMonthlyQuota(organizationId: string): Promise<void> {
     const orgId = resolveOrganizationUuid(organizationId);
     if (!orgId) {
@@ -213,5 +257,44 @@ export class QuotaService {
     const atLimit =
       maxInvoicesPerMonth != null && current >= maxInvoicesPerMonth;
     return { current, max: maxInvoicesPerMonth, atLimit };
+  }
+
+  async getStorageQuotaSnapshot(organizationId: string): Promise<{
+    currentBytes: string;
+    maxGb: number | null;
+    atLimit: boolean;
+  }> {
+    const orgId = resolveOrganizationUuid(organizationId);
+    if (!orgId) {
+      return { currentBytes: "0", maxGb: null, atLimit: false };
+    }
+    let tier: SubscriptionTier = SubscriptionTier.STARTER;
+    try {
+      const sub = await this.prisma.organizationSubscription.findUnique({
+        where: { organizationId: orgId },
+        select: { tier: true },
+      });
+      if (sub?.tier != null) {
+        tier = sub.tier;
+      }
+    } catch (e) {
+      this.logger.warn(
+        `getStorageQuotaSnapshot: subscription findUnique failed for ${orgId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    const { maxStorageGb } = await this.quotasForTier(tier);
+    const org = await this.prisma.organization.findFirst({
+      where: { id: orgId, isDeleted: false },
+      select: { storageUsedBytes: true },
+    });
+    const used = org?.storageUsedBytes ?? 0n;
+    const maxBytes =
+      maxStorageGb != null ? BigInt(maxStorageGb) * 1024n ** 3n : null;
+    const atLimit = maxBytes != null && used >= maxBytes;
+    return {
+      currentBytes: used.toString(),
+      maxGb: maxStorageGb,
+      atLimit,
+    };
   }
 }

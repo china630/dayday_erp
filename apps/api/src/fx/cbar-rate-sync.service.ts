@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { CbarRateStatus, Decimal } from "@dayday/database";
+import { CbarRateStatus, Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { CbarFxService, type CbarLatestRate, type ParsedCbarDoc } from "./cbar-fx.service";
 import {
@@ -9,7 +9,10 @@ import {
 
 const CHECK_CODES = ["USD", "EUR"] as const;
 
-function eqValue4(a: Decimal | number, b: Decimal | number): boolean {
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
+
+function eqValue4(a: Prisma.Decimal | number, b: Prisma.Decimal | number): boolean {
   const da = a instanceof Decimal ? a : new Decimal(a);
   const db = b instanceof Decimal ? b : new Decimal(b);
   return da.toDecimalPlaces(4).equals(db.toDecimalPlaces(4));

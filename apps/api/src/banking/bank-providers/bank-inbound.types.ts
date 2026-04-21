@@ -1,9 +1,9 @@
-import type { BankStatementLineType, Decimal } from "@dayday/database";
+import type { BankStatementLineType, Prisma } from "@dayday/database";
 
 /** Унифицированная операция из банка перед записью в bank_statement_lines */
 export type InboundBankTransaction = {
   integrationKey: string;
-  amount: Decimal;
+  amount: Prisma.Decimal;
   type: BankStatementLineType;
   counterpartyTaxId: string | null;
   valueDate: Date;

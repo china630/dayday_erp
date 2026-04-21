@@ -78,4 +78,15 @@ export class CreateEmployeeDto {
   @IsNumber()
   @Min(0)
   contractorMonthlySocialAzn?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Initial salary balance (AZN) for average salary calculations (pre-ERP payroll history).",
+    example: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  initialSalaryBalance?: number;
 }

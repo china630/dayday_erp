@@ -237,13 +237,28 @@ export class ReportingService {
       };
     }
 
+    const deptFilter = departmentId?.trim();
+    if (deptFilter) {
+      const dept = await this.prisma.department.findFirst({
+        where: { id: deptFilter, organizationId },
+      });
+      if (!dept) {
+        throw new BadRequestException("Неизвестный департамент");
+      }
+    }
+
+    const transactionWhere: Prisma.TransactionWhereInput = {
+      date: { gte: dateFrom, lte: dateTo },
+      ...(deptFilter ? { departmentId: deptFilter } : {}),
+    };
+
     const agg = await this.prisma.journalEntry.groupBy({
       by: ["accountId"],
       where: {
         organizationId,
         ledgerType,
         accountId: { in: ids },
-        transaction: { date: { gte: dateFrom, lte: dateTo } },
+        transaction: transactionWhere,
       },
       _sum: { debit: true, credit: true },
     });
@@ -272,14 +287,7 @@ export class ReportingService {
     let payrollExpenseNet = r721.dr.sub(r721.cr);
     let payrollSource: "ledger" | "department_payroll" = "ledger";
 
-    const deptFilter = departmentId?.trim();
     if (deptFilter) {
-      const dept = await this.prisma.department.findFirst({
-        where: { id: deptFilter, organizationId },
-      });
-      if (!dept) {
-        throw new BadRequestException("Неизвестный департамент");
-      }
       const slips = await this.prisma.payrollSlip.findMany({
         where: {
           organizationId,
@@ -361,9 +369,12 @@ export class ReportingService {
       },
       netProfit: netProfit.toFixed(4),
       methodologyNote:
-        payrollSource === "department_payroll"
+        (payrollSource === "department_payroll"
           ? "Строка расходов на персонал по выбранному департаменту посчитана по проведённым расчётным листкам (gross + взносы работодателя) за период дат проводок зарплаты; прочие строки P&L — по ГК. Сумма по 721 в ГК может включать не только ФОТ (напр. амортизацию)."
-          : "Чистая прибыль по начислению (обороты по счетам за период). Кассовая сверка «сумма оплат − себестоимость − налоги с ЗП» даст другой результат, если оплаты и начисления не совпадают по периодам.",
+          : "Чистая прибыль по начислению (обороты по счетам за период). Кассовая сверка «сумма оплат − себестоимость − налоги с ЗП» даст другой результат, если оплаты и начисления не совпадают по периодам.") +
+        (deptFilter
+          ? " При фильтре ЦФО обороты по выручке, себестоимости и 662 учитываются только по транзакциям с привязкой к этому департаменту."
+          : ""),
     };
   }
 

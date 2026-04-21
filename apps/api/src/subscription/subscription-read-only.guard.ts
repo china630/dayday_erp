@@ -103,6 +103,9 @@ export class SubscriptionReadOnlyGuard implements CanActivate {
     if (p.startsWith("/api/public")) {
       return true;
     }
+    if (p.startsWith("/api/billing/webhooks")) {
+      return true;
+    }
     if (p === "/api/billing/checkout" && method === "POST") {
       return true;
     }

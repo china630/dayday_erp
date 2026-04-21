@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -18,6 +19,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { CreatePayrollRunDto } from "./dto/create-payroll-run.dto";
 import { PayrollHeavyQueueService } from "./payroll-heavy.queue";
+import { PayrollExportService } from "./payroll-export.service";
 import { PayrollService } from "./payroll.service";
 
 @ApiTags("hr-payroll")
@@ -27,6 +29,7 @@ export class PayrollController {
   constructor(
     private readonly payroll: PayrollService,
     private readonly payrollQueue: PayrollHeavyQueueService,
+    private readonly exportService: PayrollExportService,
   ) {}
 
   @Get("runs")
@@ -39,6 +42,26 @@ export class PayrollController {
   @ApiOperation({ summary: "Расчёт с листовками" })
   getRun(@OrganizationId() organizationId: string, @Param("id") id: string) {
     return this.payroll.getRun(organizationId, id);
+  }
+
+  @Get("runs/:id/xlsx")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary: "Excel export: payroll run slips (e-taxes.gov.az template)",
+  })
+  async runXlsx(
+    @OrganizationId() organizationId: string,
+    @Param("id") id: string,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.exportService.buildRunXlsxBuffer(
+      organizationId,
+      id,
+    );
+    return new StreamableFile(buffer, {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      disposition: `attachment; filename="${filename}"`,
+    });
   }
 
   @Post("runs")

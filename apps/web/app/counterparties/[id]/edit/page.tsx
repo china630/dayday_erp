@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../../lib/api-client";
+import { safeJson } from "../../../../lib/api-fetch";
 import { inputFieldClass } from "../../../../lib/form-classes";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
 import { ModulePageLinks } from "../../../../components/module-page-links";
@@ -77,12 +78,12 @@ export default function EditCounterpartyPage() {
       `/api/counterparties/global/by-voen/${encodeURIComponent(digits)}`,
     );
     if (mdm.ok) {
-      const g = (await mdm.json()) as {
+      const g = await safeJson<{
         taxId: string;
         name: string;
         legalAddress?: string | null;
         vatStatus?: boolean | null;
-      } | null;
+      }>(mdm);
       setVoenCheckBusy(false);
       if (g) {
         setName(g.name);
@@ -103,11 +104,15 @@ export default function EditCounterpartyPage() {
       setMsg(`${t("counterparties.voenCheckErr")}: ${res.status} ${await res.text()}`);
       return;
     }
-    const j = (await res.json()) as {
+    const j = await safeJson<{
       name: string;
       isVatPayer: boolean;
       address: string | null;
-    };
+    }>(res);
+    if (!j) {
+      setMsg(`${t("counterparties.voenCheckErr")}: empty response`);
+      return;
+    }
     setName(j.name);
     setIsVatPayer(j.isVatPayer);
     if (j.address?.trim()) {

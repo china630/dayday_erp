@@ -21,9 +21,9 @@
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "../prisma-client";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 /**
  * Синхронно с apps/web/lib/i18n/apply-db-overrides.ts — единственные допустимые
@@ -289,4 +289,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });

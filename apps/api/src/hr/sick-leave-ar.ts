@@ -1,4 +1,7 @@
-import { Decimal } from "@dayday/database";
+import { Prisma } from "@dayday/database";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 /** İş stajı (tam illər): əmək müqaviləsi başlanğıcından hesabla. */
 export function totalServiceWholeYears(

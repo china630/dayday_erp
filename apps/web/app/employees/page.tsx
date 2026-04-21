@@ -20,6 +20,7 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 import { EmployeeModal } from "./employee-modal";
+import { EntityAuditHistory } from "../../components/admin/entity-audit-history";
 
 function sanitizeFinInput(raw: string): string {
   return raw.replace(/[^0-9A-HJ-NP-Za-hj-np-z]/g, "").slice(0, 7);
@@ -73,6 +74,7 @@ export default function EmployeesPage() {
   const [positions, setPositions] = useState<JobPositionOpt[]>([]);
   const [editPositionId, setEditPositionId] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [editPanelTab, setEditPanelTab] = useState<"form" | "history">("form");
 
   const load = useCallback(async () => {
     if (!token) {
@@ -271,8 +273,44 @@ export default function EmployeesPage() {
       )}
 
       {editing && (
-        <section className={`${CARD_CONTAINER_CLASS} p-6 max-w-lg border-[#2980B9]/25`}>
+        <section className={`${CARD_CONTAINER_CLASS} p-6 max-w-2xl border-[#2980B9]/25`}>
           <h2 className="text-lg font-semibold text-[#34495E] mb-4">{t("employees.editSection")}</h2>
+          <div className="flex flex-wrap gap-2 border-b border-[#D5DADF] pb-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setEditPanelTab("form")}
+              className={`text-sm font-medium px-3 py-1.5 rounded border ${
+                editPanelTab === "form"
+                  ? "bg-white text-[#34495E] border-[#2980B9]"
+                  : "bg-transparent text-[#7F8C8D] border-transparent hover:border-[#D5DADF]"
+              }`}
+            >
+              {t("employees.editTabForm")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditPanelTab("history")}
+              className={`text-sm font-medium px-3 py-1.5 rounded border ${
+                editPanelTab === "history"
+                  ? "bg-white text-[#34495E] border-[#2980B9]"
+                  : "bg-transparent text-[#7F8C8D] border-transparent hover:border-[#D5DADF]"
+              }`}
+            >
+              {t("employees.editTabHistory")}
+            </button>
+          </div>
+          {editPanelTab === "history" ? (
+            <div>
+              <h3 className="text-sm font-semibold text-[#34495E] mb-3">
+                {t("employees.historyTitle")}
+              </h3>
+              <EntityAuditHistory
+                entityType="Employee"
+                entityId={editing.id}
+                token={token}
+              />
+            </div>
+          ) : (
           <form noValidate onSubmit={(e) => void submitEdit(e)} className="grid gap-4">
             <div>
               <span className={lbl}>{t("employees.kind")}</span>
@@ -385,6 +423,7 @@ export default function EmployeesPage() {
                   setEditSalary("");
                   setEditVoen("");
                   setEditContractorSocial("");
+                  setEditPanelTab("form");
                 }}
                 className="border border-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
               >
@@ -392,6 +431,7 @@ export default function EmployeesPage() {
               </button>
             </div>
           </form>
+          )}
         </section>
       )}
 
@@ -427,6 +467,7 @@ export default function EmployeesPage() {
                     className="text-xs px-2 py-1 rounded-md border border-slate-200"
                     onClick={() => {
                       setEditing(r);
+                      setEditPanelTab("form");
                       setEditPositionId(r.positionId);
                       setEditKind((r.kind ?? "EMPLOYEE") as "EMPLOYEE" | "CONTRACTOR");
                       setEditVoen((r.voen ?? "").replace(/\D/g, ""));
@@ -505,6 +546,7 @@ export default function EmployeesPage() {
                           className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10"
                           onClick={() => {
                             setEditing(r);
+                            setEditPanelTab("form");
                             setEditPositionId(r.positionId);
                             setEditKind((r.kind ?? "EMPLOYEE") as "EMPLOYEE" | "CONTRACTOR");
                             setEditVoen((r.voen ?? "").replace(/\D/g, ""));

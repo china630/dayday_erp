@@ -1,8 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import bcrypt from "bcrypt";
+import { executePlatformRawUnsafe } from "./platform-raw-sql";
 import { loadTemplateIfrsMappingPackage } from "./template-ifrs";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 const SUPER_ADMINS = [
   "inaram84@gmail.com",
@@ -30,7 +31,7 @@ async function upsertSystemConfigDefaults() {
 async function seedTemplateIfrsMappings() {
   // Ensure table exists even if migrations weren't generated locally.
   // This keeps `npm run db:prod-init` working on an empty database.
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     CREATE TABLE IF NOT EXISTS "template_ifrs_mappings" (
       "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
       "nas_code" TEXT NOT NULL,
@@ -42,13 +43,13 @@ async function seedTemplateIfrsMappings() {
       CONSTRAINT "template_ifrs_mappings_pkey" PRIMARY KEY ("id")
     );
   `);
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE INDEX IF NOT EXISTS "template_ifrs_mappings_nas_code_idx" ON "template_ifrs_mappings"("nas_code");`,
   );
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE INDEX IF NOT EXISTS "template_ifrs_mappings_ifrs_code_idx" ON "template_ifrs_mappings"("ifrs_code");`,
   );
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE UNIQUE INDEX IF NOT EXISTS "template_ifrs_mappings_nas_code_ifrs_code_key" ON "template_ifrs_mappings"("nas_code","ifrs_code");`,
   );
 
@@ -81,7 +82,7 @@ async function seedTemplateIfrsMappings() {
 }
 
 async function ensureMdmGlobalCounterpartiesSchema() {
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     CREATE TABLE IF NOT EXISTS "global_counterparties" (
       "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
       "tax_id" TEXT NOT NULL,
@@ -92,17 +93,17 @@ async function ensureMdmGlobalCounterpartiesSchema() {
       CONSTRAINT "global_counterparties_pkey" PRIMARY KEY ("id")
     );
   `);
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE UNIQUE INDEX IF NOT EXISTS "global_counterparties_tax_id_key" ON "global_counterparties"("tax_id");`,
   );
 
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `ALTER TABLE "counterparties" ADD COLUMN IF NOT EXISTS "global_id" UUID;`,
   );
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE INDEX IF NOT EXISTS "counterparties_global_id_idx" ON "counterparties"("global_id");`,
   );
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -148,11 +149,12 @@ async function upsertSuperAdmins() {
 
 async function ensureCriticalSchemaFixups() {
   // Keep prod-init resilient when migrations lag behind code.
+  // DDL is also codified in Prisma migration `20260430120000_align_out_of_band_schema` — prefer `migrate deploy` so history matches the DB.
   // These are safe, idempotent DDL statements.
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `ALTER TABLE "warehouses" ADD COLUMN IF NOT EXISTS "inventory_account_code" TEXT NOT NULL DEFAULT '201';`,
   );
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     DO $$
     BEGIN
       ALTER TYPE "BankStatementLineOrigin" ADD VALUE 'MANUAL_BANK_ENTRY';
@@ -169,10 +171,10 @@ async function ensureCriticalSchemaFixups() {
  */
 async function ensureInventoryAuditSchema() {
   // Важно: ADD COLUMN и ADD CONSTRAINT не держать в одном DO — при ошибке FK откатится и колонка пропадёт.
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `ALTER TABLE IF EXISTS "inventory_audits" ADD COLUMN IF NOT EXISTS "warehouse_id" UUID;`,
   );
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     DO $$
     BEGIN
       IF to_regclass('public.inventory_audits') IS NULL THEN
@@ -190,14 +192,14 @@ async function ensureInventoryAuditSchema() {
       WHEN foreign_key_violation THEN NULL;
     END $$;
   `);
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `ALTER TABLE IF EXISTS "inventory_audits" DROP COLUMN IF EXISTS "items";`,
   );
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE INDEX IF NOT EXISTS "inventory_audits_org_wh_date_idx" ON "inventory_audits" ("organization_id", "warehouse_id", "date");`,
   );
 
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     CREATE TABLE IF NOT EXISTS "inventory_audit_lines" (
       "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
       "organization_id" UUID NOT NULL,
@@ -211,7 +213,7 @@ async function ensureInventoryAuditSchema() {
       CONSTRAINT "inventory_audit_lines_pkey" PRIMARY KEY ("id")
     );
   `);
-  await prisma.$executeRawUnsafe(`
+  await executePlatformRawUnsafe(prisma, `
     DO $$
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_audit_lines_org_fkey') THEN
@@ -231,13 +233,13 @@ async function ensureInventoryAuditSchema() {
       END IF;
     END $$;
   `);
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE UNIQUE INDEX IF NOT EXISTS "inventory_audit_lines_audit_product_uidx" ON "inventory_audit_lines" ("inventory_audit_id", "product_id");`,
   );
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE INDEX IF NOT EXISTS "inventory_audit_lines_org_audit_idx" ON "inventory_audit_lines" ("organization_id", "inventory_audit_id");`,
   );
-  await prisma.$executeRawUnsafe(
+  await executePlatformRawUnsafe(prisma,
     `CREATE INDEX IF NOT EXISTS "inventory_audit_lines_org_product_idx" ON "inventory_audit_lines" ("organization_id", "product_id");`,
   );
   process.stdout.write("[prod-init] schema: ensured inventory audit tables/indexes\n");
@@ -259,5 +261,6 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });
 

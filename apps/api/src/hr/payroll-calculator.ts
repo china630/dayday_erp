@@ -1,4 +1,7 @@
-import { Decimal } from "@dayday/database";
+import { Prisma } from "@dayday/database";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 /** decimal.js: ROUND_HALF_UP — округление каждого налога до 2 знаков. */
 const RM_HALF_UP = 4;

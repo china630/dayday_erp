@@ -22,10 +22,11 @@ import { AbsencesService } from "./absences.service";
 import type { SickPayCalcDto } from "./dto/sick-pay-calc.dto";
 import { TimesheetService } from "./timesheet.service";
 import { PAYROLL_ENTITY_ASYNC_THRESHOLD } from "./payroll.constants";
+import { calculateContractorMicroPayroll } from "./payroll-calculator";
 import {
-  calculateContractorMicroPayroll,
-  calculatePrivateNonOilPayroll,
-} from "./payroll-calculator";
+  calculatePrivateNonOilPayrollV161,
+  parsePayrollTaxSettings,
+} from "../payroll/tax-calculator";
 
 @Injectable()
 export class PayrollService {
@@ -73,12 +74,14 @@ export class PayrollService {
       throw new ConflictException("Payroll run already exists for this month");
     }
 
-    const employees = await this.prisma.employee.findMany({
-      where: { organizationId },
-    });
+    const [employees, org] = await Promise.all([
+      this.prisma.employee.findMany({ where: { organizationId } }),
+      this.prisma.organization.findUnique({ where: { id: organizationId } }),
+    ]);
     if (employees.length === 0) {
       throw new BadRequestException("No employees to pay");
     }
+    const taxSettings = parsePayrollTaxSettings(org?.settings);
 
     let tsSummary: Awaited<
       ReturnType<TimesheetService["summarizeForPayroll"]>
@@ -128,7 +131,7 @@ export class PayrollService {
                 new Decimal(emp.salary),
                 emp.contractorMonthlySocialAzn,
               )
-            : calculatePrivateNonOilPayroll(grossBase);
+            : calculatePrivateNonOilPayrollV161(grossBase, taxSettings);
         if (b.net.isNegative()) {
           throw new BadRequestException(
             `Отрицательная сумма к выплате для сотрудника ${emp.lastName}: проверьте оклад и фикс. соц. удержания`,

@@ -16,6 +16,7 @@ import { PayrollController } from "./payroll.controller";
 import { PayrollHeavyQueueService } from "./payroll-heavy.queue";
 import { PayrollHeavyWorker } from "./payroll-heavy.worker";
 import { PayrollService } from "./payroll.service";
+import { PayrollExportService } from "./payroll-export.service";
 
 @Module({
   imports: [PrismaModule, AccountingModule],
@@ -32,6 +33,7 @@ import { PayrollService } from "./payroll.service";
     PayrollHeavyQueueService,
     PayrollHeavyWorker,
     PayrollService,
+    PayrollExportService,
     AbsenceTypesService,
     AbsencesService,
     OrgStructureService,

@@ -19,8 +19,10 @@
     "build:chart": "tsc -p tsconfig.chart.json",
     "build": "prisma generate && npm run build:chart",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:reset": "prisma migrate reset",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:ifrs-demo-map": "tsx prisma/ifrs-demo-mapping.ts",
@@ -32,14 +34,13 @@
     "docker-init:export": "tsx prisma/docker-init/export-seed-data.ts",
     "docker-init:super-admin-hash": "tsx prisma/docker-init/export-super-admin-hash.ts"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "^7.0.0",
+    "@prisma/adapter-pg": "^7.0.0",
     "bcrypt": "^6.0.0",
     "dotenv": "^16.6.1",
-    "prisma": "^6.19.3",
+    "pg": "^8.16.3",
+    "prisma": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },

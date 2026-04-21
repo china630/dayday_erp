@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
+import { safeJson } from "../../../lib/api-fetch";
 import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { inputFieldClass } from "../../../lib/form-classes";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
@@ -40,20 +41,59 @@ export function CreateCounterpartyModal({
       return;
     }
     setVoenCheckBusy(true);
-    // 1) MDM lookup
+    // 1) Global company directory (enriched profile)
+    const dirRes = await apiFetch(
+      `/api/organization/directory/by-voen/${encodeURIComponent(d)}`,
+    );
+    if (dirRes.ok) {
+      const dir = await safeJson<{
+        name: string;
+        legalAddress?: string | null;
+        phone?: string | null;
+        directorName?: string | null;
+      }>(dirRes);
+      if (dir) {
+        if (dir.name?.trim() && (!name.trim() || name.trim() !== dir.name.trim())) {
+          setName(dir.name);
+        }
+        if (dir.legalAddress?.trim()) {
+          const incoming = dir.legalAddress.trim();
+          setAddress((prev) => {
+            const cur = prev.trim();
+            if (!cur) return incoming;
+            if (cur !== incoming) return incoming;
+            return prev;
+          });
+        }
+      }
+    }
+    // 2) MDM lookup
     const mdm = await apiFetch(`/api/counterparties/global/by-voen/${encodeURIComponent(d)}`);
     if (mdm.ok) {
-      const g = (await mdm.json()) as {
+      const g = await safeJson<{
         taxId: string;
         name: string;
         legalAddress?: string | null;
         vatStatus?: boolean | null;
-      } | null;
+      }>(mdm);
       if (g) {
         setVoenCheckBusy(false);
-        setName(g.name);
-        setIsVatPayer(g.vatStatus ?? null);
-        if (g.legalAddress?.trim()) setAddress((a) => (a.trim() ? a : g.legalAddress!));
+        // Merge logic: patch only missing fields or different values; never reset user-entered data.
+        if (g.name?.trim() && (!name.trim() || name.trim() !== g.name.trim())) {
+          setName(g.name);
+        }
+        if (g.vatStatus !== undefined && g.vatStatus !== null && isVatPayer !== g.vatStatus) {
+          setIsVatPayer(g.vatStatus);
+        }
+        if (g.legalAddress?.trim()) {
+          const incoming = g.legalAddress.trim();
+          setAddress((prev) => {
+            const cur = prev.trim();
+            if (!cur) return incoming;
+            if (cur !== incoming) return incoming;
+            return prev;
+          });
+        }
         return;
       }
     }
@@ -61,7 +101,7 @@ export function CreateCounterpartyModal({
       setVoenCheckBusy(false);
       return;
     }
-    // 2) External lookup fallback (e-taxes)
+    // 3) External lookup fallback (e-taxes)
     const res = await apiFetch(`/api/tax/taxpayer-info?voen=${encodeURIComponent(d)}`);
     setVoenCheckBusy(false);
     if (!res.ok) {
@@ -70,14 +110,32 @@ export function CreateCounterpartyModal({
       });
       return;
     }
-    const j = (await res.json()) as {
+    const j = await safeJson<{
       name: string;
       isVatPayer: boolean;
       address: string | null;
-    };
-    setName(j.name);
-    setIsVatPayer(j.isVatPayer);
-    if (j.address?.trim()) setAddress((a) => (a.trim() ? a : j.address!));
+    }>(res);
+    if (!j) {
+      toast.error(t("counterparties.voenCheckErr"), {
+        description: "empty response",
+      });
+      return;
+    }
+    if (j.name?.trim() && (!name.trim() || name.trim() !== j.name.trim())) {
+      setName(j.name);
+    }
+    if (isVatPayer !== j.isVatPayer) {
+      setIsVatPayer(j.isVatPayer);
+    }
+    if (j.address?.trim()) {
+      const incoming = j.address.trim();
+      setAddress((prev) => {
+        const cur = prev.trim();
+        if (!cur) return incoming;
+        if (cur !== incoming) return incoming;
+        return prev;
+      });
+    }
   }
 
   useEffect(() => {

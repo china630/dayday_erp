@@ -1,6 +1,10 @@
 import { HttpException, HttpStatus } from "@nestjs/common";
 
-export type QuotaKind = "maxEmployees" | "maxInvoicesPerMonth" | "maxOrganizations";
+export type QuotaKind =
+  | "maxEmployees"
+  | "maxInvoicesPerMonth"
+  | "maxOrganizations"
+  | "maxStorageGb";
 
 export type QuotaExceededBody = {
   /** HTTP 402 — см. PRD §7.12.3.1 / TZ §14.8.7 */
@@ -32,6 +36,11 @@ function messages(
       return {
         az: `Təşkilat limiti dolub (${current}/${limit}). Daha yüksək tarifə keçin.`,
         ru: `Достигнут лимит организаций по тарифу (${current}/${limit}). Перейдите на более высокий тариф.`,
+      };
+    case "maxStorageGb":
+      return {
+        az: `Yaddaş limiti dolub (~${current} GB / ${limit} GB). Daha yüksək tarifə keçin.`,
+        ru: `Достигнут лимит хранилища (~${current} GB из ${limit} GB). Перейдите на более высокий тариф.`,
       };
     default:
       return {

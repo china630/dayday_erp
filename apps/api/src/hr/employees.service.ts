@@ -5,18 +5,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Decimal, EmployeeKind, Prisma } from "@dayday/database";
+import { EmployeeKind, Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
-import { QuotaService } from "../quota/quota.service";
 import { CreateEmployeeDto } from "./dto/create-employee.dto";
 import { UpdateEmployeeDto } from "./dto/update-employee.dto";
 
+const Decimal = Prisma.Decimal;
+
 @Injectable()
 export class EmployeesService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly quota: QuotaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   list(
     organizationId: string,
@@ -55,6 +53,7 @@ export class EmployeesService {
     }
     const cnt = await this.prisma.employee.count({
       where: {
+        organizationId,
         positionId,
         ...(excludeEmployeeId ? { id: { not: excludeEmployeeId } } : {}),
       },
@@ -73,7 +72,6 @@ export class EmployeesService {
     if (kind === EmployeeKind.CONTRACTOR && !dto.voen?.trim()) {
       throw new BadRequestException("Для подрядчика (CONTRACTOR) укажите VÖEN (10 цифр)");
     }
-    await this.quota.assertEmployeeQuota(organizationId);
     await this.assertPositionSlotAvailable(organizationId, dto.positionId);
     try {
       return await this.prisma.employee.create({

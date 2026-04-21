@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { Prisma } from "@dayday/database";
 import type { AuthUser } from "../auth/types/auth-user";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -10,6 +11,8 @@ import {
 import { serializeForAudit } from "./audit-serialize";
 
 const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+
+let auditHashSecretFallbackWarned = false;
 
 export type EntitySnapshot = {
   entityType: string;
@@ -40,9 +43,10 @@ export class AuditService {
     const explicit = this.config.get<string>("AUDIT_HASH_SECRET") ?? null;
     const jwtFallback = this.config.get<string>("JWT_SECRET") ?? null;
     this.auditHashSecret = explicit ?? jwtFallback ?? "audit-hash-dev-only";
-    if (!explicit && process.env.NODE_ENV === "production") {
-      this.logger.warn(
-        "AUDIT_HASH_SECRET is not set; falling back to JWT_SECRET. Set AUDIT_HASH_SECRET in production to harden audit log integrity.",
+    if (!explicit && jwtFallback && !auditHashSecretFallbackWarned) {
+      auditHashSecretFallbackWarned = true;
+      console.warn(
+        "[AuditService] AUDIT_HASH_SECRET is not set; using JWT_SECRET as the audit hash key. Set AUDIT_HASH_SECRET in production to harden audit log integrity.",
       );
     }
   }
@@ -472,5 +476,35 @@ export class AuditService {
       invalidCount: invalidIds.length,
       invalidIds,
     };
+  }
+
+  /**
+   * Global platform audit row (organizationId = null). Idempotent per payment order id.
+   */
+  async logPlatformBillingPaymentApplied(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const exists = await tx.auditLog.findFirst({
+      where: {
+        entityType: "platform.billing.payment_applied",
+        entityId: orderId,
+      },
+      select: { id: true },
+    });
+    if (exists) {
+      return;
+    }
+    await tx.auditLog.create({
+      data: {
+        organizationId: null,
+        userId: null,
+        entityType: "platform.billing.payment_applied",
+        entityId: orderId,
+        action: "webhook",
+        newValues: payload as object,
+      },
+    });
   }
 }

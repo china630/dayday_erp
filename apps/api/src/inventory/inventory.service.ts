@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
-  Decimal,
   Prisma,
   StockMovementReason,
   StockMovementType,
@@ -22,6 +21,7 @@ import {
   PAYABLE_SUPPLIERS_ACCOUNT_CODE,
 } from "../ledger.constants";
 import { PrismaService } from "../prisma/prisma.service";
+import { StockService } from "../stock/stock.service";
 import type { PurchaseStockDto } from "./dto/purchase-stock.dto";
 import type { TransferStockDto } from "./dto/transfer-stock.dto";
 import {
@@ -33,11 +33,15 @@ import type { PatchInventorySettingsDto } from "./dto/patch-inventory-settings.d
 import type { AdjustStockDto } from "./dto/adjust-stock.dto";
 import type { CreateWarehouseDto } from "./dto/create-warehouse.dto";
 
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
+
 @Injectable()
 export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accounting: AccountingService,
+    private readonly stock: StockService,
   ) {}
 
   async getInventorySettings(organizationId: string): Promise<
@@ -184,7 +188,7 @@ export class InventoryService {
         ...(filters?.productId ? { productId: filters.productId } : {}),
       },
       include: { product: true, warehouse: true, invoice: { select: { number: true, id: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
       take: filters?.take ?? 200,
     });
   }
@@ -196,6 +200,7 @@ export class InventoryService {
     if (!wh) throw new NotFoundException("Warehouse not found");
 
     return this.prisma.$transaction(async (tx) => {
+      const documentDate = new Date();
       let total = new Decimal(0);
 
       for (const line of dto.lines) {
@@ -264,13 +269,14 @@ export class InventoryService {
             quantity: qty,
             price: unit,
             note: dto.reference ?? null,
+            documentDate,
           },
         });
       }
 
       await this.accounting.postJournalInTransaction(tx, {
         organizationId,
-        date: new Date(),
+        date: documentDate,
         reference: dto.reference ?? "PURCHASE",
         description: "Закупка товара на склад",
         counterpartyId: dto.counterpartyId ?? null,
@@ -314,6 +320,7 @@ export class InventoryService {
     const batch = randomUUID();
 
     return this.prisma.$transaction(async (tx) => {
+      const documentDate = new Date();
       const src = await tx.stockItem.findUnique({
         where: {
           organizationId_warehouseId_productId: {
@@ -328,6 +335,16 @@ export class InventoryService {
       if (avail.lt(qty) && !allowNeg) {
         throw new BadRequestException("Недостаточно товара для перемещения");
       }
+
+      const unitOut = await this.stock.computeIssueUnitCost(
+        tx,
+        organizationId,
+        dto.fromWarehouseId,
+        dto.productId,
+        qty,
+        avgFrom,
+        avgFrom,
+      );
 
       const qSrcNew = avail.sub(qty);
       await tx.stockItem.upsert({
@@ -364,8 +381,8 @@ export class InventoryService {
       const qDst1 = qDst0.add(qty);
       const cDst1 =
         qDst1.lte(0) ? new Decimal(0) : qDst0.lte(0)
-          ? avgFrom
-          : qDst0.mul(cDst0).add(qty.mul(avgFrom)).div(qDst1);
+          ? unitOut
+          : qDst0.mul(cDst0).add(qty.mul(unitOut)).div(qDst1);
 
       await tx.stockItem.upsert({
         where: {
@@ -396,9 +413,10 @@ export class InventoryService {
           type: StockMovementType.OUT,
           reason: StockMovementReason.ADJUSTMENT,
           quantity: qty,
-          price: avgFrom,
+          price: unitOut,
           transferBatchId: batch,
           note: "TRANSFER_OUT",
+          documentDate,
         },
       });
       await tx.stockMovement.create({
@@ -409,9 +427,10 @@ export class InventoryService {
           type: StockMovementType.IN,
           reason: StockMovementReason.ADJUSTMENT,
           quantity: qty,
-          price: avgFrom,
+          price: unitOut,
           transferBatchId: batch,
           note: "TRANSFER_IN",
+          documentDate,
         },
       });
 
@@ -433,6 +452,8 @@ export class InventoryService {
     });
     if (!inv) throw new NotFoundException("Invoice not found");
     if (inv.inventorySettled) return;
+
+    const saleDocumentDate = inv.recognizedAt ?? inv.createdAt;
 
     const org = await tx.organization.findUnique({
       where: { id: organizationId },
@@ -476,7 +497,16 @@ export class InventoryService {
       });
       const avail = si?.quantity ?? new Decimal(0);
       const avg = si?.averageCost ?? new Decimal(0);
-      const unitCost = avg.gt(0) ? avg : line.unitPrice;
+      const fallbackPrice = new Decimal(line.unitPrice);
+      const unitCost = await this.stock.computeIssueUnitCost(
+        tx,
+        organizationId,
+        whId,
+        pid,
+        need,
+        avg,
+        fallbackPrice.gt(0) ? fallbackPrice : avg,
+      );
 
       if (avail.lt(need) && !allowNeg) {
         throw new BadRequestException(
@@ -518,6 +548,7 @@ export class InventoryService {
           quantity: need,
           price: unitCost,
           invoiceId: inv.id,
+          documentDate: saleDocumentDate,
         },
       });
     }
@@ -525,7 +556,7 @@ export class InventoryService {
     if (totalCogs.gt(0)) {
       await this.accounting.postJournalInTransaction(tx, {
         organizationId,
-        date: new Date(),
+        date: saleDocumentDate,
         reference: inv.number,
         description: `Себестоимость по инвойсу ${inv.number}`,
         lines: [
@@ -557,6 +588,7 @@ export class InventoryService {
     organizationId: string,
     dto: AdjustStockDto,
   ): Promise<{ type: "IN" | "OUT"; amount: string }> {
+    const documentDate = new Date();
     const qty = new Decimal(dto.quantity);
     const wh = await tx.warehouse.findFirst({
       where: { id: dto.warehouseId, organizationId },
@@ -594,7 +626,16 @@ export class InventoryService {
       if (avail.lt(qty) && !allowNeg) {
         throw new BadRequestException("Недостаточно товара для списания");
       }
-      const amount = qty.mul(avg);
+      const unit = await this.stock.computeIssueUnitCost(
+        tx,
+        organizationId,
+        dto.warehouseId,
+        dto.productId,
+        qty,
+        avg,
+        avg,
+      );
+      const amount = qty.mul(unit);
       const qNew = avail.sub(qty);
 
       await tx.stockItem.upsert({
@@ -610,7 +651,7 @@ export class InventoryService {
           warehouseId: dto.warehouseId,
           productId: dto.productId,
           quantity: qNew,
-          averageCost: avg,
+          averageCost: unit,
         },
         update: {
           quantity: qNew,
@@ -625,15 +666,16 @@ export class InventoryService {
           type: StockMovementType.OUT,
           reason: StockMovementReason.ADJUSTMENT,
           quantity: qty,
-          price: avg,
+          price: unit,
           note: "INV_ADJ_OUT",
+          documentDate,
         },
       });
 
       if (amount.gt(0)) {
         await this.accounting.postJournalInTransaction(tx, {
           organizationId,
-          date: new Date(),
+          date: documentDate,
           reference: "INV-ADJ-OUT",
           description: `Списание запасов (${invAccountCode})`,
           isFinal: true,
@@ -701,6 +743,7 @@ export class InventoryService {
         quantity: qty,
         price: unit,
         note: "INV_ADJ_IN",
+        documentDate,
       },
     });
 
@@ -708,7 +751,7 @@ export class InventoryService {
     if (amount.gt(0)) {
       await this.accounting.postJournalInTransaction(tx, {
         organizationId,
-        date: new Date(),
+        date: documentDate,
         reference: "INV-ADJ-IN",
         description: `Оприходование излишков (${invAccountCode})`,
         isFinal: true,

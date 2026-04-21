@@ -35,6 +35,7 @@ import { PatchYearlyDiscountDto } from "./dto/patch-yearly-discount.dto";
 import { SetBillingPriceDto } from "./dto/set-billing-price.dto";
 import { SetTierQuotasDto } from "./dto/set-tier-quotas.dto";
 import { TranslationUpsertDto } from "./dto/translation-upsert.dto";
+import { UpsertChartTemplateEntryDto } from "./dto/upsert-chart-template-entry.dto";
 
 @ApiTags("admin")
 @ApiBearerAuth("bearer")
@@ -233,6 +234,21 @@ export class AdminController {
       skip,
       take,
     });
+  }
+
+  @Get("chart-template")
+  @ApiOperation({
+    summary:
+      "Глобальный шаблон NAS (chart_of_accounts_entries) — источник для новых организаций",
+  })
+  chartTemplateList() {
+    return this.admin.listChartTemplateEntries();
+  }
+
+  @Post("chart-template")
+  @ApiOperation({ summary: "Создать или обновить строку глобального плана NAS" })
+  chartTemplateUpsert(@Body() dto: UpsertChartTemplateEntryDto) {
+    return this.admin.upsertChartTemplateEntry(dto);
   }
 
   @Post("impersonate/:userId")

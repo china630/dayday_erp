@@ -24,7 +24,13 @@ type AuditRow = {
   hash: string | null;
   clientIp: string | null;
   userAgent: string | null;
-  user?: { id: string; email: string } | null;
+  user?: {
+    id: string;
+    email: string;
+    fullName: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
 };
 
 export default function AuditSettingsPage() {
@@ -65,7 +71,8 @@ export default function AuditSettingsPage() {
         setLoadErr(String(res.status));
         return;
       }
-      setRows((await res.json()) as AuditRow[]);
+      const body = (await res.json()) as { items: AuditRow[] };
+      setRows(body.items ?? []);
     } finally {
       setBusy(false);
     }
@@ -201,8 +208,15 @@ export default function AuditSettingsPage() {
                 <td className="px-3 py-2 whitespace-nowrap text-gray-700">
                   {new Date(r.createdAt).toLocaleString()}
                 </td>
-                <td className="px-3 py-2 max-w-[140px] truncate" title={r.user?.email ?? r.userId ?? ""}>
-                  {r.user?.email ?? r.userId ?? "—"}
+                <td
+                  className="px-3 py-2 max-w-[180px] truncate"
+                  title={r.user?.email ?? r.userId ?? ""}
+                >
+                  {r.user
+                    ? [r.user.firstName, r.user.lastName].filter(Boolean).join(" ").trim() ||
+                      r.user.fullName?.trim() ||
+                      r.user.email
+                    : (r.userId ?? "—")}
                 </td>
                 <td className="px-3 py-2">
                   <span className="font-medium">{r.entityType}</span>

@@ -26,9 +26,10 @@ export class SubscriptionController {
   async getMe(@OrganizationId() organizationId: string) {
     /** Сначала снимок подписки (lazy-create строки) — иначе квоты в parallel получают 404. */
     const snapshot = await this.access.getOrganizationSnapshot(organizationId);
-    const [employees, invoicesThisMonth] = await Promise.all([
+    const [employees, invoicesThisMonth, storage] = await Promise.all([
       this.quota.getEmployeeQuotaSnapshot(organizationId),
       this.quota.getInvoiceMonthlyQuotaSnapshot(organizationId),
+      this.quota.getStorageQuotaSnapshot(organizationId),
     ]);
     const expiresAt = snapshot.expiresAt;
     const now = Date.now();
@@ -52,7 +53,7 @@ export class SubscriptionController {
       isTrial: snapshot.isTrial,
       readOnly,
       trialDaysLeft,
-      quotas: { employees, invoicesThisMonth },
+      quotas: { employees, invoicesThisMonth, storage },
     };
   }
 

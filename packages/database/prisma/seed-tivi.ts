@@ -30,6 +30,7 @@ import {
   TimesheetEntryType,
   TimesheetStatus,
 } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import { calculatePrivateNonOilPayroll } from "../../../apps/api/src/hr/payroll-calculator.ts";
 import { isAzWorkingDay } from "../../../apps/api/src/hr/calendar/az-2026.ts";
 import { loadChartJson, seedChartOfAccountsForOrganization } from "./chart-seed.ts";
@@ -54,7 +55,7 @@ if (process.env.NODE_ENV === "production") {
   process.exit(1);
 }
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 const SEED_MARKER = "tiviSeedDemo";
 
@@ -800,10 +801,10 @@ async function main(): Promise<void> {
     });
   }
 
-  /* ---------- Касса: MKO (услуги), MXO подотчёт, авансовый отчёт ---------- */
+  /* ---------- Kassa: KMO (income), KXO (accountable), advance report ---------- */
   const y = now.getUTCFullYear();
-  const pkoNum = `MKO-${y}-00001`;
-  const rkoNum = `MXO-${y}-00001`;
+  const pkoNum = `KMO-${y}-00001`;
+  const rkoNum = `KXO-${y}-00001`;
 
   const emp244 = employees.find((e) => e.accountable244 === "244.01");
   if (emp244) {
@@ -813,7 +814,7 @@ async function main(): Promise<void> {
           organizationId: org.id,
           orderNumber: pkoNum,
           date: new Date(Date.UTC(y, now.getUTCMonth(), 8, 12, 0, 0, 0)),
-          kind: CashOrderKind.MKO,
+          kind: CashOrderKind.KMO,
           status: CashOrderStatus.DRAFT,
           pkoSubtype: CashOrderPkoSubtype.INCOME_FROM_CUSTOMER,
           amount: new Decimal(1200),
@@ -846,7 +847,7 @@ async function main(): Promise<void> {
           organizationId: org.id,
           orderNumber: rkoNum,
           date: new Date(Date.UTC(y, now.getUTCMonth(), 9, 12, 0, 0, 0)),
-          kind: CashOrderKind.MXO,
+          kind: CashOrderKind.KXO,
           status: CashOrderStatus.DRAFT,
           rkoSubtype: CashOrderRkoSubtype.ACCOUNTABLE_ISSUE,
           amount: new Decimal(500),
@@ -931,4 +932,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });

@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -47,4 +48,12 @@ export class UpdateCounterpartyDto {
   @Type(() => Boolean)
   @IsBoolean()
   isVatPayer?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Язык гостевого портала счёта: az | ru | en",
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(["az", "ru", "en"])
+  portalLocale?: "az" | "ru" | "en";
 }

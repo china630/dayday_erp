@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
-  Decimal,
   InvoiceStatus,
   LedgerType,
   Prisma,
@@ -21,8 +20,11 @@ import {
 import { parseOrgIsVatPayer } from "../common/org-vat-payer.util";
 import { PrismaService } from "../prisma/prisma.service";
 
-function d(v: Decimal | null | undefined): Decimal {
-  return v ?? new Decimal(0);
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
+
+function d(v: Prisma.Decimal | null | undefined): Prisma.Decimal {
+  return v ?? new Prisma.Decimal(0);
 }
 
 @Injectable()
@@ -36,7 +38,7 @@ export class NettingService {
   private async receivableForCounterparty(
     organizationId: string,
     counterpartyId: string,
-  ): Promise<Decimal> {
+  ): Promise<Prisma.Decimal> {
     const invoices = await this.prisma.invoice.findMany({
       where: {
         organizationId,
@@ -46,11 +48,11 @@ export class NettingService {
       },
       include: { payments: { select: { amount: true } } },
     });
-    let sum = new Decimal(0);
+    let sum = new Prisma.Decimal(0);
     for (const inv of invoices) {
       const paid = inv.payments.reduce(
         (s, p) => s.add(p.amount),
-        new Decimal(0),
+        new Prisma.Decimal(0),
       );
       const bal = inv.totalAmount.sub(paid);
       if (bal.gt(0)) sum = sum.add(bal);

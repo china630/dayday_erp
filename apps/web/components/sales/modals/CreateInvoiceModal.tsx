@@ -34,22 +34,16 @@ function newLine(): LineRow {
   };
 }
 
-/** VAT split for one line; unitPrice is per the vatInclusive flag (gross vs net per unit). */
+/** VAT split for one line; `unitPrice` is stored as NET price per unit. */
 function vatSplitForLine(
   qty: number,
-  unitPrice: number,
+  unitPriceNet: number,
   vatRatePct: number,
-  vatInclusive: boolean,
 ): { net: number; vat: number; gross: number } {
   const v = vatRatePct / 100;
-  if (vatInclusive) {
-    const gross = qty * unitPrice;
-    const net = v <= 0 ? gross : gross / (1 + v);
-    return { net, vat: gross - net, gross };
-  }
-  const net = qty * unitPrice;
-  const vat = net * v;
-  return { net, vat, gross: net + vat };
+  const net = qty * unitPriceNet;
+  const gross = net * (1 + v);
+  return { net, vat: gross - net, gross };
 }
 
 type NettingPreview = {
@@ -77,7 +71,7 @@ export function CreateInvoiceModal({
   const [vatInclusive, setVatInclusive] = useState(false);
   const [vatRate, setVatRate] = useState<0 | 18>(18);
   const [isService, setIsService] = useState(false);
-  const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
+  const [lines, setLines] = useState<LineRow[]>(() => []);
   const [busy, setBusy] = useState(false);
   const [netting, setNetting] = useState<NettingPreview | null>(null);
 
@@ -98,17 +92,6 @@ export function CreateInvoiceModal({
       setProducts(arr);
       const first = arr[0];
       if (first) {
-        setLines((prev) =>
-          prev.length
-            ? prev
-            : [
-                {
-                  ...newLine(),
-                  productId: first.id,
-                  unitPrice: String(Number(first.price) || 0),
-                },
-              ],
-        );
         const vr0 = Number(first.vatRate);
         setVatRate(vr0 === 0 ? 0 : 18);
       }
@@ -126,7 +109,7 @@ export function CreateInvoiceModal({
     setVatInclusive(false);
     setVatRate(18);
     setIsService(false);
-    setLines([newLine()]);
+    setLines([]);
     void loadRefs();
   }, [open, loadRefs]);
 
@@ -201,13 +184,13 @@ export function CreateInvoiceModal({
       if (isService) {
         if (!row.description.trim()) continue;
       } else if (!row.productId) continue;
-      const s = vatSplitForLine(q, u, vatRate, vatInclusive);
+      const s = vatSplitForLine(q, u, vatRate);
       net += s.net;
       vat += s.vat;
       gross += s.gross;
     }
     return { net, vat, gross };
-  }, [lines, vatRate, vatInclusive, isService]);
+  }, [lines, vatRate, isService]);
 
   const canSubmit = useMemo(() => {
     if (!counterpartyId) return false;
@@ -365,7 +348,7 @@ export function CreateInvoiceModal({
           </label>
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <input type="checkbox" checked={isService} onChange={(e) => setIsService(e.target.checked)} />
-            Xidmət
+            {t("invoiceNew.serviceToggle")}
           </label>
         </div>
 
@@ -373,7 +356,9 @@ export function CreateInvoiceModal({
           <table className="min-w-full text-sm">
             <thead className="bg-[#F4F5F7] text-left text-[#34495E]">
               <tr>
-                <th className="px-3 py-2 font-semibold">{isService ? "Xidmət" : t("invoiceNew.product")}</th>
+                <th className="px-3 py-2 font-semibold">
+                  {isService ? t("invoiceNew.serviceCol") : t("invoiceNew.product")}
+                </th>
                 <th className="w-28 px-3 py-2 text-right font-semibold">{t("invoiceNew.quantity")}</th>
                 <th className="w-40 px-3 py-2 text-right font-semibold">
                   {vatInclusive ? t("invoiceNew.priceHintGross") : t("invoiceNew.priceHintNet")}
@@ -437,10 +422,24 @@ export function CreateInvoiceModal({
                   </td>
                   <td className="px-3 py-2 align-middle text-right">
                     <input
-                      value={row.unitPrice}
+                      value={(() => {
+                        const v = Number(String(row.unitPrice).replace(",", "."));
+                        if (!vatInclusive || !Number.isFinite(v)) return row.unitPrice;
+                        const mult = vatRate === 18 ? 1.18 : 1;
+                        const gross = v * mult;
+                        return String(Math.round(gross * 10_000) / 10_000);
+                      })()}
                       onChange={(e) => {
-                        const v = e.target.value;
-                        setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: v } : x)));
+                        const raw = e.target.value;
+                        const n = Number(String(raw).replace(",", "."));
+                        if (!Number.isFinite(n)) {
+                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: raw } : x)));
+                          return;
+                        }
+                        const mult = vatRate === 18 ? 1.18 : 1;
+                        const net = vatInclusive ? n / mult : n;
+                        const normalized = String(Math.round(net * 10_000) / 10_000);
+                        setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: normalized } : x)));
                       }}
                       className={`w-36 text-right ${INPUT_BORDERED_CLASS}`}
                       inputMode="decimal"
@@ -451,7 +450,7 @@ export function CreateInvoiceModal({
                       type="button"
                       title={t("inventory.purchaseRemoveLine")}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-[2px] border border-[#D5DADF] text-slate-600 hover:bg-[#F4F5F7]"
-                      onClick={() => setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)))}
+                      onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
                     >
                       <Trash2 className="h-4 w-4" aria-hidden />
                     </button>

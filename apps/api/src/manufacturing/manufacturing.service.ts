@@ -15,6 +15,7 @@ import {
 } from "../ledger.constants";
 import { PrismaService } from "../prisma/prisma.service";
 import { parseInventorySettings } from "../inventory/inventory-settings";
+import { StockService } from "../stock/stock.service";
 import { ReleaseProductionDto } from "./dto/release-production.dto";
 import { UpsertRecipeDto } from "./dto/upsert-recipe.dto";
 import { roundMoney2 } from "../fixed-assets/decimal-round";
@@ -24,6 +25,7 @@ export class ManufacturingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accounting: AccountingService,
+    private readonly stock: StockService,
   ) {}
 
   listRecipes(organizationId: string) {
@@ -138,6 +140,7 @@ export class ManufacturingService {
     const batchQty = new Decimal(dto.quantity);
 
     return this.prisma.$transaction(async (tx) => {
+      const documentDate = new Date();
       let totalMaterial = new Decimal(0);
 
       for (const line of recipe.lines) {
@@ -161,7 +164,16 @@ export class ManufacturingService {
             `Недостаточно компонента ${line.componentProductId} на складе`,
           );
         }
-        const lineCost = need.mul(avg);
+        const unit = await this.stock.computeIssueUnitCost(
+          tx,
+          organizationId,
+          dto.warehouseId,
+          line.componentProductId,
+          need,
+          avg,
+          avg,
+        );
+        const lineCost = need.mul(unit);
         totalMaterial = totalMaterial.add(lineCost);
         const newQty = avail.sub(need);
 
@@ -191,8 +203,9 @@ export class ManufacturingService {
             type: StockMovementType.OUT,
             reason: StockMovementReason.MANUFACTURING,
             quantity: need,
-            price: avg,
+            price: unit,
             note: `MFG_OUT ${dto.finishedProductId}`,
+            documentDate,
           },
         });
       }
@@ -251,13 +264,14 @@ export class ManufacturingService {
           quantity: batchQty,
           price: unitCost,
           note: "MFG_IN",
+          documentDate,
         },
       });
 
       // Дт 204 / Кт 201; IFRS — через translateToIFRS при маппингах 204 и 201.
       await this.accounting.postJournalInTransaction(tx, {
         organizationId,
-        date: new Date(),
+        date: documentDate,
         reference: `MFG-${dto.finishedProductId.slice(0, 8)}`,
         description: `Выпуск готовой продукции, ${batchQty.toString()} ед.`,
         isFinal: true,

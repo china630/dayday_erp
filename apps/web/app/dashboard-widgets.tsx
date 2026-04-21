@@ -52,6 +52,15 @@ type MiniFinancialsPayload = {
   cashFlowMonth: string;
 };
 
+type ExecutiveWidgetsPayload = {
+  periodLabel: string;
+  totalCash: string;
+  receivables: string;
+  vendorPayables: string;
+  salariesAndTaxesPayables: string;
+  netProfitMtd: string;
+};
+
 type DashboardPayload = {
   ledgerType?: string;
   cashBankBalance: string;
@@ -178,6 +187,8 @@ export function DashboardWidgets() {
   );
   const [miniFin, setMiniFin] = useState<MiniFinancialsPayload | null>(null);
   const [miniFinErr, setMiniFinErr] = useState<string | null>(null);
+  const [exec, setExec] = useState<ExecutiveWidgetsPayload | null>(null);
+  const [execErr, setExecErr] = useState<string | null>(null);
   const canClose = canCloseAccountingPeriod(user?.role ?? undefined);
 
   const load = useCallback(async () => {
@@ -251,11 +262,27 @@ export function DashboardWidgets() {
     setMiniFin((await res.json()) as MiniFinancialsPayload);
   }, [token, t, ledgerType]);
 
+  const loadExec = useCallback(async () => {
+    if (!token) {
+      setExec(null);
+      return;
+    }
+    setExecErr(null);
+    const res = await apiFetch(`/api/reports/executive-widgets?${ledgerQueryParam(ledgerType)}`);
+    if (!res.ok) {
+      setExecErr(t("dashboard.miniErr", { status: String(res.status) }));
+      setExec(null);
+      return;
+    }
+    setExec((await res.json()) as ExecutiveWidgetsPayload);
+  }, [token, t, ledgerType]);
+
   useEffect(() => {
     if (!ready || !ledgerReady) return;
     void load();
     void loadMiniFin();
-  }, [load, loadMiniFin, ready, ledgerReady]);
+    void loadExec();
+  }, [load, loadMiniFin, loadExec, ready, ledgerReady]);
 
   useEffect(() => {
     if (!ready || !token) return;
@@ -484,6 +511,95 @@ export function DashboardWidgets() {
               </div>
             </div>
           </div>
+
+          {execErr && (
+            <p className="text-amber-700 text-sm mb-4">{execErr}</p>
+          )}
+          {exec && !execErr && (
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 xl:items-stretch">
+              <Link
+                href="/reports/balance-sheet"
+                className={`${CARD_CONTAINER_CLASS} flex min-h-[132px] flex-col p-5 hover:bg-[#F4F5F7] transition-colors`}
+              >
+                <p className="mb-1 text-[11px] text-[#7F8C8D]">
+                  {t("dashboard.miniPeriod", { period: exec.periodLabel })}
+                </p>
+                <h3 className="mb-2 text-[13px] font-semibold text-[#34495E]">
+                  {t("dashboard.execTotalCash")}
+                </h3>
+                <MoneyAzn
+                  value={exec.totalCash}
+                  className="mt-auto text-xl font-semibold text-[#34495E]"
+                />
+              </Link>
+              <Link
+                href="/reporting/receivables"
+                className={`${CARD_CONTAINER_CLASS} flex min-h-[132px] flex-col p-5 hover:bg-[#F4F5F7] transition-colors`}
+              >
+                <p className="mb-1 text-[11px] text-[#7F8C8D]">
+                  {t("dashboard.miniPeriod", { period: exec.periodLabel })}
+                </p>
+                <h3 className="mb-2 text-[13px] font-semibold text-[#34495E]">
+                  {t("dashboard.execReceivables")}
+                </h3>
+                <MoneyAzn
+                  value={exec.receivables}
+                  className="mt-auto text-xl font-semibold text-[#34495E]"
+                />
+              </Link>
+              <Link
+                href="/reports/balance-sheet"
+                className={`${CARD_CONTAINER_CLASS} flex min-h-[132px] flex-col p-5 hover:bg-[#F4F5F7] transition-colors`}
+              >
+                <p className="mb-1 text-[11px] text-[#7F8C8D]">
+                  {t("dashboard.miniPeriod", { period: exec.periodLabel })}
+                </p>
+                <h3 className="mb-2 text-[13px] font-semibold text-[#34495E]">
+                  {t("dashboard.execVendorPayables")}
+                </h3>
+                <p className="mb-2 text-[11px] leading-snug text-[#7F8C8D]">
+                  {t("dashboard.execVendorPayablesHint")}
+                </p>
+                <MoneyAzn
+                  value={exec.vendorPayables}
+                  className="mt-auto text-xl font-semibold text-[#34495E]"
+                />
+              </Link>
+              <Link
+                href="/reports/balance-sheet"
+                className={`${CARD_CONTAINER_CLASS} flex min-h-[132px] flex-col p-5 hover:bg-[#F4F5F7] transition-colors`}
+              >
+                <p className="mb-1 text-[11px] text-[#7F8C8D]">
+                  {t("dashboard.miniPeriod", { period: exec.periodLabel })}
+                </p>
+                <h3 className="mb-2 text-[13px] font-semibold text-[#34495E]">
+                  {t("dashboard.execSalariesTaxesPayables")}
+                </h3>
+                <p className="mb-2 text-[11px] leading-snug text-[#7F8C8D]">
+                  {t("dashboard.execSalariesTaxesPayablesHint")}
+                </p>
+                <MoneyAzn
+                  value={exec.salariesAndTaxesPayables}
+                  className="mt-auto text-xl font-semibold text-[#34495E]"
+                />
+              </Link>
+              <Link
+                href="/reporting"
+                className={`${CARD_CONTAINER_CLASS} flex min-h-[132px] flex-col p-5 hover:bg-[#F4F5F7] transition-colors`}
+              >
+                <p className="mb-1 text-[11px] text-[#7F8C8D]">
+                  {t("dashboard.miniPeriod", { period: exec.periodLabel })}
+                </p>
+                <h3 className="mb-2 text-[13px] font-semibold text-[#34495E]">
+                  {t("dashboard.execNetProfitMtd")}
+                </h3>
+                <MoneyAzn
+                  value={exec.netProfitMtd}
+                  className="mt-auto text-xl font-semibold text-[#34495E]"
+                />
+              </Link>
+            </div>
+          )}
 
           {miniFinErr && (
             <p className="text-amber-700 text-sm mb-4">{miniFinErr}</p>

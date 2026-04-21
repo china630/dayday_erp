@@ -10,7 +10,7 @@ import type { Readable } from "node:stream";
 import type { StorageService, StoredObjectMeta } from "./storage.interface";
 
 /**
- * S3-compatible (AWS S3, DigitalOcean Spaces, MinIO). Требует переменных окружения S3_*.
+ * S3-compatible (AWS S3, DigitalOcean Spaces, MinIO). Requires S3_* environment variables.
  */
 @Injectable()
 export class S3StorageService implements StorageService {

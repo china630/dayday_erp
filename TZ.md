@@ -1,27 +1,28 @@
 # Техническое задание (Т/З): DayDay ERP
 
-Единый документ для разработки: объединяет ядро Core MVP, расширения v2, интеграции v3 и слой монетизации v4. Сводные продуктовые решения (инфраструктура, тенанты, валюты, локаль) — **[PRD.md](./PRD.md) §12**. Продуктовая логика и модули **1–9** — [PRD.md](./PRD.md) §4. **Зафиксированные доработки по плану улучшения ERP (продукт ↔ код)** — **[PRD.md](./PRD.md) §4.12**; ниже в **§0** перечислено, какие разделы Т/З нужно привести в соответствие с реализацией.
+Единый документ для разработки: объединяет ядро Core MVP, расширения v2, интеграции v3 и слой монетизации v4. Сводные продуктовые решения — **[PRD.md](./PRD.md)** (§12 и др.). Детализация REST — **§0.0** ниже и Swagger API.
 
-**Оглавление (верхний уровень):** §0 — синхронизация с PRD §4.12; §1 — инфраструктура; §2–§10 — модули **1–9** (M1→§2 … M9→§10); **§6.0** — Treasury + касса/банк (PRD §4.12); **§7.0** — HR: справочник отсутствий (**5** типов ТК AР), табель, корректировка gross в черновике payroll (PRD §4.6.1); §11 — паттерн разработки; §12–§14 — дорожные карты v2–v4; §15 — Super-Admin; §16–§17 — платформенный hardening (v5.6–v5.9).
+**Оглавление (верхний уровень):** **§0.0** — реестр ключевых REST; §0 — статус синхронизации; §1 — инфраструктура; §2–§10 — модули **1–9**; **§6.0** — Treasury + касса/банк; **§7.0** — HR, табель, payroll, ЦФО; §11 — паттерн разработки; §12–§14 — дорожные карты; §15 — Super-Admin; §16–§17 — hardening.
 
 ---
 
-## 0. Синхронизация с PRD §4.12 (улучшение ERP) — доработка Т/З
+### 0.0. Реестр ключевых эндпоинтов (выжимка)
 
-Продуктовое содержание внедрённых возможностей описано в **[PRD.md](./PRD.md) §4.12**. В **этом** документе (TZ) необходимо **дополнить** соответствующие разделы: точные пути REST, тела/ответы DTO, поля Prisma, правила валидации, сценарии миграций и приёмочные критерии — по мере приоритета релиза.
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| GET | `/api/admin/chart-template` | Глобальный каталог NAS (`ChartOfAccountsEntry`), чтение (super-admin) |
+| POST | `/api/admin/chart-template` | Upsert строки каталога NAS (super-admin) |
+| POST | `/api/billing/webhooks/:provider` | Webhook платёжного провайдера (`mock`, `pasha`, `pasha_bank`), публичный маршрут |
+| GET | `/api/reports/cash-flow` | ДДС прямой метод (`CashFlowService.getDirectCashFlow`), query: `dateFrom`, `dateTo`, опц. `cashDeskId`, `bankName` |
+| GET | `/api/hr/payroll/jobs/:jobId` | Статус фоновой задачи расчёта ЗП (BullMQ) |
 
-| Область | Разделы TZ для доработки | Что зафиксировать в Т/З |
-|---------|--------------------------|-------------------------|
-| **Holding, отчёты по холдингу, RBAC-флаги** | §2 (IAM), при необходимости §10 | Модель `Holding`, связи с `Organization`, эндпоинты CRUD/привязки, отчётные агрегаты; расширение политик / флагов сессии для UI |
-| **План счетов в БД, 101\*/102\*** | §3 | Таблица счетов, сидинг из JSON, правила выбора кассового счёта по валюте |
-| **Казначейство: ДДС и физические кассы** | **§6.0** (и обзор §6) | См. **§6.0**: `GET/POST /treasury/cash-flow-items`, `GET/POST /treasury/cash-desks`, DTO, автосид |
-| **Касса MKO/MXO** | **§6.0** | См. **§6.0**: DTO, `POST …/post`, валидация ДДС/кассы, удержание → **521**; терминология AZ — **§6.0** |
-| **Банк: ручной ввод** | **§6.0** | См. **§6.0**: `POST /banking/manual-entry`, `MANUAL_BANK_ENTRY`, проводка + выписка |
-| **Склад: закупка, дефолтный склад, COGS, инвентаризация, излишки/списание** | §8 (и перекрёстно §7 при закупке) | Многострочная закупка; `defaultWarehouse`; fallback COGS; API/UI инвентаризации; эндпоинты surplus/write-off |
-| **Инвойсы и номенклатура** | §7 | `currency` (AZN/USD/EUR), `vatInclusive`, НДС только **0 \| 18**; расчёт нетто/брутто; `isService` и отображение в PDF |
-| **HR, контрагенты, UX** | §9, §5 при контрагентах, §11 | Отчество, FIN, отпускные, табель; типы контрагентов и дубли по VÖEN; централизованные ошибки API/UI, i18n |
+Полный перечень — OpenAPI `/api`. См. также `/api/treasury/*`, `POST /api/banking/manual-entry`, `GET /api/holdings/:id/consolidated-pnl`, `GET /api/reporting/pl?departmentId=…`.
 
-После заполнения таблицы строки **§0** можно сократить до ссылки «синхронизировано с PRD §4.12 на дату …».
+---
+
+## 0. Синхронизация с PRD
+
+Таблица **§0.0** отражает актуальные контракты **v25.0**. Расширенное описание модулей — разделы **§2–§10**, **§6.0**, **§7.0**; продуктовые формулировки — **PRD §4.12**, **§4.13**, **§5.1**.
 
 ---
 
@@ -32,24 +33,65 @@
 | **Хостинг** | Один VPS; оркестрация — **Docker Compose** |
 | **БД** | PostgreSQL + расширение `uuid-ossp` |
 | **Кэш / очереди** | **Redis** + **BullMQ**: расчёт ЗП, импорт выписок, прочие долгие задачи — **вне** HTTP-запроса API |
-| **Файлы (PDF и др.)** | Том Docker на старте; в коде — **абстракция хранилища** с интерфейсом S3-compatible (миграция на DigitalOcean Spaces / AWS S3 без смены бизнес-логики) |
+| **Файлы (PDF, логотипы)** | **`STORAGE_SERVICE`**: в **production** ожидается **`STORAGE_DRIVER=s3`** и переменные **`S3_*`**; локально — **`STORAGE_DRIVER=local`** + `STORAGE_LOCAL_ROOT` (см. PRD §11.0) |
 | **Почта** | **Nodemailer (SMTP)** — счета, сброс пароля |
 | **Monorepo** | `apps/web` (Next.js), `apps/api` (NestJS), `packages/database` (Prisma и общие типы при необходимости) |
 | **Локаль** | БД: **UTC**; UI: **i18next**; язык по умолчанию **RU**, подготовка полных строк под **AZ**; форматирование дат и **AZN** — локаль Азербайджана |
 | **Локальная инфра (Windows)** | Тома Docker, загрузки API, **npm-кэш**, **TEMP/TMP** — только **D:** (`D:\DockerData\dayday_erp`); корневой `.npmrc`. Образы Docker — **Disk image location** на D в Docker Desktop |
 
+**Production HTTPS requirement (hardening):**
+
+- Production environment **must use HTTPS** for the web origin.
+- Rationale: parts of the frontend rely on **WebCrypto** capabilities that may be restricted in insecure contexts (plain HTTP), and browsers can degrade/disable APIs and increase fetch instability under mixed/insecure conditions.
+- Development exception: `http://localhost` is allowed.
+
 ### 1.1. Архитектура холдинга: консолидация валют (Reporting Aggregator)
 
-**Цель:** при запросе **сводного баланса / отчёта по холдингу** суммы по всем входящим организациям приводятся к **`Holding.baseCurrency`** (по умолчанию совпадает с **AZN** и политикой PRD §1.1).
+**Maintenance mode (admin runbook) — before Prisma deploy migrations (PRD §10.0 / TZ §1):**
 
-**Сервис `CurrencyConverterService`** (Nest, модуль `FxModule` или `ReportingModule` — по факту размещения в коде):
+Цель: перед `prisma migrate deploy` временно отключить UI (и при необходимости API) понятной заглушкой, чтобы пользователи не работали в полусостоянии во время деплоя.
 
-| Метод (ориентир) | Назначение |
-|------------------|------------|
-| `convertToBase(amount, fromCurrency, atDate)` | Конвертация в базовую валюту холдинга по курсу **ЦБА** на дату `atDate` (использовать существующий контур `CbarFxService` / `CbarRateSyncService` и таблицу `cbar_official_rates`). |
-| `sumOrganizationsInHolding(holdingId, mode)` | `mode`: `AS_OF_REPORT_DATE` \| `PER_TRANSACTION_DATE` — согласно PRD §1.1. |
+- **Nginx (UI)**
+  - Положить страницу: `docs/maintenance.html` → `/var/www/html/maintenance.html`
+  - Подключить сниппет: `docs/nginx-maintenance.conf` (возвращает **503** если существует `/var/www/html/maintenance.enable`)
+  - Включить режим обслуживания:
 
-**Источник курсов:** приоритет — **внутренняя таблица** официальных курсов; при отсутствии строки — **однократный** запрос к XML/API ЦБА с записью в БД (см. §6 «Курсы»).
+    ```bash
+    sudo touch /var/www/html/maintenance.enable
+    sudo nginx -t && sudo systemctl reload nginx
+    ```
+
+  - Выключить режим обслуживания:
+
+    ```bash
+    sudo rm -f /var/www/html/maintenance.enable
+    sudo nginx -t && sudo systemctl reload nginx
+    ```
+
+- **Deploy flow (recommended)**
+  - Enable maintenance (см. выше)
+  - Apply DB migrations:
+
+    ```bash
+    docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+    ```
+
+  - Optional platform init:
+
+    ```bash
+    docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
+    ```
+
+  - Disable maintenance
+
+**Сводный P&L по холдингу за период** (`HoldingsReportingService.consolidatedProfitAndLoss`): реализовано **помесячной нарезкой периода** (UTC, `accrualMonthSlices` в `reporting-period.util.ts`). Для каждого фрагмента вызывается `ReportingService.profitAndLoss(org, from, to)`, затем **`CurrencyConverterService.convert(netProfit, orgCurrency, holdingBase, fxAsOf)`** с **`fxAsOf` = последний день фрагмента**. Результаты по фрагментам **суммируются**. Это и есть продуктовый стандарт **Monthly Slices** (PRD §1.1).
+
+
+**`CurrencyConverterService.convert`** — точечная конвертация на дату `asOf` (кросс через AZN); для «историчности» по длинному периоду используется **внешний** цикл по фрагментам (см. выше), а не один вызов на `dateTo`.
+
+**Дашборд cash/bank** по холдингу (`getHoldingSummary`): конвертация остатков на **одну** дату `asOf` — отдельно от политики P&L.
+
+**Источник курсов:** `cbar_official_rates`, `CbarFxService`.
 
 ---
 
@@ -104,9 +146,10 @@
 
 - Для детализации ролей **Accountant** и **User** в финансовых документах используются явные проверки политик (например модуль `auth/policies`): мутации инвойсов в статусе **PAID** и ручные проводки журнала недоступны роли **User**, где это зафиксировано в [PRD.md](./PRD.md) §7.9; критичные эндпоинты дополнительно защищаются **RolesGuard** / `@Roles(...)`.
 
-### Сырой SQL и тенант (Gap #5)
+### Сырой SQL и изоляция тенанта
 
 - При использовании **`$queryRaw`** / **`$executeRaw`** в запросах к данным организации вручную добавлять условие по **`organizationId`** (или параметризованный эквивалент), чтобы исключить пересечение тенантов.
+- **Реализация (v23.0):** в API доступен **`TenantPrismaRawService`** (`$queryRaw` / `$executeRaw` / `*Tx`) — **обязательный аргумент `organizationId`** на уровне вызова; SQL собирается через `Prisma.sql` и должен связывать этот идентификатор. DDL и платформенный SQL без тенанта — только через **`executePlatformRawUnsafe`** в пакете `@dayday/database` (скрипты вроде `prod-init.ts`), не через tenant-обёртку.
 
 **Неизменяемый журнал аудита (продуктовый модуль 8)** — требования к `AuditMutationInterceptor`, полям `AuditLog` и архиву: **§9**.
 
@@ -242,9 +285,10 @@
 
 **Терминология (азербайджанский бухучёт, стандарты АР) — UI и печать**
 - Для пользователя (веб-i18n, заголовок вкладки браузера, **H1** печатной формы кассового ордера) основной текст — **официальные** формулировки, а не «cash order report»:
-  - **Приход в кассу** (income, поступление наличных): **Mədaxil Kassa Orderi**, аббревиатура **MKO** (в стандарте АР приход — *mədaxil*).
-  - **Расход из кассы** (expense, выдача наличных): **Məxaric Kassa Orderi**, **MXO** (расход — *məxaric*).
-- См. также `apps/web/lib/i18n/resources.ts` (`banking.cash.*`) и HTML-печать в `CashOrderService.getPrintHtml` (`apps/api/src/kassa/cash-order.service.ts`).
+  - **Приход в кассу** (income, поступление наличных): **Kassa Mədaxil Orderi**, аббревиатура **KMO** (приход — *mədaxil*, касса — *kassa*).
+  - **Расход из кассы** (expense, выдача наличных): **Kassa Məxaric Orderi**, **KXO** (расход — *məxaric*).
+- **Legacy / backwards compatibility:** в существующих данных и части кода/маршрутов может встречаться старое именование **MKO/MXO**. В рамках миграции UX и API применяется переименование **MKO → KMO**, **MXO → KXO** (без изменения бизнес-смысла); legacy-алиасы допускаются на переходный период.
+- См. также `apps/web/lib/i18n/resources.ts` (`banking.cash.*`) и печать ордера (web print + server HTML, в зависимости от реализации) в `apps/api/src/kassa/cash-order.service.ts`.
 
 ---
 
@@ -271,18 +315,24 @@
 
 ---
 
-#### Шаг 3. Кассовые ордера (`CashDeskController`, базовый путь `/api/banking/cash`; в БД/Prisma — `MKO` / `MXO`; публичные названия — **§6.0**, MKO/MXO)
+#### Шаг 3. Кассовые ордера (`CashDeskController`, базовый путь `/api/banking/cash`; в БД/Prisma — `KMO` / `KXO`; legacy: `MKO` / `MXO`)
 
 | Метод и путь | Роли | Назначение |
 |--------------|------|------------|
 | `GET /api/banking/cash/balances` | JWT | Остатки по счетам **101\*** по валютам; query `ledgerType` — как в остальных отчётах (`parseLedgerTypeQuery`). |
 | `GET /api/banking/cash/orders` | JWT | Журнал ордеров организации. |
-| `POST /api/banking/cash/orders/mko` | **Owner, Admin, Accountant** | Черновик **MKO**; тело **`CreatePkoDraftDto`**. |
-| `POST /api/banking/cash/orders/mxo` | те же | Черновик **MXO**; тело **`CreateRkoDraftDto`**. |
+| `POST /api/banking/cash/orders/kmo` | **Owner, Admin, Accountant** | Черновик **KMO**; тело **`CreatePkoDraftDto`**. |
+| `POST /api/banking/cash/orders/kxo` | те же | Черновик **KXO**; тело **`CreateRkoDraftDto`**. |
 | `POST /api/banking/cash/orders/:id/post` | те же | **Проведение** черновика → проводка в ГК + статус **POSTED**. |
 | `GET /api/banking/cash/orders/:id/print` | JWT | HTML бланк для печати. |
 | `GET /api/banking/cash/accountable` | JWT | Подотчётные (сальдо **244**). |
 | `POST /api/banking/cash/advance-reports` / `…/:id/post` | **Owner, Admin, Accountant** | Авансовый отчёт (без изменений в рамках §6.0). |
+
+**KO-1 print form (форма № KO-1)**
+
+- For **KMO** (incoming cash order), UI provides an additional print view **KO-1** with a strict grid layout (per the accountant audit template).
+- The print view includes the field **“Məbləğ yazı ilə”** rendered in **AZ** and **RU** (amount-to-words).
+- UI entry point: button **“Çap et”** in the cash order view modal (web print).
 
 **DTO черновика MKO — `CreatePkoDraftDto`**
 
@@ -400,7 +450,7 @@
 
 6. **Связи в `Organization`** (Prisma): коллекции `cashFlowItems`, `cashDesks`; у **`CashFlowItem`** / **`CashDesk`** — обратные связи на `CashOrder` и `BankStatementLine` где задано в схеме.
 
-**Применение в среде:** `npm run db:migrate` из корня монорепо (или `prisma migrate deploy` в CI) после обновления `schema.prisma`. Для уже существующих черновиков ордеров без `cash_flow_item_id` — миграция данных или пересоздание документов перед проведением.
+**Применение в среде:** `npm run db:migrate` из корня монорепо — это **`prisma migrate deploy`** (применить уже добавленные в репозиторий миграции; в CI — то же). Сгенерировать новую миграцию из `schema.prisma`: **`npm run db:migrate:dev`**. Для уже существующих черновиков ордеров без `cash_flow_item_id` — миграция данных или пересоздание документов перед проведением.
 
 ---
 
@@ -488,14 +538,18 @@
 
 - Методы **`previewLaborLeavePay`** / **`previewSickLeavePay`** делегируют в **`AbsencesService`** (калькуляторы без проведения ведомости).
 - При создании черновика **с привязкой к утверждённому табелю** (`timesheetId`) для штатных (**`EmployeeKind.EMPLOYEE`**) подменяется **базовый gross** до расчёта налогов (`calculatePrivateNonOilPayroll`):
-  - **Оплачиваемые отпуска по 30.4** (`VACATION` в табеле, синхронизированные из типов с `LABOR_LEAVE_304`): добавляется \((\text{средняя за 12 мес} / 30.4) \times \text{календарные дни отпуска в месяце}\). Средняя берётся из **проведённых** `payroll_slips` за 12 календарных месяцев, предшествующих концу месяца ведомости; если проведённых месяцев нет — для черновика в качестве средней используется **оклад** из карточки сотрудника.
+  - **Оплачиваемые отпуска (LABOR_LEAVE_304)** (`VACATION` в табеле): добавляется
+    \[
+    (\text{SumGross} / (N_{\text{months}} \cdot 30.4)) \times \text{календарные дни отпуска в месяце}
+    \]
+    где \(N_{\text{months}}\) — количество **полных** отработанных календарных месяцев с даты `hireDate` (в карточке сотрудника) до месяца, предшествующего отпуску, но не более **12**. Если число календарных месяцев с **проведёнными** `payroll_slips` в 12-месячном ретроспективном окне **меньше** \(N_{\text{months}}\) и в карточке сотрудника задано **`initial_salary_balance` > 0**, то к сумме начислений в окне добавляется этот баланс (в т.ч. когда в ERP **нет ни одной** проведённой ведомости в окне — вся база для среднего берётся из `initial_salary_balance`). Если нет ни проводок, ни положительного `initial_salary_balance` — база = **оклад** (`salary`) / 30.4.
   - **Больничный (`SICK_LEAVE_STAJ`)**: к gross месяца добавляется сумма работодателя по правилам ТК AР за **календарные дни больничного в этом месяце**, с учётом **первых 14 календарных дней каждого эпизода** (по записям `Absence` с типом формулы `SICK_LEAVE_STAJ`) и процента от стажа; дни после 14-го оплачиваются DSMF вне ERP.
   - **Без оплаты** (`UNPAID_RECORD` → `OFF` в табеле): отработанные **рабочие** дни (`WORK` + **`BUSINESS_TRIP`** на рабочих днях производственного календаря АР) дают долю оклада \(\text{оклад} \times (\text{дни} / N)\), где \(N\) — число рабочих дней в месяце; дни `OFF` на рабочих днях в эту долю не входят (удержание по табелю).
 - Подрядчики (**`CONTRACTOR`**) и ведомость **без табеля** — по-прежнему gross = поле **`salary`** (старое поведение).
 
 ### Payroll Processor
 
-Расчёт выполнять **асинхронно** (BullMQ), результат уведомлять пользователя (по готовности / email при необходимости).
+Черновик ведомости и проведение при превышении порога **`PAYROLL_ENTITY_ASYNC_THRESHOLD`** (константа в `payroll.constants.ts`; в продакшене **0** — при наличии сотрудников / листов фактически **всегда** через очередь **`payroll-heavy`**, BullMQ) выполняются **асинхронно**: ответ **`{ async: true, jobId }`**, статус — **`GET /api/hr/payroll/jobs/:jobId`**. Уведомления в UI / email — по политике продукта (опционально).
 
 | Направление | Содержание |
 |-------------|------------|
@@ -505,13 +559,19 @@
 **Удержания и взносы:**
 
 - **Income Tax:** 14% (с учётом льготы 8000 AZN в ненефтяном секторе).
-- **DSMF (соцстрах):** 3% с работника, 22% (или 10% + 150) с работодателя.
-- **ITS (медстрах):** 2% с работника и работодателя.
+- **DSMF (соцстрах, private non‑oil):** worker: 10% до 200 AZN + 10 AZN с остатка; employer: 22% (standard) или 15% (preferential) — берётся из `Organization.settings`.
+- **ITS (медстрах):** progressive (1%–2%) по текущим ставкам АР (см. реализацию tax calculator).
 - **Unemployment Insurance:** 0,5%.
 
 ### Авто-проводки
 
 При расчёте зарплаты создаются проводки: **Дт 721** (расходы на оплату труда) — **Кт 533** (задолженность перед персоналом).
+
+### 7.0.1. ЦФО (`departmentId`): быстрый расход (QuickExpense) и зарплата
+
+- **`POST /api/accounting/quick-expense`** (`QuickExpenseDto`): поле **`departmentId`** **необязательно** в контракте API. Если передано — выполняется проверка, что `Department` принадлежит организации; значение сохраняется в **`Transaction.departmentId`** и участвует в отчётах с фильтром по ЦФО (например **`GET /api/reporting/pl?departmentId=…`**). Для корректного **P&L по подразделениям** по операционным расходам, вводимым через этот эндпоинт, **`departmentId` следует передавать** всегда, когда расход относится к конкретному ЦФО (иначе проводка попадает только в организационный срез без привязки к отделу).
+
+- **Проведение ведомости ЗП** (`PayrollService.postRunSync`): формируется **одна агрегированная** финансовая транзакция по счетам **721 / 533 / 521** и др. **без** заполнения **`Transaction.departmentId`**. Фонд оплаты труда в главной книге отражается **по организации целиком**; разнесение ФОТ по ЦФО через поле транзакции в текущей реализации **не выполняется**. Для аналитики по персоналу используются **`PayrollSlip`**, **`Employee` → `JobPosition` → `Department`**. Целевое распределение проводок ЗП по `departmentId` — отдельная доработка (до неё P&L по ЦФО по строке «зарплата» опирается на методологию без построчного ЦФО в GL).
 
 ### Организационная структура и позиции
 
@@ -541,8 +601,8 @@
 
 #### Аналитика (Reporting)
 
-- Обновить **`ReportingService`**: агрегировать суммы из **`JournalEntry`** по счетам **721** и **533** (и при необходимости связанным субсчетам по политике) с цепочкой **`JournalEntry` → Transaction → (связь с начислением ЗП) → Employee → JobPosition → Department**.
-- Выход: разрезы по **департаменту** (и/или по `JobPosition`) для P&L / отчётов по персоналу; при отсутствии разнесения по сотруднику в проводке — расширить модель начисления (например, `payrollSlip.employeeId` уже используется) так, чтобы каждая строка журнала по ЗП была однозначно привязана к сотруднику и далее к ЦФО.
+- **QuickExpense и прочие проводки с `Transaction.departmentId`:** разрезы P&L по ЦФО — по полю транзакции (см. **§7.0.1**).
+- **Зарплата:** агрегированная проводка без `departmentId` на транзакции; для срезов по подразделениям — данные **`PayrollSlip`** и оргструктура (**`Employee` → `JobPosition` → `Department`**), до внедрения распределения ФОТ по проводкам.
 
 ---
 
@@ -565,9 +625,25 @@
 
 ## 9. Модуль 8: Неизменяемый аудит (AuditMutationInterceptor)
 
+### §9.0 Структура таблицы `audit_logs` (Prisma: `AuditLog`)
+
+Логические поля продукта и соответствие колонкам БД:
+
+| Логическое поле | Колонка / Prisma | Описание |
+|-----------------|------------------|----------|
+| **entityName** (тип сущности) | `entity_type` / `entityType` | Например `Invoice`, `Employee`, `Product`, `JournalEntry`; для прочих мутаций — `HTTP_MUTATION`. |
+| **entityId** | `entity_id` / `entityId` | Идентификатор сущности (UUID или строка до 255 символов для fallback). |
+| **action** (HTTP-метод мутации) | `action` | `POST`, `PATCH`, `PUT`, `DELETE` (в UI OWNER-журнала маппится на CREATE / UPDATE / DELETE). |
+| **userId** | `user_id` / `userId` | Пользователь из JWT (nullable для edge cases). |
+| **oldData** | `old_values` / `oldValues` | JSON снимок до изменения (ключевые сущности). |
+| **newData** | `new_values` / `newValues` | JSON снимок после изменения или ответа API. |
+| **timestamp** | `created_at` / `createdAt` | UTC время записи. |
+
+Дополнительно в той же строке: `organizationId`, `changes` (путь + тело для generic-мутаций), `clientIp`, `userAgent`, `hash` (SHA-256 целостности). Архивная копия — `audit_log_archives` с тем же набором полей плюс `archived_at`.
+
 ### Поведение
 
-- **Глобальный перехватчик** NestJS (`AuditMutationInterceptor`): автоматически логирует **мутации** (`POST`, `PATCH`, `PUT`, `DELETE`) с привязкой к **`userId`** и **`organizationId`** (из JWT), за исключением публичных маршрутов auth (`/auth/login`, `/auth/register`, `/auth/refresh`).
+- **Глобальный перехватчик** NestJS (`AuditMutationInterceptor`): автоматически логирует **мутации** (`POST`, `PATCH`, `PUT`, `DELETE`) с привязкой к **`userId`** и **`organizationId`** (из JWT), за исключением публичных маршрутов auth (`/auth/login`, `/auth/register`, `/auth/refresh`). Запись в `audit_logs` выполняется **после** формирования HTTP-ответа **без ожидания** клиентом (fire-and-forget): снижает задержку ответа; при аварийном завершении процесса сразу после ответа теоретически возможна потеря последней audit-строки (см. PRD §10.0).
 - Для сущностей **Invoice**, **Employee**, **Product** и для операций с **проводками** (например `POST /accounting/quick-expense` → снимок транзакции и строк `JournalEntry`) сохраняются **`oldValues`** и **`newValues`** (JSON); для прочих мутаций — запись типа `HTTP_MUTATION` с телом запроса в поле `changes`.
 - В каждую запись записываются **`clientIp`**, **`userAgent`**, **`hash`** (SHA-256 от канонического JSON полей + секрет).
 - **Проверка целостности:** `POST /api/audit/integrity-check` (Owner/Admin) — сверка хешей по организации; строки без хеша (legacy) учитываются отдельно.
@@ -610,6 +686,8 @@
 
 #### §10.1 (v6.0) `InventoryAuditService` — транзакция проведения
 
+**Note (audit sync):** Treasury cash orders were renamed **MKO/MXO → KMO/KXO**, and incoming cash orders (KMO) have an additional **KO-1** print form requirement (see §6.0).
+
 - **Approve (проведение) выполняется атомарно**: весь процесс оборачивается в **`prisma.$transaction`**.
 - **Ограничения (Compliance):**
   - Запрещено проводить документ в статусе **APPROVED** повторно.
@@ -623,6 +701,45 @@
 - **i18n (RU/AZ) для UI инвентаризации:** ключи `inventory.audit*` используются на страницах `/inventory/audit/new`, `/inventory/audits`, `/inventory/audits/[id]` и должны проходить `npm run i18n:audit` (см. §17). Ключи включают, например: `inventory.auditTitle`, `inventory.auditSubtitle`, `inventory.auditThSystem`, `inventory.auditThFact`, `inventory.auditThDiff`, `inventory.auditThCost`, `inventory.auditThAmountDiff`, `inventory.auditTotalDiff`, `inventory.auditStatusDraft`, `inventory.auditStatusApproved`.
 
 #### §10.2 (v14.0) Модуль Manufacturing — спецификации (ProductRecipe)
+
+**Связь с ЦФО:** производственные и складские проводки, как и прочие операционные расходы, для P&L по подразделениям должны согласовываться с правилами **`departmentId`** в финансовых транзакциях — см. **§7.0.1** (в т.ч. быстрый расход и отличие от агрегированной зарплатной проводки).
+
+#### Financial Reports (v16.1): Balance Sheet + Cash Flow
+
+**Goal:** management reporting built on top of the Ledger (double-entry), using **Decimal** arithmetic on the API side.
+
+**Balance Sheet mapping (GL → Management lines)**
+
+Balance is generated **as of a date** (`asOfDate`, UTC, inclusive) using closing balances from the Ledger.
+
+- **Assets**
+  - **Cash & Bank**: **101.\*** (cash desks), **221.\*** (bank accounts), plus legacy **223.\*** if present.
+  - **Receivables**: **211.\***
+  - **Inventory / Stock**: **201.\*** (goods), **204.\*** (finished goods)
+- **Liabilities**
+  - **Payables**: **531.\***
+  - **Payroll & taxes payable**: **521.\***, **523.\***
+- **Executive widgets** (`GET /api/reports/executive-widgets`): ответ содержит **отдельные** суммы по **531** (кредиторка поставщиков) и по **521 + 523** (ЗП и налоги у источника и смежные обязательства); на дашборде не объединяются в одну KPI «кредиторка».
+- **`StockMovement.documentDate`:** для метода оценки **FIFO** порядок слоёв при расчёте себестоимости списания — **`document_date` ASC**, при равенстве дат — **`created_at` ASC**; при создании движения задаётся бизнес-датой (например дата описи инвентаризации, `recognizedAt` / `createdAt` инвойса для отгрузки, текущий момент для закупки/перемещения/корректировки).
+- **Equity**
+  - **Charter capital**: **301.\*** (and related equity codes if present)
+  - **Retained earnings / P&L result**: derived from equity / revenue / expense movements up to `asOfDate` (implementation detail in `FinancialReportService`)
+
+**Cash Flow (Direct method)**
+
+Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: **`GET /api/reports/cash-flow`**.
+
+- **Cash sources**:
+  - **Bank** (221.\*): `BankStatementLine` с **`origin` ∈ {`FILE_IMPORT`, `MANUAL_BANK_ENTRY`}**, с привязкой к `CashFlowItem`; период — по **`valueDate`**, при отсутствии — по дате выписки.
+  - **Cash desk** (101.\*): проведённые **KMO/KXO** (`CashOrder`), с привязкой к `CashFlowItem`.
+- **Grouping**: by `CashFlowItem` (code + name). Category is inferred from item code:
+  - `CF-INV*` → Investing
+  - `CF-FIN*` → Financing
+  - otherwise → Operating
+
+**Performance / caching**
+
+- If the number of underlying ledger entries / source rows exceeds **1000**, the API may cache the computed report in **Redis** for a short TTL (keyed by org + params).
 
 **Цель:** базовый CRUD для производственных рецептов (из каких материалов/сырья состоит готовый товар), закрывающий требования модуля **Manufacturing** на уровне MVP.
 
@@ -788,6 +905,28 @@
 **Базис:** v2/v3 считаются реализованными; v4 наращивает **слой монетизации** без переписывания доменной логики учёта.
 
 **Стек:** Prisma (PostgreSQL), NestJS API, Next.js (App Router) web.
+
+### §14.0 Global Company Registry (v19.0)
+
+**Цель:** единый справочник юрлиц по **VÖEN (10 цифр)** для подсказок при вводе контрагента и обогащения данных между организациями платформы (без нарушения изоляции тенанта: локальные записи остаются в `counterparties` с `organizationId`).
+
+| Компонент | Описание |
+|-----------|----------|
+| **Таблица `global_company_directory`** | Уникальный ключ `tax_id`; поля: `name`, `legal_address`, `phone`, `director_name` (денормализация). |
+| **Источники обновления** | При сохранении **профиля организации** (`PATCH /api/organization/settings`) и при **создании/обновлении контрагента** запись по VÖEN **асинхронно** upsert-ится в справочник (fire-and-forget). |
+| **Связь с MDM** | Таблица `global_counterparties` остаётся для НДС/lookup; глобальный реестр компаний дополняет UX (Smart-fill). |
+| **API чтения** | `GET /api/organization/directory/by-voen/:taxId` (JWT) — данные для автозаполнения формы контрагента. |
+| **Профиль организации** | Поля `legal_address`, `phone`, `director_name`, `logo_url`, `valuation_method` (см. PRD §11.0); банковские счета — `organization_bank_accounts` (1:N). |
+| **Миграция БД** | Файл в репозитории: `packages/database/prisma/migrations/20260429100000_org_profile_global_directory/migration.sql`. На стенде: `npm run db:migrate` из корня (= `migrate deploy`) с валидным `DATABASE_URL`; в CI — `prisma migrate deploy`. |
+
+#### Customer Portal Security (гостевая ссылка на счёт)
+
+| Аспект | Требование |
+|--------|------------|
+| **Токен** | Не перечисляемый идентификатор: **UUID v4** + **"."** + **HMAC-SHA256** (секрет среды `INVOICE_PORTAL_TOKEN_SECRET`, иначе fallback на `JWT_SECRET`) по строке `{invoiceId}:{uuid}`; кодировка подписи **base64url**. Значение хранится в `invoices.public_token` (уникальный индекс). |
+| **Подбор** | Перебор пространства токенов практически исключён; на `GET /api/public/invoices/:token` и PDF — **rate limiting** (`@nestjs/throttler`, лимит на IP). |
+| **Транспорт** | Ссылка только по **HTTPS** в проде; в ответе портала не раскрывать внутренние UUID организации сверх необходимого публичного JSON. |
+| **Язык** | Опционально `counterparties.portal_locale` ∈ {`az`,`ru`,`en`}; иначе язык UI портала по **Accept-Language** браузера. |
 
 ### 14.1. Схема Prisma
 
@@ -1002,9 +1141,20 @@ enum SubscriptionTier {
 
 #### 14.8.7. QuotaGuard и перехват на фронте
 
-**Декоратор `@CheckQuota(resource)`** (Nest): метаданные для ресурса (`USERS`, `INVOICES_PER_MONTH`, `WAREHOUSE_VOLUME` — enum по мере расширения). Guard / interceptor вызывает **`QuotaService`** до мутации; при превышении — **`QuotaExceededException` → HTTP 402** с телом `QUOTA_EXCEEDED`.
+**Декоратор `@CheckQuota(resource)`** (Nest): метаданные для ресурса (`USERS`, `INVOICES_PER_MONTH`, `STORAGE` — квота хранилища дополняется проверками в сервисах загрузки файлов / PDF). Guard вызывает **`QuotaService`** до мутации; при превышении — **`QuotaExceededException` → HTTP 402** с телом `QUOTA_EXCEEDED`.
 
 **Фронтенд:** глобальный перехват в `apiFetch` для `402` + `code === "QUOTA_EXCEEDED"` — событие **`dayday:quota-upgrade`** и отображение модалки апгрейда (тот же UX-паттерн, что и `SUBSCRIPTION_READ_ONLY`).
+
+#### 14.8.8. Вебхуки платёжных систем (v23.0)
+
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| POST | `/api/billing/webhooks/:provider` | Приём уведомления шлюза (`mock`, `pasha`, `pasha_bank`). **Публичный** маршрут (`@Public()`): без JWT. |
+
+- **Подпись:** тело `{ orderId, status, signature, externalId? }`; проверка HMAC как у PAŞA Bank mock/реального шлюза (`PashaBankPaymentProvider.verifyWebhookSignature`). Неверная подпись → **401**.
+- **Идемпотентность:** перевод `PaymentOrder` из `PENDING` в `PAID` через **`updateMany`** с условием `status = PENDING`; повторный вебхук не продлевает подписку повторно. Запись **`SubscriptionInvoice`** — с защитой от дубликата по `paymentOrderId`.
+- **Побочные эффекты при успехе:** обновление **`OrganizationSubscription`** (продление `expiresAt` / модули по metadata pro-rata), запись в **`audit_logs`** с `organizationId = null`, `entityType = platform.billing.payment_applied` (глобальный аудит платформы).
+- **Legacy:** `POST /api/public/billing/webhook` сохраняется для совместимости; новые заказы используют callback URL на **`/api/billing/webhooks/pasha_bank`**.
 
 ---
 
@@ -1079,14 +1229,15 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 ### Prisma Extension (Strict Multi-tenancy)
 
 - **`PrismaService`** строится с **`$extends`**: перехват операций `find*`, `update*`, `delete*`, `create*`, `count`, `aggregate` (по моделям с полем `organizationId`) для **принудительного** слияния условия `organizationId` с контекстом текущего запроса.
+- **Сырой SQL:** см. **§2** — `TenantPrismaRawService` + `executePlatformRawUnsafe` для не-тенантного DDL.
 - **Контекст:** `AsyncLocalStorage` (или эквивалент), заполняется HTTP-interceptor’ом из JWT (`organizationId`); для маршрутов **`/api/admin`** при `isSuperAdmin` — режим без фильтра по тенанту (только для платформенных эндпоинтов).
 - **Исключения:** модели без тенанта (`User`, `Organization`, `SystemConfig`, `TranslationOverride` и т.д.) не подмешивают `organizationId`.
 - **Воркеры BullMQ:** в начале обработки job выставляют тот же контекст (`organizationId` из payload) либо `skipTenantFilter` для глобальных задач (например архив аудита).
 
 ### Async Processing (BullMQ)
 
-- Операции, затрагивающие **более 50 сущностей** за один запрос (порог настраивается в коде), выполняются **асинхронно** через BullMQ: API возвращает **`jobId`**, клиент опрашивает статус / отображает прогресс.
-- **Зарплата:** массовое создание черновика расчёта и/или проведение run при большом числе сотрудников — очередь `payroll-heavy`; синхронный путь сохраняется для малых объёмов.
+- Операции с **настраиваемым порогом** по числу затронутых сущностей (например тяжёлые импорты) выполняются **асинхронно** через BullMQ: API возвращает **`jobId`**, клиент опрашивает статус / отображает прогресс (конкретные пороги — в коде соответствующих сервисов).
+- **Зарплата:** очередь **`payroll-heavy`**; порог **`PAYROLL_ENTITY_ASYNC_THRESHOLD`** (см. **§7** — при **0** черновик и проведение ставятся в очередь при ненулевом числе сотрудников / листов). Статус: **`GET /api/hr/payroll/jobs/:jobId`**.
 
 ### Квоты и продукт
 
@@ -1149,6 +1300,7 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 | **v14.2** | §7.0 — канонические коды **LABOR_LEAVE**, **SOCIAL_LEAVE**, **UNPAID_LEAVE**, **EDUCATIONAL_LEAVE**, **SICK_LEAVE** + `description`; reconcile старых кодов при `GET /api/hr/absence-types`; черновик payroll с утверждённым табелем — корректировка gross (30.4, больничный по эпизодам, без оплаты по рабочим дням) |
 | **v14.3** | Внедрение реляционной инвентаризации: `InventoryAudit` + `InventoryAuditLine` (1:N), проведение описи атомарно в `prisma.$transaction` (проводки 201/204↔611/731 + `StockMovement` ADJUSTMENT), UI полноэкранного редактора с realtime‑расчётами; унификация UI‑модалок по проекту (единые футеры/кнопки и i18n‑ключи) |
 | **v14.4** | Fix: холдинг `/api/holdings/:id/summary` — корректная консолидация Cash/Bank как сумма строк по дочерним компаниям (round-per-row, чтобы total совпадал с таблицей); конвертация в базовую валюту по дате `asOf` с логированием FX ошибок без обнуления сумм |
+| **v25.0** | **§0.0** — реестр эндпоинтов (`/api/admin/chart-template`, `/api/billing/webhooks`, `/api/reports/cash-flow`, jobs payroll); **§7.0.1** — `departmentId` для QuickExpense vs агрегированная ЗП; **§10.2** — ссылка на ЦФО; **§16** — BullMQ/payroll пороги; прямой ДДС — происхождение банковских строк; сырой SQL — переименование заголовка §2 (реализация `TenantPrismaRawService`) |
 
 Актуальная спецификация — **этот `TZ.md`**; при изменениях править только его.
 

@@ -496,19 +496,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       pathname.startsWith("/employees") ||
       pathname.startsWith("/hr/") ||
       pathname.startsWith("/payroll");
-    const reportsActive = pathname.startsWith("/reporting");
+    const reportsActive =
+      pathname.startsWith("/reporting") || pathname.startsWith("/reports");
     const adminActive =
       pathname.startsWith("/companies") ||
       pathname.startsWith("/settings") ||
       pathname.startsWith("/super-admin");
     const reportingHubActive =
-      pathname === "/reporting" ||
-      (pathname.startsWith("/reporting") &&
-        !pathname.startsWith("/reporting/receivables") &&
-        !pathname.startsWith("/reporting/reconciliation") &&
-        !pathname.startsWith("/reporting/aging") &&
-        !pathname.startsWith("/reporting/tax-export") &&
-        !pathname.startsWith("/reporting/holding"));
+      !pathname.startsWith("/reports") &&
+      (pathname === "/reporting" ||
+        (pathname.startsWith("/reporting") &&
+          !pathname.startsWith("/reporting/receivables") &&
+          !pathname.startsWith("/reporting/reconciliation") &&
+          !pathname.startsWith("/reporting/aging") &&
+          !pathname.startsWith("/reporting/tax-export") &&
+          !pathname.startsWith("/reporting/holding")));
     /** Только хаб остатков `/inventory`, без вложенных экранов (köçürmə, inventar və s.) */
     const inventoryMainActive = pathname === "/inventory";
     return {

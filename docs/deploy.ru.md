@@ -1,24 +1,36 @@
-# DayDay / ERA ERP — развёртывание в production (Ubuntu 24.04 + Docker Compose)
+# DayDay ERP — развёртывание в production (Ubuntu 24.04 + Docker Compose)
 
-Инструкция для владельца сервера: поднять стек из `docker-compose.prod.yml` (Postgres, Redis, NestJS API, Next.js).
+Цель: поднять стек из `docker-compose.prod.yml`:
+- Postgres (`db`)
+- Redis (`redis`)
+- NestJS API (`api`)
+- Next.js Web (`web`)
 
-Англоязычный оригинал: [deploy.md](./deploy.md).
+Документ обновлён под:
+- **Node.js 22** (образы `apps/api/Dockerfile`, `apps/web/Dockerfile`)
+- **Prisma ORM 7** + **`prisma.config.ts`** + **driver adapter** (`@prisma/adapter-pg`)
+- Требование **HTTPS** для production web-origin (см. `TZ.md` §1)
 
-## 1. Подключение по SSH
+---
 
-С рабочей машины (подставьте свои значения):
+## 0. Быстрый чек-лист перед стартом
+
+- Есть домен и будет настроен HTTPS (Caddy/nginx/Traefik) → трафик на `web:3000`.
+- В корне репозитория будет `.env` (шаблон: `env.production.example`).
+- Вы понимаете, что `NEXT_PUBLIC_*` переменные **вшиваются в клиентский бандл на этапе build**.
+- На сервере открыт только нужный внешний порт (обычно 80/443); Postgres/Redis наружу не публикуем.
+
+---
+
+## 1. SSH
 
 ```bash
-ssh -i /path/to/key.pem deploy@YOUR_SERVER_IP
+ssh deploy@YOUR_SERVER_IP
 ```
 
-Или по паролю (менее безопасно):
+---
 
-```bash
-ssh deploy@129.212.170.185
-```
-
-## 2. Установка Docker на чистую Ubuntu 24.04
+## 2. Docker (Ubuntu 24.04)
 
 ```bash
 sudo apt-get update
@@ -26,24 +38,28 @@ sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${VERSION_CODENAME:-noble}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"${VERSION_CODENAME:-noble}\") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$USER"
 ```
 
-Выйдите из сессии и войдите снова (или выполните `newgrp docker`), чтобы применилась группа `docker`. Проверка:
+Перезайди в SSH или выполни `newgrp docker`, затем:
 
 ```bash
 docker version
 docker compose version
 ```
 
-## 3. Установка Git
+---
+
+## 3. Git
 
 ```bash
 sudo apt-get install -y git
 ```
+
+---
 
 ## 4. Клонирование репозитория
 
@@ -54,134 +70,179 @@ cd /opt/dayday_erp
 git clone YOUR_GIT_URL .
 ```
 
-Подставьте вместо `YOUR_GIT_URL` URL вашего удалённого репозитория (HTTPS или SSH), например `https://github.com/<org>/<repo>.git` или `git@github.com:<org>/<repo>.git`.
+---
 
-## 5. Файл окружения (`.env`)
-
-В корне репозитория:
+## 5. Production `.env` (корень репозитория)
 
 ```bash
 cp env.production.example .env
 nano .env
 ```
 
-Если в репозитории по-прежнему есть только `.env.example`, используйте его; актуальный шаблон для production — **`env.production.example`** в корне монорепо.
+### Минимально обязательные переменные
 
-### Обязательно и настоятельно рекомендуется
+- **Postgres**:
+  - `POSTGRES_PASSWORD` (обязательна)
+  - опционально `POSTGRES_USER`, `POSTGRES_DB`
+- **API**:
+  - `REDIS_URL=redis://redis:6379`
+  - `JWT_SECRET`, `JWT_REFRESH_SECRET`
+  - `AUDIT_HASH_SECRET` (рекомендуется)
+  - `CORS_ORIGINS=https://your-domain.tld` (можно несколько через запятую)
+- **Web**:
+  - `NEXT_PUBLIC_API_URL=http://api:4000` (для сборки/SSR внутри сети Compose)
 
-| Переменная / тема | Пояснение |
-|-------------------|-----------|
-| `POSTGRES_PASSWORD` | **Обязательна** для `docker-compose.prod.yml` (без неё Compose не запустит стек). |
-| `REDIS_URL` | **Обязательна в `.env`** для сервиса `api` (Compose не подставляет её сам). Для Redis из этого compose: `redis://redis:6379`. Не используйте URL read-replica для очередей Bull. |
-| `JWT_SECRET`, `JWT_REFRESH_SECRET` | Длинные случайные значения; не повторяйте секреты из разработки. |
-| `COMPOSE_PROJECT_NAME` | Рекомендуется задать (например `dayday_prod`), чтобы имя сети Docker было предсказуемым и совпадало с шагом миграций ниже. |
-| `CORS_ORIGINS` | В production без подходящего origin браузер не сможет вызывать API с вашего сайта. |
-| `NODE_ENV` | Должно быть `production` и для API, и для web (Compose также выставляет это для сервисов приложений). |
+### Часто нужные опции (рекомендуется настроить до публичного запуска)
 
-### URL и порты (Compose)
+- **Storage (логотипы, PDF)**:
+  - production: `STORAGE_DRIVER=s3` + `S3_*`
+  - альтернативно: `STORAGE_DRIVER=local` + `STORAGE_LOCAL_ROOT`
+- **SMTP**:
+  - `SMTP_HOST` + `SMTP_*` — без этого письма не отправляются
+- **Sentry**:
+  - API: `SENTRY_DSN_API`
+  - Web client: `NEXT_PUBLIC_SENTRY_DSN`
+  - sourcemaps upload для web build: `SENTRY_UPLOAD_SOURCEMAPS=1` + `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT_WEB`
 
-- **Web (хост → контейнер):** `PORT` — порт на хосте мапится на порт контейнера `3000` (по умолчанию `3000`). Пример: `PORT=80` откроет интерфейс на 80-м порту хоста.
-- **API (хост → контейнер):** `API_PUBLISH_PORT` (по умолчанию `4000`) → `API_PORT` (по умолчанию `4000`) внутри контейнера API.
-- **Публикация Postgres / Redis:** `POSTGRES_PUBLISH_PORT` (по умолчанию `5432`), `REDIS_PUBLISH_PORT` (по умолчанию `6379`). На «закрытом» сервере можно убрать проброс портов в compose, если с БД и Redis работают только контейнеры.
+### Важно про `NEXT_PUBLIC_*`
 
-### Связка приложений
+`NEXT_PUBLIC_*` попадают в Next.js bundle **во время** `docker build` (см. `apps/web/Dockerfile`). Если меняете эти значения — нужно **пересобрать образ web**.
 
-- **`DATABASE_URL` в `.env`:** для сервиса `api` Compose **переопределяет** `DATABASE_URL` адресом сервиса `db` внутри сети Docker. В стандартной схеме править вручную не нужно.
-- **`REDIS_URL`:** задаётся **только в `.env`** (Compose больше не переопределяет). Для Redis из этого же `docker-compose.prod.yml` укажите `REDIS_URL=redis://redis:6379` (хост `redis` — имя сервиса в сети Compose).
-- **`NEXT_PUBLIC_API_URL`:** по умолчанию в Compose — `http://api:4000`, чтобы сервер Next.js ходил в API по внутренней сети (rewrites и серверные запросы). Браузер ходит на тот же origin через `/api/...`; меняйте значение только если понимаете разницу серверных и клиентских URL.
-- **`CORS_ORIGINS`:** в production API разрешает origin из этого списка через запятую (плюс localhost по умолчанию). Укажите публичный адрес сайта, например `https://erp.example.com`.
+---
 
-### Аварийный обход модулей (`EMERGENCY_MODULE_ACCESS_EMAIL`)
+## 6. Первый запуск стека
 
-В текущем коде **нет** отдельной production-переменной, которая включает или выключает этот обход. Обход для фиксированного dev-email **отключён при `NODE_ENV=production`** (см. `apps/api/src/subscription/subscription-access.service.ts`). Для боя нужно:
-
-- Держать для API **`NODE_ENV=production`**.
-- Не запускать стек с `NODE_ENV=development` на публичном сервере.
-
-## 6. Миграции БД (до или сразу после первого старта API)
-
-Рекомендуемый путь на сервере: **`bash scripts/deploy-prod-db-migrate.sh`** (поднимает стек и выполняет `npm run db:migrate:deploy` внутри контейнера `api`).
-
-Альтернатива без скрипта: одноразовый контейнер `node` с примонтированным каталогом `prisma`, когда сервис `db` в состоянии healthy, из каталога с репозиторием на сервере.
-
-Задайте **фиксированное имя проекта Compose**, чтобы имя сети по умолчанию было предсказуемым (`${COMPOSE_PROJECT_NAME}_default`):
+Из корня (где лежит `docker-compose.prod.yml`):
 
 ```bash
-cd /opt/dayday_erp
-export COMPOSE_PROJECT_NAME=dayday_prod
-set -a && source .env && set +a
-
-docker compose -f docker-compose.prod.yml up -d db
-# Когда в `docker compose ps` у db статус healthy:
-
-docker run --rm \
-  --network "${COMPOSE_PROJECT_NAME}_default" \
-  -e DATABASE_URL="postgresql://${POSTGRES_USER:-dayday}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dayday}" \
-  -v "$(pwd)/packages/database/prisma:/prisma" \
-  -w /prisma \
-  node:20-alpine \
-  sh -c "npx --yes prisma@6.19.3 migrate deploy"
-```
-
-Подстройте `POSTGRES_*`, если меняли их в `.env`. Альтернатива: с доверенной машины выполнить `npm run db:migrate:deploy`, указав `DATABASE_URL`, который достигает Postgres (VPN или SSH-туннель).
-
-## 7. Справочные данные БД → SQL-дамп (обязательный сценарий со скриптом)
-
-Postgres выполняет скрипты из `packages/database/prisma/docker-init/` **только при первом создании** каталога данных. Если том Docker с БД уже существует, **новый `01-seed-data.sql` из Git сам по себе не накатится** — в работающей базе не появятся обновлённые переводы, `system_config`, прайс и т.п.
-
-**Правило при релизе:** как только вы меняете в «эталонной» базе платформенные данные (переопределения i18n, биллинг/прайс, квоты, настройки в `system_config` и т.д.), нужно **выгрузить** это состояние в репозиторий скриптом и **закоммитить** обновлённый `01-seed-data.sql`, чтобы свежие установки и ручное применение на сервере оставались согласованными.
-
-Из **корня монорепо**, при корневом `.env` с рабочим `DATABASE_URL` на БД с нужным содержимым:
-
-```bash
-npm run db:dump-to-prod
-```
-
-Скрипт перезаписывает `packages/database/prisma/docker-init/01-seed-data.sql` идемпотентными `INSERT … ON CONFLICT` для:
-
-- `translation_overrides` (с отсечением опасных односегментных ключей),
-- `system_config`,
-- `pricing_modules`, `pricing`, `pricing_bundles`.
-
-Сид супер-админа лежит отдельно в **`02-super-admin-seed.sql`** (экспорт его не перезаписывает; пароль в дампе пользователей по умолчанию не тянется из БД).
-
-**Другие варианты вызова:** `dotenv -e .env -- npm run docker-init:export -w @dayday/database` (тот же экспорт). Чтобы вывести SQL в stdout вместо файла: задайте `DOCKER_INIT_OUT=-` перед командой.
-
-**Уже работающий прод-сервер:** после `git pull` при необходимости прогоните новый дамп (или нужные фрагменты) через `psql` в контейнере `db`, если том с данными уже был создан — иначе строки в БД не обновятся.
-
-## 8. Сборка и запуск всего стека
-
-### Скрипты в `scripts/` (сервер, из корня репозитория)
-
-| Скрипт | Когда использовать |
-|--------|--------------------|
-| `bash scripts/deploy-prod-code.sh` | Обновление кода/образов **без** миграций Prisma (схема БД не менялась). |
-| `bash scripts/deploy-prod-db-migrate.sh` | Релиз с **новыми миграциями**: `git pull`, бэкап БД, `up --build`, `prisma migrate deploy`, затем **`npm run db:prod-init -w @dayday/database`** (идемпотентные DDL-фиксы схемы из `prod-init.ts`, без полного повторного сида). |
-| `bash scripts/deploy-prod-db-reset.sh` | **Только осознанно:** снимок тома Postgres (`down -v`), полный `db:prod-init` — все данные БД в compose-томе уничтожаются. |
-
-Перед первым запуском скриптов: `chmod +x scripts/*.sh` (по желанию). Убедитесь, что в `.env` заданы `REDIS_URL`, `POSTGRES_PASSWORD`, JWT и при необходимости `COMPOSE_PROJECT_NAME`.
-
-### Вручную через Compose
-
-Из корня репозитория (где лежит `docker-compose.prod.yml`). Имя проекта Compose должно совпадать с тем, что использовали для миграций (часто задаётся в `.env` как `COMPOSE_PROJECT_NAME`):
-
-```bash
-export COMPOSE_PROJECT_NAME=dayday_prod   # или уже в .env
 docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml ps
 ```
 
-Проверка состояния:
+Логи:
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f api web
 ```
 
-## 9. HTTPS и обратный прокси (рекомендуется)
+---
 
-Для публичного доступа завершайте TLS на **nginx** или **Caddy** перед портами `web` (и при необходимости `api`). Ограничьте или уберите проброс портов Postgres/Redis (`POSTGRES_PUBLISH_PORT` / `REDIS_PUBLISH_PORT`), если к ним снаружи подключаться не нужно.
+## 7. Prisma 7: миграции и первичная инициализация
 
-## 10. Устранение неполадок
+В этом репозитории Prisma настроена через `packages/database/prisma.config.ts`.
+В production миграции применяем **только** командой `prisma migrate deploy` (никаких `migrate dev`).
 
-- **Подстановка переменных в Compose:** спецсимволы в `POSTGRES_PASSWORD` могут сломать собранную из кусков строку `DATABASE_URL`. Используйте пароль, безопасный для URL, или процент-кодируйте символы в строке подключения для миграций.
-- **`npm ci` в Docker:** сборка опирается на закоммиченный `package-lock.json` в корне монорепо. Если установка в образе падает, пересоберите lockfile локально и закоммитьте.
+### 7.0. Maintenance mode перед миграциями (рекомендуется)
+
+Перед `db:migrate:deploy` включайте maintenance mode, чтобы пользователи не работали в момент изменения схемы.
+
+- Готовые файлы в репозитории:
+  - `docs/maintenance.html` — страница обслуживания (AZ/RU)
+  - `docs/nginx-maintenance.conf` — сниппет Nginx (возвращает 503 при наличии `/var/www/html/maintenance.enable`)
+
+Пример последовательности на сервере:
+
+```bash
+# 1) разово: положить maintenance.html и подключить nginx-сниппет
+sudo cp /opt/dayday_erp/docs/maintenance.html /var/www/html/maintenance.html
+# include /opt/dayday_erp/docs/nginx-maintenance.conf; внутри server { ... }
+
+# 2) включить maintenance
+sudo touch /var/www/html/maintenance.enable
+sudo nginx -t && sudo systemctl reload nginx
+
+# 3) миграции/инициализация
+docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
+
+# 4) выключить maintenance
+sudo rm -f /var/www/html/maintenance.enable
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 7.1. Миграции (обязательно)
+
+```bash
+docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+```
+
+### 7.2. Идемпотентная “доводка” платформенных данных (рекомендуется)
+
+```bash
+docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
+```
+
+Примечание: `db:prod-init` должен быть идемпотентным; это не “reset”.
+
+---
+
+## 8. HTTPS (обязательно для production)
+
+Production web-origin должен быть **HTTPS**.
+
+Рекомендация: поставить Caddy или nginx и проксировать:
+- `https://your-domain.tld` → `http://127.0.0.1:3000` (контейнер `web`)
+
+API можно не публиковать отдельно: браузер ходит через тот же origin `/api/*` (Next rewrites).
+
+---
+
+## 9. Проверки после деплоя
+
+- `GET /api/health` через публичный web-origin (например `https://your-domain.tld/api/health`)
+- Логин/регистрация в UI
+- Проверка, что переводы подгружаются (нет ошибок `Failed to fetch`/`Unexpected end of JSON input`)
+
+---
+
+## 10. Типовые проблемы
+
+- **`npm install` / `prisma generate` падает из-за `DATABASE_URL`**: убедитесь, что `.env` в корне и `DATABASE_URL`/`POSTGRES_*` заданы корректно (в compose `DATABASE_URL` для `api` собирается автоматически).
+- **Windows локально: ENOTEMPTY/EPERM в `.next`**: остановить `next dev`, запустить `npm run clean -w @dayday/web`, повторить build; добавить исключение антивируса для `apps/web/.next`.
+
+---
+
+## 11. Runbook: «снести дроплет и поднять заново» (без данных)
+
+Сценарий подходит, если в production нет бизнес-данных и можно безболезненно пересоздать сервер.
+
+### 11.1. На новой машине (Ubuntu 24.04)
+
+1) Установи Docker и Git (см. разделы 2–3).
+2) Клонируй репозиторий в `/opt/dayday_erp`.
+3) Подготовь `.env`:
+
+```bash
+cd /opt/dayday_erp
+cp env.production.example .env
+nano .env
+```
+
+Минимум: `POSTGRES_PASSWORD`, `REDIS_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL`.
+
+### 11.2. Поднять стек + миграции
+
+```bash
+cd /opt/dayday_erp
+docker compose -f docker-compose.prod.yml up -d --build
+
+docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
+```
+
+### 11.3. Проверки
+
+- Web открывается по HTTPS.
+- `GET https://your-domain.tld/api/health` отдаёт 200.
+- Логин/регистрация работают.
+
+### 11.4. Если нужно повторить «с нуля»
+
+Остановить и удалить контейнеры и данные:
+
+```bash
+cd /opt/dayday_erp
+docker compose -f docker-compose.prod.yml down -v
+```
+
+Затем снова выполнить шаги из 11.2.

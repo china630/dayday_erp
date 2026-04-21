@@ -1,4 +1,5 @@
 import type { i18n as I18nType } from "i18next";
+import { safeJson } from "../api-fetch";
 
 /**
  * Убирает из плоского списка «короткие» ключи, если есть более длинные с тем же префиксом.
@@ -119,9 +120,10 @@ export async function applyTranslationOverrides(
     { credentials: "include" },
   );
   if (!res.ok) return;
-  const data = (await res.json()) as {
+  const data = (await safeJson(res)) as {
     overrides?: Record<string, string>;
-  };
+  } | null;
+  if (!data) return;
   const flat = dropFlatRootStringNamespaceKeys(
     dropFlatKeysThatShadowNestedObjects(
       dropFlatKeysShadowedByLongerKeys(data.overrides ?? {}),

@@ -1,12 +1,18 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { Decimal, LedgerType } from "@dayday/database";
+import { LedgerType, Prisma } from "@dayday/database";
 import { AccessControlService } from "../access/access-control.service";
 import { CurrencyConverterService } from "../fx/currency-converter.service";
 import { CbarExternalFetchDisabledError } from "../fx/cbar-fx.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ReportingService } from "../reporting/reporting.service";
-import { parseIsoDateOnly } from "../reporting/reporting-period.util";
+import {
+  accrualMonthSlices,
+  parseIsoDateOnly,
+} from "../reporting/reporting-period.util";
 import { runWithTenantContextAsync } from "../prisma/tenant-context";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class HoldingsReportingService {
@@ -131,11 +137,18 @@ export class HoldingsReportingService {
     }
 
     const baseCur = (holding.baseCurrency ?? "AZN").toUpperCase();
-    let asOf: Date;
+    let dateFromD: Date;
+    let dateToD: Date;
     try {
-      asOf = parseIsoDateOnly(dateTo);
+      dateFromD = parseIsoDateOnly(dateFrom);
+      dateToD = parseIsoDateOnly(dateTo);
     } catch {
-      asOf = new Date();
+      dateFromD = new Date();
+      dateToD = new Date();
+    }
+    let fxSlices = accrualMonthSlices(dateFromD, dateToD);
+    if (fxSlices.length === 0) {
+      fxSlices = [{ fromStr: dateFrom, toStr: dateTo, fxAsOf: dateToD }];
     }
 
     const organizations = [];
@@ -171,10 +184,27 @@ export class HoldingsReportingService {
       );
 
       try {
-        const inBase = await this.currency.convert(np, cur, baseCur, asOf);
-        consolidatedNetProfitInBase = consolidatedNetProfitInBase.add(inBase);
+        let inBaseSum = new Decimal(0);
+        for (const seg of fxSlices) {
+          const pnlSeg = await this.reporting.profitAndLoss(
+            org.id,
+            seg.fromStr,
+            seg.toStr,
+            ledgerType,
+            null,
+          );
+          const npSeg = new Decimal(pnlSeg.netProfit);
+          const part = await this.currency.convert(
+            npSeg,
+            cur,
+            baseCur,
+            seg.fxAsOf,
+          );
+          inBaseSum = inBaseSum.add(part);
+        }
+        consolidatedNetProfitInBase = consolidatedNetProfitInBase.add(inBaseSum);
         const last = organizations[organizations.length - 1]!;
-        last.netProfitInHoldingBase = inBase.toFixed(4);
+        last.netProfitInHoldingBase = inBaseSum.toFixed(4);
       } catch (e) {
         if (e instanceof CbarExternalFetchDisabledError) {
           fxNote =
@@ -196,7 +226,9 @@ export class HoldingsReportingService {
       holdingId: holding.id,
       holdingName: holding.name,
       holdingBaseCurrency: baseCur,
-      fxAsOfDate: dateTo,
+      /** Помесячные фрагменты периода: курс ЦБА на конец каждого фрагмента (UTC). */
+      consolidationFxMode: "monthly_slice_end_rate" as const,
+      consolidationFxSlices: fxSlices.length,
       dateFrom,
       dateTo,
       ledgerType,
@@ -205,7 +237,9 @@ export class HoldingsReportingService {
       consolidatedNetProfitInHoldingBase: fxNote
         ? null
         : consolidatedNetProfitInBase.toFixed(4),
-      consolidationNote: fxNote,
+      consolidationNote:
+        fxNote ??
+        "Чистая прибыль за каждый календарный фрагмент месяца внутри периода переводится в валюту холдинга по курсу ЦБА на последний день фрагмента; суммы по фрагментам складываются.",
     };
   }
 }

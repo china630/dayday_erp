@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AccountType, Decimal, LedgerType } from "@dayday/database";
+import { AccountType, LedgerType, Prisma } from "@dayday/database";
 import { AccountingService } from "../accounting/accounting.service";
 import {
   FX_GAIN_ACCOUNT_CODE,
@@ -7,6 +7,9 @@ import {
 } from "../ledger.constants";
 import { PrismaService } from "../prisma/prisma.service";
 import { CbarRateSyncService } from "./cbar-rate-sync.service";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 type FxRevalState = {
   lastPostedMonth?: string;

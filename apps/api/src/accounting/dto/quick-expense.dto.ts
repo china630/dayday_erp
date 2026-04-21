@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
 } from "class-validator";
@@ -22,4 +23,9 @@ export class QuickExpenseDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  /** ЦФО (департамент): привязка расхода для аналитики P&L по подразделению. */
+  @IsOptional()
+  @IsUUID()
+  departmentId?: string;
 }

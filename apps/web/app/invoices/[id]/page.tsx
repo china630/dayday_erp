@@ -11,6 +11,7 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import QRCode from "qrcode";
 import { SignatureProviderMark } from "../../../components/signature-provider-mark";
 import { ModulePageLinks } from "../../../components/module-page-links";
+import { EntityAuditHistory } from "../../../components/admin/entity-audit-history";
 
 type SignatureLog = {
   id: string;
@@ -75,6 +76,12 @@ export default function InvoiceViewPage() {
   const [netAmount, setNetAmount] = useState("");
   const [netBusy, setNetBusy] = useState(false);
   const [netErr, setNetErr] = useState<string | null>(null);
+  const [viewTab, setViewTab] = useState<"details" | "history">("details");
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<{
+    kind: "ok" | "err";
+    text: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!token || !id) {
@@ -278,6 +285,25 @@ export default function InvoiceViewPage() {
     Number(inv.remaining) > 0 &&
     netPreview?.canNet;
 
+  const sharePortalLink = async () => {
+    if (!token || !id) return;
+    setShareBusy(true);
+    setShareFeedback(null);
+    try {
+      const res = await apiFetch(`/api/invoices/${id}/portal-link`);
+      if (!res.ok) throw new Error(String(res.status));
+      const j = (await res.json()) as { url: string };
+      await navigator.clipboard.writeText(j.url);
+      setShareFeedback({ kind: "ok", text: t("invoiceView.sharePortalCopied") });
+      window.setTimeout(() => setShareFeedback(null), 4000);
+    } catch {
+      setShareFeedback({ kind: "err", text: t("invoiceView.sharePortalError") });
+      window.setTimeout(() => setShareFeedback(null), 5000);
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <ModulePageLinks
@@ -298,10 +324,57 @@ export default function InvoiceViewPage() {
       </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
+      {shareFeedback && (
+        <p
+          className={
+            shareFeedback.kind === "err"
+              ? "text-sm text-red-600"
+              : "text-sm text-emerald-700"
+          }
+        >
+          {shareFeedback.text}
+        </p>
+      )}
       {loading && <p className="text-gray-600">{t("common.loading")}</p>}
 
       {!loading && inv && (
         <>
+          <div className="flex flex-wrap gap-2 border-b border-[#D5DADF] pb-2">
+            <button
+              type="button"
+              onClick={() => setViewTab("details")}
+              className={`text-sm font-medium px-3 py-1.5 rounded border ${
+                viewTab === "details"
+                  ? "bg-white text-[#34495E] border-[#2980B9]"
+                  : "bg-transparent text-[#7F8C8D] border-transparent hover:border-[#D5DADF]"
+              }`}
+            >
+              {t("invoiceView.tabDetails")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewTab("history")}
+              className={`text-sm font-medium px-3 py-1.5 rounded border ${
+                viewTab === "history"
+                  ? "bg-white text-[#34495E] border-[#2980B9]"
+                  : "bg-transparent text-[#7F8C8D] border-transparent hover:border-[#D5DADF]"
+              }`}
+            >
+              {t("invoiceView.tabHistory")}
+            </button>
+          </div>
+
+          {viewTab === "history" ? (
+            <section className="rounded-lg border border-[#D5DADF] bg-white p-4">
+              <h2 className="text-sm font-semibold text-[#34495E] mb-3">
+                {t("invoiceView.historyTitle")}
+              </h2>
+              <EntityAuditHistory entityType="Invoice" entityId={id} token={token} />
+            </section>
+          ) : null}
+
+          {viewTab === "details" ? (
+            <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">
@@ -329,6 +402,14 @@ export default function InvoiceViewPage() {
                   {t("invoiceView.sign")}
                 </button>
               )}
+              <button
+                type="button"
+                disabled={shareBusy}
+                onClick={() => void sharePortalLink()}
+                className="inline-flex items-center justify-center border border-[#2980B9] text-[#2980B9] bg-white px-4 py-2 rounded-lg hover:bg-slate-50 text-sm font-medium shadow-sm disabled:opacity-50"
+              >
+                {shareBusy ? "…" : t("invoiceView.sharePortal")}
+              </button>
             </div>
           </div>
 
@@ -389,6 +470,8 @@ export default function InvoiceViewPage() {
               </tbody>
             </table>
           </div>
+            </>
+          ) : null}
         </>
       )}
 

@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { Decimal } from "@prisma/client/runtime/library";
+import { Prisma } from "@prisma/client";
 
 export type PricingModuleSeedRow = {
   key: string;
@@ -34,7 +34,7 @@ export async function seedPricingModuleIfEmpty(prisma: PrismaClient): Promise<vo
       data: {
         key: m.key,
         name: m.name,
-        pricePerMonth: new Decimal(m.pricePerMonth),
+        pricePerMonth: new Prisma.Decimal(m.pricePerMonth),
         sortOrder: m.sortOrder,
       },
     });

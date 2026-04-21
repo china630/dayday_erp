@@ -14,13 +14,12 @@ import {
   HoldingAccessRole,
   InviteStatus,
   SubscriptionTier,
-  syncAzChartForOrganization,
   UserRole,
 } from "@dayday/database";
 import * as bcrypt from "bcrypt";
 import type { Response } from "express";
-import { AccountsService } from "../accounts/accounts.service";
 import { OrgStructureService } from "../hr/org-structure.service";
+import { OrganizationsService } from "../organizations/organizations.service";
 import { QuotaService } from "../quota/quota.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES } from "../subscription/subscription.constants";
@@ -60,7 +59,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly accounts: AccountsService,
+    private readonly organizations: OrganizationsService,
     private readonly orgStructure: OrgStructureService,
     private readonly quota: QuotaService,
   ) {}
@@ -183,8 +182,7 @@ export class AuthService {
           role: UserRole.OWNER,
         },
       });
-      await syncAzChartForOrganization(tx, o.id);
-      await this.accounts.bootstrapMultiGaapForNewOrganization(o.id, tx);
+      await this.organizations.provisionChartOfAccountsFromTemplate(tx, o.id);
       return { org: o, userId: u.id };
     });
 
@@ -258,8 +256,7 @@ export class AuthService {
           role: UserRole.OWNER,
         },
       });
-      await syncAzChartForOrganization(tx, o.id);
-      await this.accounts.bootstrapMultiGaapForNewOrganization(o.id, tx);
+      await this.organizations.provisionChartOfAccountsFromTemplate(tx, o.id);
       return { org: o };
     });
 

@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { UserRole } from "@dayday/database";
+import { UserRole, syncAzChartForOrganization, type Prisma } from "@dayday/database";
+import { AccountsService } from "../accounts/accounts.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AccessControlService } from "../access/access-control.service";
 
@@ -12,7 +13,21 @@ export class OrganizationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AccessControlService,
+    private readonly accounts: AccountsService,
   ) {}
+
+  /**
+   * Copies the platform NAS chart template (`chart_of_accounts_entries` + JSON) into this
+   * organization's `accounts`, then bootstraps multi-GAAP (IFRS mirror). Call inside the same
+   * `prisma.$transaction` as `organization.create` so onboarding stays atomic.
+   */
+  async provisionChartOfAccountsFromTemplate(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+  ): Promise<void> {
+    await syncAzChartForOrganization(tx, organizationId);
+    await this.accounts.bootstrapMultiGaapForNewOrganization(organizationId, tx);
+  }
 
   /**
    * Смена `organizations.ownerId`; прежний OWNER → ADMIN, новый пользователь → OWNER.

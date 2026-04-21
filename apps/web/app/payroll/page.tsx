@@ -4,6 +4,7 @@ import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { ModulePageLinks } from "../../components/module-page-links";
 import {
+  Fragment,
   Suspense,
   useCallback,
   useEffect,
@@ -156,6 +157,7 @@ function PayrollPageInner() {
   const [importTimesheet, setImportTimesheet] = useState(false);
   const [approvedTimesheetId, setApprovedTimesheetId] = useState<string | null>(null);
   const [postingRunId, setPostingRunId] = useState<string | null>(null);
+  const [taxDetailsSlipId, setTaxDetailsSlipId] = useState<string | null>(null);
   const [deletingAbsenceId, setDeletingAbsenceId] = useState<string | null>(null);
   const payrollBusy = payrollJob !== null;
 
@@ -206,6 +208,27 @@ function PayrollPageInner() {
     }
     setLoading(false);
   }, [token, t]);
+
+  const downloadRunXlsx = useCallback(
+    async (runId: string) => {
+      if (!token) return;
+      const res = await apiFetch(`/api/hr/payroll/runs/${runId}/xlsx`);
+      if (!res.ok) {
+        setError(`${t("common.loadErr")}: ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `payroll-${runId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    [token, t],
+  );
 
   const loadAbsencesBlock = useCallback(async () => {
     if (!token) {
@@ -581,6 +604,14 @@ function PayrollPageInner() {
               <span className="rounded-[2px] border border-[#D5DADF] bg-[#EBEDF0] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[#34495E]">
                 {currentRun.status}
               </span>
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                disabled={payrollBusy}
+                onClick={() => void downloadRunXlsx(currentRun.id)}
+              >
+                {t("payroll.exportXlsx")}
+              </button>
               {currentRun.status === "DRAFT" ? (
                 <button
                   type="button"
@@ -738,7 +769,8 @@ function PayrollPageInner() {
                   </thead>
                   <tbody>
                     {slipsFiltered.map((s) => (
-                      <tr key={s.id} className="border-t border-[#EBEDF0]">
+                      <Fragment key={s.id}>
+                      <tr className="border-t border-[#EBEDF0]">
                         <td className="p-2">
                           <button
                             type="button"
@@ -794,9 +826,29 @@ function PayrollPageInner() {
                           {formatMoneyNoSymbol(s.unemploymentEmployer)}
                         </td>
                         <td className="p-2 text-right font-mono font-medium border-l border-[#D5DADF]">
-                          {formatMoneyNoSymbol(s.net)}
+                          <button
+                            type="button"
+                            className="text-action hover:text-primary hover:underline"
+                            onClick={() =>
+                              setTaxDetailsSlipId((prev) => (prev === s.id ? null : s.id))
+                            }
+                          >
+                            {formatMoneyNoSymbol(s.net)}
+                          </button>
                         </td>
                       </tr>
+                      {taxDetailsSlipId === s.id ? (
+                        <tr className="border-t border-[#EBEDF0] bg-slate-50">
+                          <td className="p-2 text-xs text-slate-700" colSpan={showTimesheetCols ? (showContractorCol ? 13 : 12) : showContractorCol ? 9 : 8}>
+                            <span className="font-semibold text-slate-900">{t("payroll.taxDetails")}:</span>{" "}
+                            {t("payroll.thPit")} {formatMoneyNoSymbol(s.incomeTax)} · DSMF{" "}
+                            {formatMoneyNoSymbol(s.dsmfWorker)} · İTS {formatMoneyNoSymbol(s.itsWorker)} · İŞS{" "}
+                            {formatMoneyNoSymbol(s.unemploymentWorker)}
+                            {showContractorCol ? ` · ${t("payroll.thContractorSoc")} ${formatMoneyNoSymbol(s.contractorSocialWithheld ?? 0)}` : ""}
+                          </td>
+                        </tr>
+                      ) : null}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

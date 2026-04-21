@@ -5,12 +5,12 @@
  *
  * Переменная SUPER_ADMIN_EMAIL (по умолчанию shirinov.chingiz@gmail.com).
  */
-import { PrismaClient } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "../prisma-client";
 
 const email =
   process.env.SUPER_ADMIN_EMAIL?.trim() || "shirinov.chingiz@gmail.com";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main(): Promise<void> {
   const row = await prisma.user.findUnique({
@@ -34,4 +34,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });

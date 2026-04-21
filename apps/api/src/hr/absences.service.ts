@@ -63,6 +63,41 @@ function dateOnlyUtc(d: Date): Date {
   );
 }
 
+function monthStartUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 12, 0, 0, 0));
+}
+
+function addMonthsUtc(monthStart: Date, months: number): Date {
+  return new Date(
+    Date.UTC(
+      monthStart.getUTCFullYear(),
+      monthStart.getUTCMonth() + months,
+      1,
+      12,
+      0,
+      0,
+      0,
+    ),
+  );
+}
+
+function fullMonthsWorkedBeforeAnchor(hireDateUtc: Date, anchorUtc: Date): number {
+  const anchorMonthStart = monthStartUtc(anchorUtc);
+  const windowEndMonthStart = addMonthsUtc(anchorMonthStart, -1);
+
+  const hireMonthStart = monthStartUtc(hireDateUtc);
+  const firstFullMonthStart =
+    hireDateUtc.getUTCDate() === 1 ? hireMonthStart : addMonthsUtc(hireMonthStart, 1);
+
+  if (firstFullMonthStart > windowEndMonthStart) return 0;
+
+  const months =
+    (windowEndMonthStart.getUTCFullYear() - firstFullMonthStart.getUTCFullYear()) * 12 +
+    (windowEndMonthStart.getUTCMonth() - firstFullMonthStart.getUTCMonth()) +
+    1;
+  return Math.max(0, months);
+}
+
 @Injectable()
 export class AbsencesService {
   constructor(
@@ -199,6 +234,95 @@ export class AbsencesService {
   }
 
   /**
+   * PRD §4.6.1 / TZ §7.0 (v16.1):
+   * Average daily rate is based on N full calendar months before the vacation start month:
+   *
+   *   avgDaily = SumGross / (N_months * 30.4)
+   *
+   * N_months is the number of full worked months since hire date (capped at 12).
+   * If the posted payroll history months are fewer than tenure months, SumGross can be
+   * extended by `initialSalaryBalance` (pre-ERP history), including when there are **zero**
+   * posted slips in the lookback window but `initialSalaryBalance` > 0.
+   * If there is no data at all, fallback is basic salary / 30.4.
+   */
+  async calculateAverageDailyRate(
+    organizationId: string,
+    employeeId: string,
+    anchorDate: string | Date,
+  ): Promise<{
+    employeeId: string;
+    monthsExpected: number;
+    monthsWithData: number;
+    lookbackStartYm: string;
+    lookbackEndYm: string;
+    totalGrossInWindow: string;
+    averageMonthlyGross: string;
+    averageDailyGross: string;
+    divisor304: "30.4";
+  }> {
+    await this.ensureEmployee(organizationId, employeeId);
+    const emp = await this.prisma.employee.findFirstOrThrow({
+      where: { id: employeeId, organizationId },
+      select: { startDate: true, salary: true, initialSalaryBalance: true },
+    });
+    const anchorUtc =
+      typeof anchorDate === "string" ? this.parseDateOnly(anchorDate) : dateOnlyUtc(anchorDate);
+    const { startKey, endKey } = vacationPayLookbackYmBounds(anchorUtc);
+
+    const tenureFullMonths = fullMonthsWorkedBeforeAnchor(
+      dateOnlyUtc(emp.startDate),
+      anchorUtc,
+    );
+    const monthsExpected = Math.max(1, Math.min(12, tenureFullMonths || 0));
+
+    const slips = await this.prisma.payrollSlip.findMany({
+      where: {
+        organizationId,
+        employeeId,
+        payrollRun: { status: PayrollRunStatus.POSTED },
+      },
+      include: { payrollRun: true },
+    });
+
+    const monthSet = new Set<string>();
+    let totalGross = new Decimal(0);
+    for (const s of slips) {
+      const k = ymKey(s.payrollRun.year, s.payrollRun.month);
+      if (k < startKey || k > endKey) continue;
+      monthSet.add(`${s.payrollRun.year}-${s.payrollRun.month}`);
+      totalGross = totalGross.add(s.gross);
+    }
+
+    const monthsWithData = monthSet.size;
+    const initialBal =
+      emp.initialSalaryBalance != null && emp.initialSalaryBalance.gt(0)
+        ? emp.initialSalaryBalance
+        : new Decimal(0);
+
+    const useInitialBalance =
+      monthsWithData < monthsExpected && initialBal.gt(0);
+    const sumForRate = useInitialBalance ? totalGross.add(initialBal) : totalGross;
+
+    const hasAnyHistory = monthsWithData > 0 || initialBal.gt(0);
+    const avgDaily = hasAnyHistory
+      ? sumForRate.div(new Decimal(monthsExpected).mul(30.4))
+      : new Decimal(emp.salary).div(30.4);
+    const avgMonthly = avgDaily.mul(30.4);
+
+    return {
+      employeeId,
+      monthsExpected,
+      monthsWithData,
+      lookbackStartYm: String(startKey),
+      lookbackEndYm: String(endKey),
+      totalGrossInWindow: roundMoney2(sumForRate).toFixed(2),
+      averageMonthlyGross: roundMoney2(avgMonthly).toFixed(2),
+      averageDailyGross: roundMoney2(avgDaily).toFixed(2),
+      divisor304: "30.4",
+    };
+  }
+
+  /**
    * Ay üzrə brüt əmək haqqı: təsdiq tabell + məzuniyyət 30.4 + xəstəlik (işəgötürən hissəsi).
    * Orta yoxdursa — müqavilə məbləği 30.4 üçün baza kimi götürülür (draft vedomost).
    */
@@ -224,13 +348,11 @@ export class AbsencesService {
     });
 
     const anchor = monthEndUtc(year, month);
-    const avgRow = await this.averageMonthlyGrossFromPostedSlips(
-      organizationId,
-      employeeId,
-      anchor,
-    );
-    const avgMonthly = avgRow?.avgMonthly ?? contractMonthlyGross;
-    const daily304 = avgMonthly.div(30.4);
+    const rate = await this.calculateAverageDailyRate(organizationId, employeeId, anchor);
+    const daily304 =
+      rate.monthsWithData > 0
+        ? new Decimal(rate.averageDailyGross)
+        : contractMonthlyGross.div(30.4);
 
     const partWork = contractMonthlyGross.mul(
       new Decimal(mix.workBizWorkingDays).div(norm),
@@ -320,20 +442,9 @@ export class AbsencesService {
     }
     const calendarDays = daysInclusiveUtc(vStart, vEnd);
 
-    const avg = await this.averageMonthlyGrossFromPostedSlips(
-      organizationId,
-      employeeId,
-      vStart,
-    );
-    if (!avg) {
-      throw new BadRequestException(
-        "Нет проведённых расчётных листов за 12 месяцев, предшествующих отпуску",
-      );
-    }
-
     const { startKey, endKey } = vacationPayLookbackYmBounds(vStart);
-    const avgMonthly = avg.avgMonthly;
-    const dailyRate = avgMonthly.div(30.4);
+    const rate = await this.calculateAverageDailyRate(organizationId, employeeId, vStart);
+    const dailyRate = new Decimal(rate.averageDailyGross);
     const amount = roundMoney2(dailyRate.mul(calendarDays));
 
     return {
@@ -341,10 +452,11 @@ export class AbsencesService {
       vacationStart: vacationStart.slice(0, 10),
       vacationEnd: vacationEnd.slice(0, 10),
       calendarDays,
-      monthsInAverage: avg.nMonths,
-      totalGrossInWindow: roundMoney2(avg.totalGross).toFixed(2),
-      averageMonthlyGross: roundMoney2(avgMonthly).toFixed(2),
-      averageDailyGross: roundMoney2(dailyRate).toFixed(2),
+      monthsInAverage: rate.monthsExpected,
+      monthsWithData: rate.monthsWithData,
+      totalGrossInWindow: rate.totalGrossInWindow,
+      averageMonthlyGross: rate.averageMonthlyGross,
+      averageDailyGross: rate.averageDailyGross,
       vacationPayAmount: amount.toFixed(2),
       lookbackStartYm: String(startKey),
       lookbackEndYm: String(endKey),

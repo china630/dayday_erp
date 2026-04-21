@@ -8,10 +8,10 @@
  * или из packages/database:
  *   dotenv -e ../../.env -- npx tsx prisma/sync-translation-overrides-from-resources.ts
  */
-import { PrismaClient } from "@prisma/client";
+import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import { resources } from "../../../apps/web/lib/i18n/resources";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 const I18N_CACHE_KEY = "i18n.cacheVersion";
 
@@ -84,4 +84,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await closePrismaPool();
   });

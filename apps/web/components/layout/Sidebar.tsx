@@ -33,6 +33,7 @@ import {
   PieChart,
   ScrollText,
   Settings,
+  Shield,
   ShieldCheck,
   ShoppingBag,
   ShoppingCart,
@@ -524,6 +525,13 @@ export function MainSidebar({
             icon={Gavel}
             onNavClick={onNavClick}
           />
+          <SideNavSubItem
+            href="/reports/cash-flow"
+            label={t("nav.cashFlowDirect")}
+            isActive={pathname.startsWith("/reports/cash-flow")}
+            icon={Coins}
+            onNavClick={onNavClick}
+          />
           {canViewHoldingReports ? (
             <SideNavSubItem
               href="/reporting/holding"
@@ -573,6 +581,14 @@ export function MainSidebar({
                       onNavClick={onNavClick}
                     />
                     <SideNavItem
+                      href="/settings/organization"
+                      label={t("nav.orgCompany")}
+                      isActive={pathname.startsWith("/settings/organization")}
+                      icon={Briefcase}
+                      nested
+                      onNavClick={onNavClick}
+                    />
+                    <SideNavItem
                       href="/settings/audit"
                       label={t("nav.settingsAudit")}
                       isActive={pathname.startsWith("/settings/audit")}
@@ -601,6 +617,14 @@ export function MainSidebar({
                       label={t("nav.paymentHistory")}
                       isActive={pathname.startsWith("/admin/payment-history")}
                       icon={ScrollText}
+                      nested
+                      onNavClick={onNavClick}
+                    />
+                    <SideNavItem
+                      href="/admin/audit-log"
+                      label={t("nav.securityAuditLog")}
+                      isActive={pathname.startsWith("/admin/audit-log")}
+                      icon={Shield}
                       nested
                       onNavClick={onNavClick}
                     />

@@ -2,6 +2,8 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaClient } from "@dayday/database";
 import { prismaSoftDeleteExtension } from "./prisma-soft-delete.extension";
 import { prismaTenantExtension } from "./prisma-tenant.extension";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 /**
  * Расширенный Prisma Client с tenant-фильтрацией.
@@ -11,8 +13,18 @@ import { prismaTenantExtension } from "./prisma-tenant.extension";
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    super();
-    const extended = new PrismaClient()
+    const url = process.env.DATABASE_URL;
+    if (!url) {
+      // Fail fast: without DB url the service cannot start and the app would crash later anyway.
+      throw new Error("DATABASE_URL is required");
+    }
+    const pool = new Pool({ connectionString: url });
+    // @prisma/adapter-pg currently bundles its own pg typings, which may differ from the app's pg typings.
+    // Runtime object is compatible; we cast to avoid TS duplicate-type conflicts.
+    const adapter = new PrismaPg(pool as unknown as never);
+    super({ adapter });
+
+    const extended = new PrismaClient({ adapter })
       .$extends(prismaTenantExtension)
       .$extends(prismaSoftDeleteExtension);
     Object.assign(extended, {
@@ -21,6 +33,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       },
       onModuleDestroy: async () => {
         await extended.$disconnect();
+        await pool.end();
       },
     });
     return extended as unknown as PrismaService;

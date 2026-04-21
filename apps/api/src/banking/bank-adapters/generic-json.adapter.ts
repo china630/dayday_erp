@@ -1,4 +1,4 @@
-import { BankStatementLineType, Decimal } from "@dayday/database";
+import { BankStatementLineType, Prisma } from "@dayday/database";
 import type { InboundBankTransaction } from "../bank-providers/bank-inbound.types";
 import type { BankTransactionAdapter } from "./bank-adapter.interface";
 
@@ -29,14 +29,14 @@ export function extractTransactionItems(json: unknown): unknown[] {
   return [];
 }
 
-function readAmount(item: Record<string, unknown>): Decimal | null {
+function readAmount(item: Record<string, unknown>): Prisma.Decimal | null {
   const raw = item.amount;
   if (raw != null && typeof raw === "object") {
     const a = raw as Record<string, unknown>;
     const s = a.amount ?? a.value ?? a.currencyAmount;
     if (s != null) {
       try {
-        return new Decimal(String(s));
+        return new Prisma.Decimal(String(s));
       } catch {
         return null;
       }
@@ -44,7 +44,7 @@ function readAmount(item: Record<string, unknown>): Decimal | null {
   }
   if (typeof raw === "string" || typeof raw === "number") {
     try {
-      return new Decimal(String(raw));
+      return new Prisma.Decimal(String(raw));
     } catch {
       return null;
     }

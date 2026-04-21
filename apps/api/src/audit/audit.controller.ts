@@ -65,7 +65,7 @@ export class AuditController {
 
   @Get("logs")
   @ApiOperation({
-    summary: "Журнал аудита с фильтрами",
+    summary: "Журнал аудита с фильтрами (пагинация: page, pageSize; иначе take)",
   })
   async logs(
     @OrganizationId() organizationId: string,
@@ -73,13 +73,12 @@ export class AuditController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("entityType") entityType?: string,
+    @Query("entityId") entityId?: string,
     @Query("action") action?: string,
     @Query("take") takeRaw?: string,
+    @Query("page") pageRaw?: string,
+    @Query("pageSize") pageSizeRaw?: string,
   ) {
-    const take = Math.min(
-      100,
-      Math.max(1, Number.parseInt(takeRaw ?? "50", 10) || 50),
-    );
     const where: Prisma.AuditLogWhereInput = { organizationId };
     if (userId) {
       where.userId = userId;
@@ -96,17 +95,54 @@ export class AuditController {
     if (entityType) {
       where.entityType = entityType;
     }
+    if (entityId) {
+      where.entityId = entityId;
+    }
     if (action) {
       where.action = action;
     }
-    return this.prisma.auditLog.findMany({
+
+    const userSelect = {
+      id: true,
+      email: true,
+      fullName: true,
+      firstName: true,
+      lastName: true,
+    } as const;
+
+    const page = Math.max(1, Number.parseInt(pageRaw ?? "0", 10) || 0);
+    const pageSizeParsed = Number.parseInt(pageSizeRaw ?? "0", 10) || 0;
+    if (page > 0 && pageSizeParsed > 0) {
+      const pageSize = Math.min(100, Math.max(1, pageSizeParsed));
+      const skip = (page - 1) * pageSize;
+      const [total, items] = await Promise.all([
+        this.prisma.auditLog.count({ where }),
+        this.prisma.auditLog.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: pageSize,
+          include: {
+            user: { select: userSelect },
+          },
+        }),
+      ]);
+      return { items, total, page, pageSize };
+    }
+
+    const take = Math.min(
+      100,
+      Math.max(1, Number.parseInt(takeRaw ?? "50", 10) || 50),
+    );
+    const items = await this.prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take,
       include: {
-        user: { select: { id: true, email: true } },
+        user: { select: userSelect },
       },
     });
+    return { items, total: items.length, page: 1, pageSize: take };
   }
 
   @Get("logs/:id")
@@ -118,7 +154,15 @@ export class AuditController {
     const row = await this.prisma.auditLog.findFirst({
       where: { id, organizationId },
       include: {
-        user: { select: { id: true, email: true } },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       },
     });
     if (!row) {

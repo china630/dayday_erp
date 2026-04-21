@@ -95,15 +95,25 @@ export class SystemConfigService {
   async getTierQuotas(tier: SubscriptionTier): Promise<TierQuotas> {
     const key = QUOTA_KEY(tier);
     const raw = await this.getJson(key);
+    const base = TIER_QUOTAS[tier];
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const o = raw as Record<string, unknown>;
       return {
-        maxOrganizations: toNullableNum(o.maxOrganizations),
-        maxEmployees: toNullableNum(o.maxEmployees),
-        maxInvoicesPerMonth: toNullableNum(o.maxInvoicesPerMonth),
+        maxOrganizations:
+          o.maxOrganizations !== undefined
+            ? toNullableNum(o.maxOrganizations)
+            : base.maxOrganizations,
+        maxEmployees:
+          o.maxEmployees !== undefined ? toNullableNum(o.maxEmployees) : base.maxEmployees,
+        maxInvoicesPerMonth:
+          o.maxInvoicesPerMonth !== undefined
+            ? toNullableNum(o.maxInvoicesPerMonth)
+            : base.maxInvoicesPerMonth,
+        maxStorageGb:
+          o.maxStorageGb !== undefined ? toNullableNum(o.maxStorageGb) : base.maxStorageGb,
       };
     }
-    return TIER_QUOTAS[tier];
+    return base;
   }
 
   async setTierQuotas(tier: SubscriptionTier, quotas: TierQuotas): Promise<void> {

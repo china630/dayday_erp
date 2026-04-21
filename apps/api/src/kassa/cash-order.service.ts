@@ -68,7 +68,7 @@ export class CashOrderService {
     kind: CashOrderKind,
     year: number,
   ): Promise<string> {
-    const prefix = kind === CashOrderKind.MKO ? "MKO" : "MXO";
+    const prefix = kind === CashOrderKind.KMO ? "KMO" : "KXO";
     const start = `${prefix}-${year}-`;
     const last = await tx.cashOrder.findFirst({
       where: {
@@ -119,7 +119,7 @@ export class CashOrderService {
     const orderNumber = await this.nextOrderNumberTx(
       tx,
       organizationId,
-      CashOrderKind.MKO,
+      CashOrderKind.KMO,
       year,
     );
 
@@ -128,7 +128,7 @@ export class CashOrderService {
         organizationId,
         orderNumber,
         date: params.valueDate,
-        kind: CashOrderKind.MKO,
+        kind: CashOrderKind.KMO,
         status: CashOrderStatus.DRAFT,
         pkoSubtype: CashOrderPkoSubtype.INCOME_FROM_CUSTOMER,
         currency: params.currency,
@@ -234,7 +234,7 @@ export class CashOrderService {
       const orderNumber = await this.nextOrderNumberTx(
         tx,
         organizationId,
-        CashOrderKind.MKO,
+        CashOrderKind.KMO,
         year,
       );
       return tx.cashOrder.create({
@@ -242,7 +242,7 @@ export class CashOrderService {
           organizationId,
           orderNumber,
           date,
-          kind: CashOrderKind.MKO,
+          kind: CashOrderKind.KMO,
           status: CashOrderStatus.DRAFT,
           pkoSubtype: dto.pkoSubtype,
           currency: dto.currency || "AZN",
@@ -310,7 +310,7 @@ export class CashOrderService {
       const orderNumber = await this.nextOrderNumberTx(
         tx,
         organizationId,
-        CashOrderKind.MXO,
+        CashOrderKind.KXO,
         year,
       );
       return tx.cashOrder.create({
@@ -318,7 +318,7 @@ export class CashOrderService {
           organizationId,
           orderNumber,
           date,
-          kind: CashOrderKind.MXO,
+          kind: CashOrderKind.KXO,
           status: CashOrderStatus.DRAFT,
           rkoSubtype: dto.rkoSubtype,
           currency: dto.currency || "AZN",
@@ -359,7 +359,7 @@ export class CashOrderService {
   }
 
   /**
-   * Backdated MXO: нельзя получить отрицательный остаток на кассе 101* на любой день
+   * Backdated KXO: нельзя получить отрицательный остаток на кассе 101* на любой день
    * от даты ордера до сегодня (UTC), см. TZ §6.0.1.
    */
   private async assertBackdatedRkoNoCashGap(
@@ -372,7 +372,7 @@ export class CashOrderService {
       withholdingTaxAmount: Decimal | null;
     },
   ): Promise<void> {
-    if (params.kind !== CashOrderKind.MXO) return;
+    if (params.kind !== CashOrderKind.KXO) return;
     const orderDay = params.date.toISOString().slice(0, 10);
     const todayDay = new Date().toISOString().slice(0, 10);
     if (orderDay >= todayDay) return;
@@ -495,8 +495,8 @@ export class CashOrderService {
     if (wht.lt(0)) {
       throw new BadRequestException("Invalid withholdingTaxAmount");
     }
-    if (wht.gt(0) && order.kind !== CashOrderKind.MXO) {
-      throw new BadRequestException("withholdingTaxAmount is only valid for MXO");
+    if (wht.gt(0) && order.kind !== CashOrderKind.KXO) {
+      throw new BadRequestException("withholdingTaxAmount is only valid for KXO");
     }
 
     await this.assertBackdatedRkoNoCashGap(organizationId, {
@@ -509,7 +509,7 @@ export class CashOrderService {
 
     return this.prisma.$transaction(async (tx) => {
       let lines: Array<{ accountCode: string; debit: string; credit: string }>;
-      if (order.kind === CashOrderKind.MKO) {
+      if (order.kind === CashOrderKind.KMO) {
         lines = [
           { accountCode: cash, debit: cashPaid.toString(), credit: "0" },
           { accountCode: offset, debit: "0", credit: cashPaid.toString() },
@@ -567,11 +567,11 @@ export class CashOrderService {
       : "";
     const party = cp || emp || "—";
     const amountStr = order.amount.toFixed(2);
-    /** Публичные названия по стандарту АР: приход — mədaxil (MKO), расход — məxaric (MXO). */
+    /** Public names: incoming = KMO, outgoing = KXO (see TZ §6.0). */
     const documentTitleAz =
-      order.kind === CashOrderKind.MKO
-        ? "Mədaxil Kassa Orderi (MKO)"
-        : "Məxaric Kassa Orderi (MXO)";
+      order.kind === CashOrderKind.KMO
+        ? "Kassa Mədaxil Orderi (KMO)"
+        : "Kassa Məxaric Orderi (KXO)";
     return `<!DOCTYPE html>
 <html lang="az">
 <head>

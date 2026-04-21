@@ -1,9 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Decimal, SubscriptionInvoiceStatus } from "@dayday/database";
+import { Prisma, SubscriptionInvoiceStatus } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { runWithTenantContextAsync } from "../prisma/tenant-context";
 import { BillingPlatformService } from "./billing-platform.service";
 import { OrganizationModuleService } from "./organization-module.service";
+
+const Decimal = Prisma.Decimal;
 
 function startOfMonthUtc(d: Date): Date {
   return new Date(
@@ -90,7 +92,7 @@ export class BillingMonthlyService {
           const items: Array<{
             organizationId: string;
             description: string;
-            amount: Decimal;
+            amount: Prisma.Decimal;
           }> = [];
 
           for (const o of list) {

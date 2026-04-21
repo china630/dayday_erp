@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmptyState } from "../../../../components/empty-state";
+import { KO1PrintForm, type KO1PrintOrder } from "../../../../components/print/KO1PrintForm";
 import { apiFetch } from "../../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
@@ -18,7 +19,7 @@ import { ledgerQueryParam, useLedger } from "../../../../lib/ledger-context";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
 import { SubscriptionPaywall } from "../../../../components/subscription-paywall";
 
-type CashOrderKind = "MKO" | "MXO";
+type CashOrderKind = "KMO" | "KXO";
 type CashOrderStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
 type CashOrderRow = {
@@ -61,7 +62,8 @@ type AccountableRow = {
   currency: string;
 };
 
-type CounterpartyOpt = { id: string; name: string };
+type CounterpartyRole = "CUSTOMER" | "SUPPLIER" | "BOTH" | "OTHER";
+type CounterpartyOpt = { id: string; name: string; role?: CounterpartyRole };
 type EmployeeOpt = {
   id: string;
   firstName: string;
@@ -193,6 +195,9 @@ export default function BankingCashPage() {
   const [quickCfId, setQuickCfId] = useState("");
   const [quickBusy, setQuickBusy] = useState(false);
 
+  const [ko1PrintOrder, setKo1PrintOrder] = useState<KO1PrintOrder | null>(null);
+  const [viewOrder, setViewOrder] = useState<CashOrderRow | null>(null);
+
   const loadCore = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -256,6 +261,14 @@ export default function BankingCashPage() {
   }, [ready, token, loadCore]);
 
   useEffect(() => {
+    if (pkoSubtype === "INCOME_FROM_CUSTOMER") {
+      setPkoEmpId("");
+    } else if (pkoSubtype === "RETURN_FROM_ACCOUNTABLE") {
+      setPkoCpId("");
+    }
+  }, [pkoSubtype]);
+
+  useEffect(() => {
     if (cashFlowItems.length === 0) return;
     const first = cashFlowItems[0].id;
     setPkoCfId((v) => v || first);
@@ -293,7 +306,7 @@ export default function BankingCashPage() {
 
   const typeLabel = useCallback(
     (row: CashOrderRow) =>
-      row.kind === "MKO" ? t("banking.cash.typeIn") : t("banking.cash.typeOut"),
+      row.kind === "KMO" ? t("banking.cash.typeIn") : t("banking.cash.typeOut"),
     [t],
   );
 
@@ -311,6 +324,29 @@ export default function BankingCashPage() {
       w.document.write(html);
       w.document.close();
     }
+  }
+
+  function printKo1ForRow(row: CashOrderRow) {
+    if (row.kind !== "KMO") {
+      void openPrint(row.id);
+      return;
+    }
+    const fromParty = row.counterparty?.name
+      ? row.counterparty.name
+      : row.employee
+        ? `${row.employee.firstName} ${row.employee.lastName}`.trim()
+        : "—";
+
+    setKo1PrintOrder({
+      orderNumber: row.orderNumber,
+      dateIso: row.date?.slice?.(0, 10) ?? todayIso(),
+      organizationName: "", // will be filled once API includes org info in list (KO-1 still prints)
+      organizationTaxId: null,
+      fromParty,
+      purpose: row.purpose ?? "",
+      amount: String(row.amount ?? "0"),
+    });
+    window.setTimeout(() => window.print(), 50);
   }
 
   async function submitPko(e: React.FormEvent) {
@@ -333,7 +369,7 @@ export default function BankingCashPage() {
     if (pkoEmpId) body.employeeId = pkoEmpId;
     if (pkoNotes.trim()) body.notes = pkoNotes.trim();
     if (pkoDeskId) body.cashDeskId = pkoDeskId;
-    const res = await apiFetch("/api/banking/cash/orders/mko", {
+    const res = await apiFetch("/api/banking/cash/orders/kmo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -371,7 +407,7 @@ export default function BankingCashPage() {
     if (Number.isFinite(wht) && wht > 0) {
       body.withholdingTaxAmount = wht;
     }
-    const res = await apiFetch("/api/banking/cash/orders/mxo", {
+    const res = await apiFetch("/api/banking/cash/orders/kxo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -402,7 +438,7 @@ export default function BankingCashPage() {
       return;
     }
     setQuickBusy(true);
-    const create = await apiFetch("/api/banking/cash/orders/mxo", {
+    const create = await apiFetch("/api/banking/cash/orders/kxo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -486,7 +522,30 @@ export default function BankingCashPage() {
 
   return (
     <SubscriptionPaywall module="kassaPro">
-      <section className="space-y-6 max-w-7xl mx-auto">
+      <>
+        <style jsx global>{`
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            #ko1-print-root,
+            #ko1-print-root * {
+              visibility: visible !important;
+            }
+            #ko1-print-root {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              background: white;
+            }
+          }
+        `}</style>
+        <div id="ko1-print-root" className="hidden print:block">
+          {ko1PrintOrder ? <KO1PrintForm order={ko1PrintOrder} lang="az" /> : null}
+        </div>
+
+        <section className="space-y-6 max-w-7xl mx-auto">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="m-0 text-xl font-semibold text-[#34495E]">{t("banking.cash.pageTitle")}</h1>
@@ -580,7 +639,15 @@ export default function BankingCashPage() {
                 <tbody>
                   {orders.map((row) => (
                     <tr key={row.id} className="border-b border-slate-50">
-                      <td className="px-4 py-2 font-mono text-xs">{row.orderNumber}</td>
+                      <td className="px-4 py-2 font-mono text-xs">
+                        <button
+                          type="button"
+                          className="text-left hover:underline underline-offset-2"
+                          onClick={() => setViewOrder(row)}
+                        >
+                          {row.orderNumber}
+                        </button>
+                      </td>
                       <td className="px-4 py-2 whitespace-nowrap">
                         {row.date?.slice?.(0, 10) ?? "—"}
                       </td>
@@ -599,7 +666,14 @@ export default function BankingCashPage() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => void openPrint(row.id)}
+                            onClick={() => setViewOrder(row)}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                          >
+                            {t("common.view")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => printKo1ForRow(row)}
                             className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
                             title={t("banking.cash.print")}
                           >
@@ -626,6 +700,65 @@ export default function BankingCashPage() {
                 <p className="px-4 py-6 text-slate-500 text-sm">—</p>
               )}
             </div>
+
+            {viewOrder ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold m-0">
+                        {viewOrder.orderNumber}
+                      </h3>
+                      <p className="mb-0 mt-1 text-xs text-slate-600">
+                        {viewOrder.date?.slice?.(0, 10) ?? "—"} · {typeLabel(viewOrder)} ·{" "}
+                        {statusLabel(viewOrder.status)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={SECONDARY_BUTTON_CLASS}
+                      onClick={() => setViewOrder(null)}
+                    >
+                      {t("common.close")}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-sm text-slate-800">
+                    <div>
+                      <span className="text-xs font-medium text-slate-500">
+                        {t("banking.cash.colParty")}
+                      </span>
+                      <div className="mt-0.5">{partyLabel(viewOrder)}</div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-slate-500">
+                        {t("banking.cash.colPurpose")}
+                      </span>
+                      <div className="mt-0.5">{viewOrder.purpose}</div>
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-slate-500">
+                        {t("banking.cash.colAmount")}
+                      </span>
+                      <div className="mt-0.5 tabular-nums">
+                        {viewOrder.amount} {viewOrder.currency}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 rounded-[2px] border border-[#D5DADF] bg-white px-3 py-2 text-[13px] font-medium text-[#34495E] hover:bg-[#F4F5F7]"
+                      onClick={() => printKo1ForRow(viewOrder)}
+                    >
+                      <Printer className="h-4 w-4" aria-hidden />
+                      {t("banking.cash.print")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className={`${CARD_CONTAINER_CLASS} p-4`}>
               <h2 className="m-0 text-sm font-semibold text-[#34495E]">{t("banking.cash.sideAccountableTitle")}</h2>
@@ -906,28 +1039,42 @@ export default function BankingCashPage() {
                     <input className={FORM_INPUT_CLASS} value={pkoOffset} onChange={(e) => setPkoOffset(e.target.value)} />
                   </div>
                 )}
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.counterparty")}</label>
-                  <select className={FORM_INPUT_CLASS} value={pkoCpId} onChange={(e) => setPkoCpId(e.target.value)}>
-                    <option value="">—</option>
-                    {counterparties.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">{t("banking.cash.employee")}</label>
-                  <select className={FORM_INPUT_CLASS} value={pkoEmpId} onChange={(e) => setPkoEmpId(e.target.value)}>
-                    <option value="">—</option>
-                    {employees.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.firstName} {c.lastName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {pkoSubtype === "INCOME_FROM_CUSTOMER" && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600">{t("banking.cash.counterparty")}</label>
+                    <select
+                      className={FORM_INPUT_CLASS}
+                      value={pkoCpId}
+                      onChange={(e) => setPkoCpId(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {counterparties
+                        .filter((c) => c.role === "CUSTOMER" || c.role === "BOTH" || c.role == null)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+                {pkoSubtype === "RETURN_FROM_ACCOUNTABLE" && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600">{t("banking.cash.employee")}</label>
+                    <select
+                      className={FORM_INPUT_CLASS}
+                      value={pkoEmpId}
+                      onChange={(e) => setPkoEmpId(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {employees.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.firstName} {c.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.cashFlowItem")}</label>
                   <select
@@ -1129,7 +1276,8 @@ export default function BankingCashPage() {
             </div>
           </div>
         )}
-      </section>
+        </section>
+      </>
     </SubscriptionPaywall>
   );
 }

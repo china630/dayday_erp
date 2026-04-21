@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Decimal, InvoiceStatus, Prisma, type UserRole } from "@dayday/database";
+import { InvoiceStatus, Prisma, type UserRole } from "@dayday/database";
 import { assertUserMayMutateInvoiceInPaidStatus } from "../auth/policies/invoice-finance.policy";
 import { AccountingService } from "../accounting/accounting.service";
 import {
@@ -18,18 +18,24 @@ import {
   STORAGE_SERVICE,
   type StorageService,
 } from "../storage/storage.interface";
-import { QuotaService } from "../quota/quota.service";
 import { CreateInvoiceDto } from "./dto/create-invoice.dto";
 import { InvoicePdfQueueService } from "./invoice-pdf.queue";
-import { buildInvoicePdfModelFromIds } from "./invoice-pdf.build";
+import {
+  buildInvoicePdfModelByInvoiceIdPublic,
+  buildInvoicePdfModelFromIds,
+} from "./invoice-pdf.build";
+import { generateInvoicePublicToken } from "./invoice-portal-token";
 import { renderInvoicePdf } from "./invoice-pdf.render";
 import { MailService } from "../mail/mail.service";
 import { parseIsoDateOnly } from "../reporting/reporting-period.util";
 import { createInvoicePaymentMirrorLine } from "../banking/banking-registry.helper";
 import { CashOrderService } from "../kassa/cash-order.service";
 
-function d(v: Decimal | null | undefined): Decimal {
-  return v ?? new Decimal(0);
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
+
+function d(v: Prisma.Decimal | null | undefined): Prisma.Decimal {
+  return v ?? new Prisma.Decimal(0);
 }
 
 @Injectable()
@@ -41,7 +47,6 @@ export class InvoicesService {
     private readonly inventory: InventoryService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
-    private readonly quota: QuotaService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
     private readonly cashOrders: CashOrderService,
   ) {}
@@ -131,8 +136,6 @@ export class InvoicesService {
       (await this.inventory.resolveDefaultWarehouseId(organizationId));
 
     const number = await this.nextInvoiceNumber(organizationId);
-
-    await this.quota.assertInvoiceMonthlyQuota(organizationId);
 
     const invoice = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const inv = await tx.invoice.create({
@@ -803,5 +806,151 @@ export class InvoicesService {
     });
     const seq = count + 1;
     return `${prefix}${String(seq).padStart(4, "0")}`;
+  }
+
+  private portalTokenSecret(): string {
+    return (
+      this.config.get<string>("INVOICE_PORTAL_TOKEN_SECRET") ??
+      this.config.getOrThrow<string>("JWT_SECRET")
+    );
+  }
+
+  private portalPublicOrigin(): string {
+    const raw =
+      this.config.get<string>("INVOICE_PORTAL_PUBLIC_ORIGIN")?.trim() ??
+      "https://erp.dayday.az";
+    return raw.replace(/\/$/, "");
+  }
+
+  /** JWT: выдать или переиспользовать гостевую ссылку на портал счёта. */
+  async ensurePortalShareLink(
+    organizationId: string,
+    invoiceId: string,
+  ): Promise<{ url: string; token: string }> {
+    const inv = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, organizationId },
+      select: { id: true, publicToken: true },
+    });
+    if (!inv) throw new NotFoundException("Invoice not found");
+
+    if (inv.publicToken) {
+      const token = inv.publicToken;
+      return {
+        token,
+        url: `${this.portalPublicOrigin()}/portal/invoice/${encodeURIComponent(token)}`,
+      };
+    }
+
+    const secret = this.portalTokenSecret();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const candidate = generateInvoicePublicToken(inv.id, secret);
+      try {
+        await this.prisma.invoice.update({
+          where: { id: inv.id },
+          data: { publicToken: candidate },
+        });
+        return {
+          token: candidate,
+          url: `${this.portalPublicOrigin()}/portal/invoice/${encodeURIComponent(candidate)}`,
+        };
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002"
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new BadRequestException("Could not allocate public token");
+  }
+
+  /** Guest: JSON для портала (без JWT). */
+  async getPublicInvoiceByToken(publicToken: string) {
+    const raw = publicToken?.trim();
+    if (!raw || raw.length > 400) {
+      throw new NotFoundException();
+    }
+    const inv = await this.prisma.invoice.findFirst({
+      where: { publicToken: raw },
+      include: {
+        counterparty: true,
+        items: { include: { product: true } },
+        payments: { orderBy: [{ date: "asc" }, { createdAt: "asc" }] },
+        organization: {
+          include: { bankAccountsOrg: true },
+        },
+      },
+    });
+    if (!inv) throw new NotFoundException();
+
+    const paidTotal = this.sumPayments(inv.payments);
+    const remaining = inv.totalAmount.sub(paidTotal);
+    const paid = remaining.lte(0);
+    let localeHint: "az" | "ru" | "en" | null = null;
+    const pl = inv.counterparty.portalLocale?.trim().toLowerCase();
+    if (pl === "az" || pl === "ru" || pl === "en") {
+      localeHint = pl;
+    }
+
+    return {
+      localeHint,
+      organization: {
+        name: inv.organization.name,
+        taxId: inv.organization.taxId,
+        logoUrl: inv.organization.logoUrl,
+        legalAddress: inv.organization.legalAddress,
+        bankAccounts: inv.organization.bankAccountsOrg.map((b) => ({
+          bankName: b.bankName,
+          accountNumber: b.accountNumber,
+          currency: b.currency,
+          iban: b.iban,
+          swift: b.swift,
+        })),
+      },
+      counterparty: {
+        name: inv.counterparty.name,
+        taxId: inv.counterparty.taxId,
+      },
+      invoice: {
+        number: inv.number,
+        status: inv.status,
+        dueDate: inv.dueDate,
+        totalAmount: inv.totalAmount.toFixed(4),
+        currency: inv.currency,
+        paidTotal: paidTotal.toFixed(4),
+        remaining: remaining.toFixed(4),
+        paymentStatus: paid ? ("PAID" as const) : ("UNPAID" as const),
+        items: inv.items.map((it) => ({
+          description: it.description,
+          quantity: it.quantity.toFixed(4),
+          unitPrice: it.unitPrice.toFixed(4),
+          vatRate: it.vatRate.toFixed(2),
+          lineTotal: it.lineTotal.toFixed(4),
+          productName: it.product?.name ?? null,
+          sku: it.product?.sku ?? null,
+        })),
+      },
+    };
+  }
+
+  async getPublicInvoicePdfBuffer(publicToken: string): Promise<Buffer> {
+    const raw = publicToken?.trim();
+    if (!raw || raw.length > 400) {
+      throw new NotFoundException();
+    }
+    const inv = await this.prisma.invoice.findFirst({
+      where: { publicToken: raw },
+      select: { id: true },
+    });
+    if (!inv) throw new NotFoundException();
+    const model = await buildInvoicePdfModelByInvoiceIdPublic(
+      this.prisma,
+      this.config,
+      inv.id,
+    );
+    if (!model) throw new NotFoundException();
+    return renderInvoicePdf(model);
   }
 }

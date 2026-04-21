@@ -31,6 +31,18 @@ import { EmptyState } from "../../../components/empty-state";
 import { PaymentConfirmationModal } from "../../../components/payment-confirmation-modal";
 import { toast } from "sonner";
 
+type PlatformInvoiceRow = {
+  id: string;
+  amount: string;
+  status: string;
+  date: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  pdfUrl: string;
+  paymentOrderId: string | null;
+  createdAt: string;
+};
+
 type BillingCatalogModule = {
   id: string;
   key: string;
@@ -72,6 +84,15 @@ function moduleIcon(key: string) {
       return <Calculator className={common} aria-hidden />;
     default:
       return <Package className={common} aria-hidden />;
+  }
+}
+
+function storageUsedGb(currentBytes: string): number {
+  try {
+    const b = BigInt(currentBytes);
+    return Math.round((Number(b) / 1024 ** 3) * 100) / 100;
+  } catch {
+    return 0;
   }
 }
 
@@ -131,6 +152,12 @@ export default function SubscriptionSettingsPage() {
   const [payBusy, setPayBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [platformInvoices, setPlatformInvoices] = useState<PlatformInvoiceRow[]>(
+    [],
+  );
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesErr, setInvoicesErr] = useState<string | null>(null);
+
   const [payModal, setPayModal] = useState<
     | null
     | {
@@ -148,6 +175,38 @@ export default function SubscriptionSettingsPage() {
     () => organizations.find((o) => o.id === organizationId) ?? null,
     [organizations, organizationId],
   );
+
+  useEffect(() => {
+    if (!token) {
+      setPlatformInvoices([]);
+      setInvoicesLoading(false);
+      return;
+    }
+    if (!canAccessBilling(user?.role ?? undefined)) {
+      setPlatformInvoices([]);
+      setInvoicesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setInvoicesLoading(true);
+    setInvoicesErr(null);
+    void (async () => {
+      const res = await apiFetch("/api/billing/invoices?page=1&pageSize=50");
+      if (cancelled) return;
+      if (!res.ok) {
+        setInvoicesErr(await res.text());
+        setPlatformInvoices([]);
+        setInvoicesLoading(false);
+        return;
+      }
+      const data = (await res.json()) as { items: PlatformInvoiceRow[] };
+      setPlatformInvoices(data.items ?? []);
+      setInvoicesLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.role]);
 
   useEffect(() => {
     if (!token) return;
@@ -481,7 +540,93 @@ export default function SubscriptionSettingsPage() {
           current={effectiveSnapshot.quotas.invoicesThisMonth.current}
           max={effectiveSnapshot.quotas.invoicesThisMonth.max}
         />
+        <QuotaProgress
+          label={t("subscriptionSettings.quotaStorage")}
+          current={storageUsedGb(
+            effectiveSnapshot.quotas.storage?.currentBytes ?? "0",
+          )}
+          max={effectiveSnapshot.quotas.storage?.maxGb ?? null}
+        />
       </section>
+
+      {canAccessBilling(user?.role ?? undefined) && (
+        <section className={`${CARD_CONTAINER_CLASS} p-6 space-y-4`}>
+          <h2 className="text-lg font-semibold text-[#34495E]">
+            {t("subscriptionSettings.platformInvoicesTitle")}
+          </h2>
+          <p className="text-[13px] text-[#7F8C8D]">
+            {t("subscriptionSettings.platformInvoicesHint")}
+          </p>
+          {invoicesErr && (
+            <p className="text-[13px] text-red-700">{invoicesErr}</p>
+          )}
+          {invoicesLoading && (
+            <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p>
+          )}
+          {!invoicesLoading && platformInvoices.length === 0 && !invoicesErr && (
+            <p className="text-[13px] text-[#7F8C8D]">
+              {t("subscriptionSettings.platformInvoicesEmpty")}
+            </p>
+          )}
+          {platformInvoices.length > 0 && (
+            <div className="overflow-x-auto rounded-[2px] border border-[#D5DADF]">
+              <table className="min-w-full text-left text-[13px]">
+                <thead className="bg-[#F8F9FA] text-[#7F8C8D] uppercase text-[11px] tracking-wide">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("subscriptionSettings.invColDate")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("subscriptionSettings.invColAmount")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("subscriptionSettings.invColStatus")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("subscriptionSettings.invColPdf")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EBEDF0] text-[#34495E]">
+                  {platformInvoices.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2 tabular-nums whitespace-nowrap">
+                        {row.date}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">{row.amount} AZN</td>
+                      <td className="px-3 py-2">{row.status}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className={LINK_ACCENT_CLASS}
+                          onClick={async () => {
+                            const res = await apiFetch(
+                              `/api/billing/invoices/${row.id}/pdf`,
+                            );
+                            if (!res.ok) {
+                              toast.error(t("subscriptionSettings.pdfDownloadErr"));
+                              return;
+                            }
+                            const blob = await res.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `platform-invoice-${row.id.slice(0, 8)}.pdf`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          {t("subscriptionSettings.downloadPdf")}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {readOnlySub && (
         <p className="text-[13px] text-amber-900 bg-amber-50 border border-amber-100 rounded-[2px] px-3 py-2">

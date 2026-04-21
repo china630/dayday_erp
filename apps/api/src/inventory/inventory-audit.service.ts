@@ -4,9 +4,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
-  Decimal,
   InventoryAuditStatus,
   Prisma,
+  StockMovementReason,
+  StockMovementType,
   UserRole,
 } from "@dayday/database";
 import { assertMayPostManualJournal } from "../auth/policies/invoice-finance.policy";
@@ -19,6 +20,9 @@ import {
   INVENTORY_GOODS_ACCOUNT_CODE,
   MISC_OPERATING_EXPENSE_ACCOUNT_CODE,
 } from "../ledger.constants";
+
+type Decimal = Prisma.Decimal;
+const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class InventoryAuditService {
@@ -320,6 +324,17 @@ export class InventoryAuditService {
       }>;
     },
   ): Promise<void> {
+    const documentDate = new Date(
+      Date.UTC(
+        audit.date.getUTCFullYear(),
+        audit.date.getUTCMonth(),
+        audit.date.getUTCDate(),
+        12,
+        0,
+        0,
+        0,
+      ),
+    );
     const invAcc =
       audit.warehouse.inventoryAccountCode === "204"
         ? FINISHED_GOODS_ACCOUNT_CODE
@@ -384,11 +399,12 @@ export class InventoryAuditService {
             organizationId,
             warehouseId: audit.warehouseId,
             productId: line.productId,
-            type: "IN",
-            reason: "ADJUSTMENT",
+            type: StockMovementType.IN,
+            reason: StockMovementReason.ADJUSTMENT,
             quantity: qtyAbs,
             price: unit,
             note: `INV_AUDIT:${audit.id}`,
+            documentDate,
           },
         });
       } else {
@@ -418,11 +434,12 @@ export class InventoryAuditService {
             organizationId,
             warehouseId: audit.warehouseId,
             productId: line.productId,
-            type: "OUT",
-            reason: "ADJUSTMENT",
+            type: StockMovementType.OUT,
+            reason: StockMovementReason.ADJUSTMENT,
             quantity: qtyAbs,
             price: unit,
             note: `INV_AUDIT:${audit.id}`,
+            documentDate,
           },
         });
       }
