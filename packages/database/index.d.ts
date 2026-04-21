@@ -1,5 +1,7 @@
 export * from "@prisma/client";
 export { Prisma } from "@prisma/client";
+/** Instance type for `new Decimal(...)` (TS2749 if only `typeof Prisma.Decimal` is exported). */
+export type Decimal = InstanceType<typeof Prisma.Decimal>;
 export declare const Decimal: typeof Prisma.Decimal;
 export {
   chartOfAccountsAzJsonPath,
