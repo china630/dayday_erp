@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DayDay ERP — модули, функции и дорожная карта</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #fff;
+      --text: #2c3e50;
+      --muted: #5d6d7e;
+      --border: #d5dadf;
+      --accent: #2980b9;
+      --k1: #c0392b;
+      --k2: #e67e22;
+      --k3: #f39c12;
+      --k4: #7f8c8d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      color: var(--text);
+      background: var(--bg);
+      margin: 0;
+      padding: 1.5rem;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; color: #34495e; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+    .legend {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .legend h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+    .legend ul { margin: 0; padding-left: 1.25rem; }
+    .legend code { background: #eef1f4; padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.85em; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 0.875rem;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #ebedf0;
+      font-weight: 600;
+      color: #34495e;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbfc; }
+    .mod { font-weight: 600; white-space: nowrap; color: #1a5276; }
+    .pct { text-align: center; font-variant-numeric: tabular-nums; min-width: 3.5rem; }
+    .horizon-current { background: #e8f6f3; }
+    .horizon-v2 { background: #fef9e7; }
+    .horizon-v3 { background: #eaf2f8; }
+    .horizon-v4 { background: #f4ecf7; }
+    .crit { text-align: center; font-weight: 600; min-width: 5rem; }
+    .c1 { color: var(--k1); }
+    .c2 { color: var(--k2); }
+    .c3 { color: var(--k3); }
+    .c4 { color: var(--k4); }
+    .note {
+      margin-top: 1.25rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    @media print {
+      body { background: #fff; }
+      .legend { break-inside: avoid; }
+      tr { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Модули и функции DayDay ERP</h1>
+    <p class="meta">
+      Сводка по <strong>PRD.md</strong> и <strong>TZ.md</strong>: целевой скоуп текущей линии продукта (ориентир <strong>v25.x</strong>) и запланированные горизонты <strong>v2 / v3 / v4+</strong>.
+      Оценка <strong>% готовности</strong> — инженерно-продуктовая (реализовано относительно зафиксированного в документах объёма для данного горизонта), не аудит кода.
+    </p>
+
+    <section class="legend">
+      <h2>Условные обозначения</h2>
+      <ul>
+        <li><strong>Горизонт «Текущая»</strong> — функциональность, входящая в актуальный скоуп ядра и расширений из PRD §4, §4.12–4.13 и синхронизированную с TZ (M1–M9, платформа).</li>
+        <li><strong>v2</strong> — PRD §5 (конкурентный scope: взаиморасчёты углублённо, налоговый экспорт, Multi-GAAP, ОС/ТМЦ).</li>
+        <li><strong>v3</strong> — PRD §6 (экосистема AZ: e-gov, ЭЦП, Direct Banking).</li>
+        <li><strong>v4+</strong> — PRD §7+ (коммерция, биллинг, квоты; часть уже внедрена как MVP платформы).</li>
+        <li><strong>Критичность для системы:</strong>
+          <span class="c1">К1</span> — ядро (без этого продукт не выполняет роль ERP);
+          <span class="c2">К2</span> — высокая (основной операционный контур);
+          <span class="c3">К3</span> — средняя (конкурентность, удобство);
+          <span class="c4">К4</span> — низкая (расширения, интеграции).
+        </li>
+      </ul>
+    </section>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Модуль</th>
+          <th>Функция / возможность</th>
+          <th>Горизонт</th>
+          <th class="pct">% *</th>
+          <th class="crit">Критич.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- M1 -->
+        <tr class="horizon-current">
+          <td class="mod">M1 IAM</td>
+          <td>Регистрация, JWT, refresh cookie, many-to-many пользователь–организация, переключатель org</td>
+          <td>Текущая</td>
+          <td class="pct">92</td>
+          <td class="crit c1">К1</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M1 IAM</td>
+          <td>RBAC (Owner/Admin/Accountant/User), Access Request по VÖEN</td>
+          <td>Текущая</td>
+          <td class="pct">88</td>
+          <td class="crit c1">К1</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M1 IAM</td>
+          <td>Policy guard / CASL-like ограничения на финансовые мутации (инвойсы PAID, журнал)</td>
+          <td>Текущая</td>
+          <td class="pct">80</td>
+          <td class="crit c2">К2</td>
+        </tr>
+
+        <!-- M2 -->
+        <tr class="horizon-current">
+          <td class="mod">M2 Ledger</td>
+          <td>План счетов в БД, NAS-проводки, транзакции, закрытие периодов</td>
+          <td>Текущая</td>
+          <td class="pct">88</td>
+          <td class="crit c1">К1</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M2 Ledger</td>
+          <td>Каталог шаблона NAS: <code>ChartOfAccountsEntry</code>, super-admin API, транзакционный онбординг org</td>
+          <td>Текущая</td>
+          <td class="pct">85</td>
+          <td class="crit c1">К1</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M2 Ledger</td>
+          <td>Теневая книга IFRS (маппинг), взаимозачёт (Netting) 211/531, НДС при зачёте (по условиям)</td>
+          <td>Текущая</td>
+          <td class="pct">82</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-v2">
+          <td class="mod">M2 Ledger</td>
+          <td>Multi-GAAP: полноценная параллельная IFRS-книга и отчётность (PRD §5.C)</td>
+          <td>v2</td>
+          <td class="pct">35</td>
+          <td class="crit c3">К3</td>
+        </tr>
+
+        <!-- M3 -->
+        <tr class="horizon-current">
+          <td class="mod">M3 CRM</td>
+          <td>Контрагенты, VÖEN, типы, взаиморасчёты 211/531</td>
+          <td>Текущая</td>
+          <td class="pct">85</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M3 CRM</td>
+          <td>Глобальный реестр <code>GlobalCounterparty</code> / MDM, lookup при вводе VÖEN</td>
+          <td>Текущая</td>
+          <td class="pct">75</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-v3">
+          <td class="mod">M3 CRM</td>
+          <td>Автопроверка VÖEN / e-taxes lookup без ручного ввода (PRD §6)</td>
+          <td>v3</td>
+          <td class="pct">15</td>
+          <td class="crit c4">К4</td>
+        </tr>
+
+        <!-- M4 -->
+        <tr class="horizon-current">
+          <td class="mod">M4 Sales</td>
+          <td>Инвойсы, НДС 0/18, валюты AZN/USD/EUR, PDF, оплата → проводки</td>
+          <td>Текущая</td>
+          <td class="pct">86</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M4 Sales</td>
+          <td>Публичный портал счёта по токену, PDF, локаль портала</td>
+          <td>Текущая</td>
+          <td class="pct">78</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-v2">
+          <td class="mod">M4 Sales</td>
+          <td>Частичные оплаты, распределение транша на несколько инвойсов, акты сверки, Aging (PRD §5.A)</td>
+          <td>v2</td>
+          <td class="pct">25</td>
+          <td class="crit c3">К3</td>
+        </tr>
+
+        <!-- M5 -->
+        <tr class="horizon-current">
+          <td class="mod">M5 Cash</td>
+          <td>Банк: выписки, импорт CSV/Excel, match, ручной ввод (MANUAL_BANK_ENTRY), статьи ДДС</td>
+          <td>Текущая</td>
+          <td class="pct">82</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M5 Cash</td>
+          <td>Kaznach: <code>CashFlowItem</code>, <code>CashDesk</code>, KMO/KXO, проведение, удержание на 521, закрытые периоды</td>
+          <td>Текущая</td>
+          <td class="pct">84</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M5 Cash</td>
+          <td>Холдинг: сводка cash/bank, Monthly Slices для P&amp;L (PRD §1.1)</td>
+          <td>Текущая</td>
+          <td class="pct">78</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-v3">
+          <td class="mod">M5 Cash</td>
+          <td>Direct Banking топ-банков, исходящие платежи на подпись (PRD §6.3)</td>
+          <td>v3</td>
+          <td class="pct">30</td>
+          <td class="crit c3">К3</td>
+        </tr>
+
+        <!-- M6 -->
+        <tr class="horizon-current">
+          <td class="mod">M6 HR</td>
+          <td>Сотрудники, оргструктура (департаменты, позиции), квоты штата</td>
+          <td>Текущая</td>
+          <td class="pct">80</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M6 HR</td>
+          <td>Payroll АР (калькулятор), ведомости, проведение 721/533/521, BullMQ для тяжёлых run</td>
+          <td>Текущая</td>
+          <td class="pct">82</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M6 HR</td>
+          <td>Отпуска/больничные: <code>AbsenceType</code>, табель, формулы ТК (30.4, 14 дней…)</td>
+          <td>Текущая</td>
+          <td class="pct">80</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M6 HR</td>
+          <td>P&amp;L по ЦФО: QuickExpense + <code>departmentId</code>; ФОТ без распределения по dept в GL (PRD/TZ §7.0.1)</td>
+          <td>Текущая</td>
+          <td class="pct">55</td>
+          <td class="crit c3">К3</td>
+        </tr>
+
+        <!-- M7 -->
+        <tr class="horizon-current">
+          <td class="mod">M7 Reports</td>
+          <td>ОСВ, P&amp;L, баланс, виджеты executive, холдинг consolidated P&amp;L</td>
+          <td>Текущая</td>
+          <td class="pct">80</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M7 Reports</td>
+          <td>ДДС прямой метод (<code>GET /api/reports/cash-flow</code>, UI <code>/reports/cash-flow</code>)</td>
+          <td>Текущая</td>
+          <td class="pct">85</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-v2">
+          <td class="mod">M7 Reports</td>
+          <td>Экспорт в e-taxes.gov.az (PRD §4.7, §5.B)</td>
+          <td>v2</td>
+          <td class="pct">10</td>
+          <td class="crit c3">К3</td>
+        </tr>
+
+        <!-- M8 -->
+        <tr class="horizon-current">
+          <td class="mod">M8 Audit</td>
+          <td>AuditMutationInterceptor, old/new JSON, хеш SHA-256, архив &gt;1 года</td>
+          <td>Текущая</td>
+          <td class="pct">85</td>
+          <td class="crit c2">К2</td>
+        </tr>
+
+        <!-- M9 -->
+        <tr class="horizon-current">
+          <td class="mod">M9 Inventory</td>
+          <td>Склад, закупки, COGS, движения, списания/оприходование, инвентаризация (реляционная опись)</td>
+          <td>Текущая</td>
+          <td class="pct">78</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M9 Mfg</td>
+          <td>Рецептуры <code>ProductRecipe</code>, <code>wasteFactor</code>, выпуск, gating <code>manufacturing</code></td>
+          <td>Текущая</td>
+          <td class="pct">72</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">M9 Inventory</td>
+          <td>Оценка запасов: AVCO / FIFO (параметр организации, PRD §11.0)</td>
+          <td>Текущая</td>
+          <td class="pct">70</td>
+          <td class="crit c3">К3</td>
+        </tr>
+        <tr class="horizon-v2">
+          <td class="mod">M9 / M2</td>
+          <td>Амортизация ОС, партионный учёт расширенный (PRD §5.D)</td>
+          <td>v2</td>
+          <td class="pct">15</td>
+          <td class="crit c4">К4</td>
+        </tr>
+
+        <!-- Platform -->
+        <tr class="horizon-current">
+          <td class="mod">Платформа</td>
+          <td>Prisma multi-tenancy, <code>TenantPrismaRawService</code>, BullMQ, Redis</td>
+          <td>Текущая</td>
+          <td class="pct">88</td>
+          <td class="crit c1">К1</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">Платформа</td>
+          <td>Super-Admin: организации, тарифы v8.8, i18n, глобальный аудит</td>
+          <td>Текущая</td>
+          <td class="pct">75</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-current">
+          <td class="mod">Платформа</td>
+          <td>Файлы: <code>STORAGE_SERVICE</code>, S3 в проде (PRD §11.0)</td>
+          <td>Текущая</td>
+          <td class="pct">80</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-v4">
+          <td class="mod">Платформа</td>
+          <td>Billing LEGO: модули, квоты, единый счёт владельцу, webhooks оплаты, Owner-only (PRD §7.12)</td>
+          <td>Текущая / v4+</td>
+          <td class="pct">72</td>
+          <td class="crit c2">К2</td>
+        </tr>
+        <tr class="horizon-v3">
+          <td class="mod">Платформа</td>
+          <td>ЭЦП ASAN/SİMA для документов (PRD §6.2)</td>
+          <td>v3</td>
+          <td class="pct">5</td>
+          <td class="crit c4">К4</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="note">
+      * Проценты отражают степень покрытия <em>задокументированного</em> объёма для выбранного горизонта (функции могут быть частично реализованы: UI/API/краевые случаи).
+      Источники нумерации модулей: <strong>PRD §4</strong>, <strong>TZ.md §2–§10</strong> (M1→§2 … M9→§10).
+      Документ сгенерирован для внутреннего планирования; при расхождении с кодом приоритет у актуальных PRD/TZ и OpenAPI.
+    </p>
+  </div>
+</body>
+</html>

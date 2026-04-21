@@ -1,7 +1,24 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { DAYDAY_MAINTENANCE_HTML } from "./lib/maintenance-page-html";
+
 const ACCESS_TOKEN_COOKIE_KEY = "dayday_access_token";
+
+/** Bracket access: improves chance the value is read at runtime (not inlined at build) under `next start`. */
+function maintenanceModeEnabled(): boolean {
+  const raw = process.env["MAINTENANCE_MODE"]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function isSkippableAssetPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml"
+  );
+}
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === "/login") return true;
@@ -22,13 +39,19 @@ export function middleware(req: NextRequest) {
   requestHeaders.set("x-dayday-pathname", pathname);
 
   // Allow static assets early.
-  if (
-    pathname.startsWith("/_next/") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml"
-  ) {
+  if (isSkippableAssetPath(pathname)) {
     return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  if (maintenanceModeEnabled()) {
+    return new NextResponse(DAYDAY_MAINTENANCE_HTML, {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Retry-After": "120",
+      },
+    });
   }
 
   if (isPublicPath(pathname)) {

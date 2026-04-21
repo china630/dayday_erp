@@ -80,6 +80,8 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+      # 1/true/on — отдаёт 503 из Next (см. MAINTENANCE_MODE в env.production.example). Нужен перезапуск web.
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-}
     ports:
       - "${PORT:-3000}:3000"
     depends_on:

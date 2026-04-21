@@ -7,4 +7,3 @@ dist
 *.tsbuildinfo
 .DS_Store
 screens
-docs
