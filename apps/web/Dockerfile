@@ -14,6 +14,11 @@ COPY packages/database/package.json packages/database/
 COPY packages/database packages/database
 COPY apps/web apps/web
 
+# @dayday/database postinstall runs `prisma generate`; Prisma 7 loads prisma.config.ts
+# which calls `env("DATABASE_URL")`. `.env` is excluded from the build context (.dockerignore).
+# This placeholder is only for config resolution during generate (no DB connection).
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
+
 RUN npm ci
 
 # Один слой перед `next build`: все ARG → ENV, чтобы Next/Sentry webpack видели переменные
