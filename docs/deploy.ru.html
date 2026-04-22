@@ -138,6 +138,8 @@ docker compose -f docker-compose.prod.yml ps</code></pre>
         <p>Prisma настроена через <code>packages/database/prisma.config.ts</code>. В production используем только <code>prisma migrate deploy</code>.</p>
         <h3>7.0. Maintenance mode перед миграциями (рекомендуется)</h3>
         <p>Перед <code>db:migrate:deploy</code> включайте maintenance mode.</p>
+        <p>Вариант A (рекомендуется при Caddy): включить в <code>.env</code> <code>MAINTENANCE_MODE=1</code> и выполнить <code>docker compose -f docker-compose.prod.yml up -d web</code>. Для выключения убрать/обнулить переменную и снова <code>up -d web</code>.</p>
+        <p>Вариант B (Nginx boundary):</p>
         <ul>
           <li><code>docs/maintenance.html</code> — страница обслуживания (AZ/RU)</li>
           <li><code>docs/nginx-maintenance.conf</code> — сниппет Nginx (503 при наличии <code>/var/www/html/maintenance.enable</code>)</li>
@@ -165,10 +167,24 @@ sudo nginx -t && sudo systemctl reload nginx</code></pre>
 
         <hr />
         <h2>8. HTTPS (обязательно для production)</h2>
-        <p>Production web-origin должен быть HTTPS. Рекомендуется проксировать:</p>
-        <ul>
-          <li><code>https://your-domain.tld</code> → <code>http://127.0.0.1:3000</code> (контейнер <code>web</code>)</li>
-        </ul>
+        <p>Production web-origin должен быть HTTPS.</p>
+        <h3>8.1. Рекомендуемый путь: Caddy (быстрее всего)</h3>
+        <pre><code>sudo apt-get update
+sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt-get update
+sudo apt-get install -y caddy</code></pre>
+        <p>Создайте <code>/etc/caddy/Caddyfile</code>:</p>
+        <pre><code>your-domain.tld {
+  reverse_proxy 127.0.0.1:3000
+}</code></pre>
+        <pre><code>sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+sudo systemctl status caddy --no-pager</code></pre>
+        <p>Caddy автоматически выпустит/обновит сертификат Let's Encrypt.</p>
+        <h3>8.2. Альтернатива: Nginx</h3>
+        <p><code>https://your-domain.tld</code> → <code>http://127.0.0.1:3000</code> (контейнер <code>web</code>).</p>
         <p>API можно не публиковать отдельно: браузер ходит через тот же origin <code>/api/*</code>.</p>
 
         <hr />

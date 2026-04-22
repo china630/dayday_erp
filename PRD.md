@@ -653,6 +653,7 @@
 | **Производительность** | Пагинация, индексы по `organizationId` + `createdAt` |
 | **API** | OpenAPI (Swagger) |
 | **Контейнеризация** | Docker Compose (dev/prod MVP) |
+| **HTTPS терминация (production)** | Reverse proxy перед `web` обязателен; рекомендуемый baseline — **Caddy** (`your-domain.tld` -> `127.0.0.1:3000`), Nginx допустим как альтернатива |
 | **Очереди** | BullMQ для фоновых задач |
 | **Файлы** | Абстракция `STORAGE_SERVICE`; **production:** S3-compatible по умолчанию (`STORAGE_DRIVER=s3`); локально допускается `local` (см. §11.0) |
 | **Почта** | Nodemailer SMTP — инвойсы, восстановление пароля |

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../lib/api-client";
 import { formatMoneyAzn } from "../../lib/format-money";
 import { inputFieldClass } from "../../lib/form-classes";
-import { isValidFinCode } from "../../lib/fin-code";
+import { isValidFinCode, normalizeFinInput } from "../../lib/fin-code";
 import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { useRequireAuth } from "../../lib/use-require-auth";
@@ -21,10 +21,6 @@ import {
 } from "../../lib/design-system";
 import { EmployeeModal } from "./employee-modal";
 import { EntityAuditHistory } from "../../components/admin/entity-audit-history";
-
-function sanitizeFinInput(raw: string): string {
-  return raw.replace(/[^0-9A-HJ-NP-Za-hj-np-z]/g, "").slice(0, 7);
-}
 
 type Employee = {
   id: string;
@@ -330,8 +326,12 @@ export default function EmployeesPage() {
               <input
                 value={editing.finCode}
                 maxLength={7}
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
                 onChange={(e) =>
-                  setEditing({ ...editing, finCode: sanitizeFinInput(e.target.value) })
+                  setEditing({ ...editing, finCode: normalizeFinInput(e.target.value) })
                 }
                 className={inputFieldClass}
               />

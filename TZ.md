@@ -51,7 +51,12 @@
 
 Цель: перед `prisma migrate deploy` временно отключить UI (и при необходимости API) понятной заглушкой, чтобы пользователи не работали в полусостоянии во время деплоя.
 
-- **Nginx (UI)**
+- **Caddy / app-level (рекомендуется для типового Compose-деплоя)**
+  - В `.env`: `MAINTENANCE_MODE=1`
+  - Применить: `docker compose -f docker-compose.prod.yml up -d web`
+  - Выключить: убрать/обнулить `MAINTENANCE_MODE`, затем снова `up -d web`.
+
+- **Nginx (UI boundary, альтернативный вариант)**
   - Положить страницу: `docs/maintenance.html` → `/var/www/html/maintenance.html`
   - Подключить сниппет: `docs/nginx-maintenance.conf` (возвращает **503** если существует `/var/www/html/maintenance.enable`)
   - Включить режим обслуживания:

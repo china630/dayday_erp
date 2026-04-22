@@ -205,8 +205,38 @@ docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
 
 Production web-origin должен быть **HTTPS**.
 
-Рекомендация: поставить Caddy или nginx и проксировать:
-- `https://your-domain.tld` → `http://127.0.0.1:3000` (контейнер `web`)
+### 8.1. Рекомендуемый путь: Caddy (быстрее всего)
+
+```bash
+sudo apt-get update
+sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt-get update
+sudo apt-get install -y caddy
+```
+
+Создайте `/etc/caddy/Caddyfile`:
+
+```caddy
+your-domain.tld {
+  reverse_proxy 127.0.0.1:3000
+}
+```
+
+Применение:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+sudo systemctl status caddy --no-pager
+```
+
+Caddy автоматически выпустит/обновит Let's Encrypt сертификат.
+
+### 8.2. Альтернатива: Nginx
+
+Остаётся валидным: `https://your-domain.tld` → `http://127.0.0.1:3000` (контейнер `web`).
 
 API можно не публиковать отдельно: браузер ходит через тот же origin `/api/*` (Next rewrites).
 

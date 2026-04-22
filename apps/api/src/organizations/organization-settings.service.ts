@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { serializeForAudit } from "../audit/audit-serialize";
 import { GlobalCompanyDirectoryService } from "../global-directory/global-company-directory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { QuotaService } from "../quota/quota.service";
@@ -25,7 +26,7 @@ export class OrganizationSettingsService {
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
   ) {}
 
-  async getSettings(organizationId: string) {
+  private async getSettingsRaw(organizationId: string) {
     const org = await this.prisma.organization.findFirst({
       where: { id: organizationId, isDeleted: false },
       include: { bankAccountsOrg: { orderBy: { createdAt: "asc" } } },
@@ -34,6 +35,13 @@ export class OrganizationSettingsService {
       throw new NotFoundException("Organization not found");
     }
     return org;
+  }
+
+  async getSettings(organizationId: string) {
+    const org = await this.getSettingsRaw(organizationId);
+    // Express JSON can't serialize BigInt (e.g. storageUsedBytes).
+    // Reuse common serializer used by audit payloads.
+    return serializeForAudit(org);
   }
 
   async patchSettings(organizationId: string, dto: PatchOrganizationSettingsDto) {
@@ -82,7 +90,7 @@ export class OrganizationSettingsService {
       }
     });
 
-    const fresh = await this.getSettings(organizationId);
+    const fresh = await this.getSettingsRaw(organizationId);
     this.directory.scheduleUpsert({
       taxId: fresh.taxId,
       name: fresh.name,
@@ -90,7 +98,7 @@ export class OrganizationSettingsService {
       phone: fresh.phone,
       directorName: fresh.directorName,
     });
-    return fresh;
+    return serializeForAudit(fresh);
   }
 
   async uploadLogo(organizationId: string, file: Express.Multer.File | undefined) {
@@ -127,7 +135,7 @@ export class OrganizationSettingsService {
       data: { logoUrl: publicUrl },
     });
 
-    const org = await this.getSettings(organizationId);
+    const org = await this.getSettingsRaw(organizationId);
     this.directory.scheduleUpsert({
       taxId: org.taxId,
       name: org.name,

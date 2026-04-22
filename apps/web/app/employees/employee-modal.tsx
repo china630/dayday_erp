@@ -10,7 +10,7 @@ import {
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
-import { isValidFinCode } from "../../lib/fin-code";
+import { isValidFinCode, normalizeFinInput } from "../../lib/fin-code";
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
 
 type JobPositionOpt = {
@@ -18,10 +18,6 @@ type JobPositionOpt = {
   name: string;
   department: { id: string; name: string };
 };
-
-function sanitizeFinInput(raw: string): string {
-  return raw.replace(/[^0-9A-HJ-NP-Za-hj-np-z]/g, "").slice(0, 7);
-}
 
 export function EmployeeModal({
   open,
@@ -199,7 +195,11 @@ export function EmployeeModal({
               <input
                 value={finCode}
                 maxLength={7}
-                onChange={(e) => setFinCode(sanitizeFinInput(e.target.value))}
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                onChange={(e) => setFinCode(normalizeFinInput(e.target.value))}
                 className={FORM_INPUT_CLASS}
               />
             </div>
