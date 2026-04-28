@@ -7,6 +7,7 @@ import {
   PaymentOrderStatus,
   Prisma,
   SubscriptionTier,
+  TemplateGroup,
 } from "@dayday/database";
 import type { TierQuotas } from "../constants/quotas";
 import { PrismaService } from "../prisma/prisma.service";
@@ -597,24 +598,33 @@ export class AdminService {
    */
   listChartTemplateEntries() {
     return this.prisma.chartOfAccountsEntry.findMany({
-      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+      orderBy: [
+        { templateGroup: "asc" },
+        { sortOrder: "asc" },
+        { code: "asc" },
+      ],
     });
   }
 
   async upsertChartTemplateEntry(dto: UpsertChartTemplateEntryDto) {
+    const templateGroup = dto.templateGroup ?? TemplateGroup.COMMERCIAL;
     const code = dto.code.trim();
-    const name = dto.name.trim();
+    const nameAz = dto.nameAz.trim();
+    const nameRu = dto.nameRu.trim();
+    const nameEn = dto.nameEn.trim();
     const parentRaw = dto.parentCode?.trim();
     const parentCode = parentRaw && parentRaw.length > 0 ? parentRaw : null;
     if (parentCode === code) {
       throw new BadRequestException("parentCode не может совпадать с code");
     }
     if (parentCode) {
-      const parent = await this.prisma.chartOfAccountsEntry.findUnique({
-        where: { code: parentCode },
+      const parent = await this.prisma.chartOfAccountsEntry.findFirst({
+        where: { templateGroup, code: parentCode },
       });
       if (!parent) {
-        throw new BadRequestException(`Неизвестный parentCode: ${parentCode}`);
+        throw new BadRequestException(
+          `Unknown parentCode in ${templateGroup}: ${parentCode}`,
+        );
       }
     }
     let cashProfile = dto.cashProfile?.trim() || null;
@@ -628,10 +638,18 @@ export class AdminService {
     const sortOrder = dto.sortOrder ?? 0;
     const isDeprecated = dto.isDeprecated ?? false;
     return this.prisma.chartOfAccountsEntry.upsert({
-      where: { code },
+      where: {
+        templateGroup_code: {
+          templateGroup,
+          code,
+        },
+      },
       create: {
+        templateGroup,
         code,
-        name,
+        nameAz,
+        nameRu,
+        nameEn,
         accountType: dto.accountType,
         parentCode,
         cashProfile,
@@ -639,7 +657,9 @@ export class AdminService {
         isDeprecated,
       },
       update: {
-        name,
+        nameAz,
+        nameRu,
+        nameEn,
         accountType: dto.accountType,
         parentCode,
         cashProfile,

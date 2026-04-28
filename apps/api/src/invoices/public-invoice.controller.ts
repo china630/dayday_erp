@@ -6,17 +6,17 @@ import { Public } from "../auth/decorators/public.decorator";
 import { InvoicesService } from "./invoices.service";
 
 /**
- * Гостевой доступ к счёту по opaque token (PRD §4.15). Без JWT; rate limit против перебора.
+ * Гостевой доступ к счёту по opaque token (PRD §4.4.1). Без JWT; rate limit против перебора.
  */
 @ApiTags("public-invoices")
 @Controller("public/invoices")
 @Public()
 @UseGuards(ThrottlerGuard)
-@Throttle({ default: { limit: 40, ttl: 60_000 } })
 export class PublicInvoiceController {
   constructor(private readonly invoices: InvoicesService) {}
 
   @Get(":token/pdf")
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: "Guest: PDF инвойса по public token" })
   async pdf(
     @Param("token") token: string,
@@ -33,6 +33,7 @@ export class PublicInvoiceController {
   }
 
   @Get(":token")
+  @Throttle({ default: { limit: 40, ttl: 60_000 } })
   @ApiOperation({ summary: "Guest: JSON инвойса (организация, банк, оплата, позиции)" })
   get(@Param("token") token: string) {
     return this.invoices.getPublicInvoiceByToken(token);

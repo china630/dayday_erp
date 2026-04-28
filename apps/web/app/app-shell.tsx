@@ -400,35 +400,40 @@ function LedgerToggle() {
   }
 
   return (
-    <div
-      className="inline-flex rounded-lg border border-gray-200 bg-slate-50 p-0.5"
-      role="group"
-      aria-label={t("ledger.toggleAria")}
-    >
-      <button
-        type="button"
-        onClick={() => setLedgerType("NAS")}
-        className={[
-          "px-2.5 py-1.5 text-xs font-semibold rounded-md transition",
-          ledgerType === "NAS"
-            ? "bg-white text-primary shadow-sm border border-action/20"
-            : "text-gray-600 hover:text-gray-900",
-        ].join(" ")}
+    <div className="inline-flex items-center gap-2">
+      <span className="text-xs font-medium text-gray-600">
+        {t("ledger.standardLabel")}
+      </span>
+      <div
+        className="inline-flex rounded-lg border border-gray-200 bg-slate-50 p-0.5"
+        role="group"
+        aria-label={t("ledger.toggleAria")}
       >
-        {t("ledger.nas")}
-      </button>
-      <button
-        type="button"
-        onClick={() => setLedgerType("IFRS")}
-        className={[
-          "px-2.5 py-1.5 text-xs font-semibold rounded-md transition",
-          ledgerType === "IFRS"
-            ? "bg-white text-primary shadow-sm border border-action/20"
-            : "text-gray-600 hover:text-gray-900",
-        ].join(" ")}
-      >
-        {t("ledger.ifrs")}
-      </button>
+        <button
+          type="button"
+          onClick={() => setLedgerType("NAS")}
+          className={[
+            "px-2.5 py-1.5 text-xs font-semibold rounded-md transition",
+            ledgerType === "NAS"
+              ? "bg-white text-primary shadow-sm border border-action/20"
+              : "text-gray-600 hover:text-gray-900",
+          ].join(" ")}
+        >
+          {t("ledger.nas")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setLedgerType("IFRS")}
+          className={[
+            "px-2.5 py-1.5 text-xs font-semibold rounded-md transition",
+            ledgerType === "IFRS"
+              ? "bg-white text-primary shadow-sm border border-action/20"
+              : "text-gray-600 hover:text-gray-900",
+          ].join(" ")}
+        >
+          {t("ledger.ifrs")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -479,6 +484,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (String(snapshot.tier).toUpperCase() === "ENTERPRISE") return false;
     return !snapshot.modules.bankingPro;
   }, [token, subReady, snapshot]);
+
+  const billingBanner = useMemo(() => {
+    const status = snapshot?.billingStatus;
+    if (status === "SOFT_BLOCK") {
+      return {
+        tone: "soft" as const,
+        text: t("billingEnforcement.softBlockBanner"),
+      };
+    }
+    if (status === "HARD_BLOCK") {
+      return {
+        tone: "hard" as const,
+        text: t("billingEnforcement.hardBlockBanner"),
+      };
+    }
+    return null;
+  }, [snapshot?.billingStatus, t]);
 
   const navSections = useMemo(() => {
     const bankCashActive =
@@ -657,6 +679,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="app-shell-main mx-auto w-full min-w-0 max-w-[100vw] px-4 py-6 pb-24 sm:px-6 sm:py-8 lg:max-w-6xl lg:px-8 lg:pb-8">
           {ready && token ? <TrialBanner /> : null}
+          {ready && token && billingBanner ? (
+            <div
+              className={[
+                "mb-4 rounded-[2px] border px-3 py-2 text-[13px] font-semibold",
+                billingBanner.tone === "hard"
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-amber-200 bg-amber-50 text-amber-900",
+              ].join(" ")}
+            >
+              {billingBanner.text}
+            </div>
+          ) : null}
           {children}
         </main>
       </div>

@@ -15,26 +15,44 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { UserRole } from "@dayday/database";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
+import { isDepartmentHeadRole } from "../auth/policies/hr-payroll.policy";
+import { requireOrgRole } from "../auth/require-org-role";
+import type { AuthUser } from "../auth/types/auth-user";
 import { OrganizationId } from "../common/org-id.decorator";
+import { DepartmentHeadScopeService } from "./department-head-scope.service";
 import { TimesheetBatchUpdateDto } from "./dto/timesheet-batch.dto";
+import { TimesheetMassApproveDto } from "./dto/timesheet-mass-approve.dto";
 import { TimesheetService } from "./timesheet.service";
 
 @ApiTags("hr-timesheet")
 @ApiBearerAuth("bearer")
 @Controller("hr/timesheets")
 export class TimesheetController {
-  constructor(private readonly timesheet: TimesheetService) {}
+  constructor(
+    private readonly timesheet: TimesheetService,
+    private readonly scope: DepartmentHeadScopeService,
+  ) {}
 
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.HR_MANAGER,
+    UserRole.DEPARTMENT_HEAD,
+  )
   @ApiOperation({
     summary: "Табель за месяц (по умолчанию создаёт черновик). create=false — только чтение",
   })
-  find(
+  async find(
     @OrganizationId() organizationId: string,
     @Query("year") year: string,
     @Query("month") month: string,
+    @CurrentUser() user: AuthUser,
     @Query("create") create?: string,
   ) {
     const y = Number.parseInt(String(year ?? ""), 10);
@@ -45,59 +63,145 @@ export class TimesheetController {
     if (!Number.isFinite(m) || m < 1 || m > 12) {
       throw new BadRequestException("month must be 1–12");
     }
+    const role = requireOrgRole(user);
+    const departmentId = isDepartmentHeadRole(role)
+        ? await this.scope.resolveManagedDepartmentId(organizationId, user.userId)
+        : undefined;
     if (create === "false") {
-      return this.timesheet.findByMonthIfExists(organizationId, y, m);
+      return this.timesheet.findByMonthIfExists(
+        organizationId,
+        y,
+        m,
+        departmentId,
+      );
     }
-    return this.timesheet.getOrCreate(organizationId, y, m);
+    return this.timesheet.getOrCreate(organizationId, y, m, departmentId);
   }
 
   @Post(":id/autofill")
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.HR_MANAGER,
+    UserRole.DEPARTMENT_HEAD,
+  )
   @ApiOperation({
     summary:
       "Автозаполнение: WORK в рабочие дни, OFF в выходные (АР 2026 — производственный календарь)",
   })
-  autofill(
+  async autofill(
     @OrganizationId() organizationId: string,
     @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.timesheet.autofill(organizationId, id);
+    const role = requireOrgRole(user);
+    const departmentId = isDepartmentHeadRole(role)
+      ? await this.scope.resolveManagedDepartmentId(organizationId, user.userId)
+      : undefined;
+    return this.timesheet.autofill(organizationId, id, departmentId);
   }
 
   @Post(":id/sync-absences")
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.HR_MANAGER,
+    UserRole.DEPARTMENT_HEAD,
+  )
   @ApiOperation({
     summary: "Синхронизация утверждённых отпусков/больничных (ячейки блокируются)",
   })
-  syncAbsences(
+  async syncAbsences(
     @OrganizationId() organizationId: string,
     @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.timesheet.syncAbsences(organizationId, id);
+    const role = requireOrgRole(user);
+    const departmentId = isDepartmentHeadRole(role)
+      ? await this.scope.resolveManagedDepartmentId(organizationId, user.userId)
+      : undefined;
+    return this.timesheet.syncAbsences(organizationId, id, departmentId);
   }
 
   @Patch(":id/entries/batch")
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.HR_MANAGER,
+    UserRole.DEPARTMENT_HEAD,
+  )
   @ApiOperation({ summary: "Пакетное обновление диапазона дней для сотрудника" })
-  batch(
+  async batch(
     @OrganizationId() organizationId: string,
     @Param("id") id: string,
     @Body() dto: TimesheetBatchUpdateDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.timesheet.batchUpdate(organizationId, id, dto.batches);
+    const role = requireOrgRole(user);
+    const departmentId = isDepartmentHeadRole(role)
+      ? await this.scope.resolveManagedDepartmentId(organizationId, user.userId)
+      : undefined;
+    return this.timesheet.batchUpdate(
+      organizationId,
+      id,
+      dto.batches,
+      departmentId,
+    );
   }
 
   @Post(":id/approve")
   @UseGuards(RolesGuard)
-  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.HR_MANAGER,
+    UserRole.DEPARTMENT_HEAD,
+  )
   @ApiOperation({ summary: "Утвердить табель (READ_ONLY)" })
-  approve(
+  async approve(
     @OrganizationId() organizationId: string,
     @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.timesheet.approve(organizationId, id);
+    const role = requireOrgRole(user);
+    const departmentId = isDepartmentHeadRole(role)
+      ? await this.scope.resolveManagedDepartmentId(organizationId, user.userId)
+      : undefined;
+    return this.timesheet.approve(organizationId, id, departmentId);
+  }
+
+  @Post(":id/approve-mass")
+  @UseGuards(RolesGuard)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.HR_MANAGER,
+    UserRole.DEPARTMENT_HEAD,
+  )
+  @ApiOperation({ summary: "Массово утвердить сотрудников в табеле (scope-aware)" })
+  async approveMass(
+    @OrganizationId() organizationId: string,
+    @Param("id") id: string,
+    @Body() dto: TimesheetMassApproveDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const role = requireOrgRole(user);
+    const departmentId = isDepartmentHeadRole(role)
+      ? await this.scope.resolveManagedDepartmentId(organizationId, user.userId)
+      : undefined;
+    return this.timesheet.massApprove(
+      organizationId,
+      id,
+      dto.employeeIds,
+      departmentId,
+    );
   }
 }

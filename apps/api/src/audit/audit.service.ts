@@ -7,8 +7,10 @@ import {
   computeAuditHash,
   type AuditHashPayload,
   verifyAuditHash,
+  verifyAuditHashLegacy,
 } from "./audit-hash";
 import { serializeForAudit } from "./audit-serialize";
+import { DataMaskingService } from "../privacy/data-masking.service";
 
 const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
@@ -39,6 +41,7 @@ export class AuditService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly dataMasking: DataMaskingService,
   ) {
     const explicit = this.config.get<string>("AUDIT_HASH_SECRET") ?? null;
     const jwtFallback = this.config.get<string>("JWT_SECRET") ?? null;
@@ -85,23 +88,12 @@ export class AuditService {
     return typeof ua === "string" ? ua : null;
   }
 
-  redactSecrets(body: unknown): unknown {
-    if (body == null || typeof body !== "object" || Array.isArray(body)) {
-      return body;
+  /** Сериализация + рекурсивное маскирование PII/секретов для `AuditLog`. */
+  private maskAuditSnapshot(value: unknown): unknown {
+    if (value === null || value === undefined) {
+      return value;
     }
-    const o = { ...(body as Record<string, unknown>) };
-    for (const k of [
-      "password",
-      "adminPassword",
-      "passwordHash",
-      "currentPassword",
-      "refresh_token",
-    ]) {
-      if (k in o) {
-        o[k] = "[REDACTED]";
-      }
-    }
-    return o;
+    return this.dataMasking.maskDeep(serializeForAudit(value));
   }
 
   sanitizeBody(req: RequestLike): unknown {
@@ -109,7 +101,10 @@ export class AuditService {
     if (ct.includes("multipart/form-data")) {
       return { _note: "multipart body omitted" };
     }
-    return this.redactSecrets(req.body);
+    if (req.body == null) {
+      return null;
+    }
+    return this.dataMasking.maskDeep(serializeForAudit(req.body));
   }
 
   async loadOldSnapshot(req: RequestLike): Promise<EntitySnapshot | null> {
@@ -200,7 +195,9 @@ export class AuditService {
         include: {
           journalEntries: {
             include: {
-              account: { select: { code: true, name: true } },
+              account: {
+                select: { code: true, nameAz: true, nameRu: true, nameEn: true },
+              },
             },
           },
         },
@@ -358,6 +355,11 @@ export class AuditService {
       newValues = serializeForAudit(responseBody);
     }
 
+    newValues = this.maskAuditSnapshot(newValues);
+    if (oldValues !== null && oldValues !== undefined) {
+      oldValues = this.maskAuditSnapshot(oldValues);
+    }
+
     const changes = {
       path: pathRaw,
       body: bodySnapshot,
@@ -378,8 +380,20 @@ export class AuditService {
       userAgent,
       createdAt,
     };
-
-    const hash = computeAuditHash(hashPayload, this.hashSecret);
+    const previous = orgId
+      ? await this.prisma.auditLog.findFirst({
+          where: { organizationId: orgId },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { hash: true },
+        })
+      : null;
+    const hash = computeAuditHash(
+      {
+        ...hashPayload,
+        prevHash: previous?.hash ?? null,
+      },
+      this.hashSecret,
+    );
 
     await this.prisma.auditLog.create({
       data: {
@@ -478,6 +492,92 @@ export class AuditService {
     };
   }
 
+  async verifyOrganizationChain(organizationId: string): Promise<{
+    total: number;
+    compromisedCount: number;
+    compromisedIds: string[];
+  }> {
+    const logs = await this.prisma.auditLog.findMany({
+      where: { organizationId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        organizationId: true,
+        userId: true,
+        entityType: true,
+        entityId: true,
+        action: true,
+        oldValues: true,
+        newValues: true,
+        changes: true,
+        clientIp: true,
+        userAgent: true,
+        hash: true,
+        createdAt: true,
+      },
+    });
+    const compromisedIds: string[] = [];
+    let prevHash: string | null = null;
+    for (const log of logs) {
+      if (!log.hash) {
+        compromisedIds.push(log.id);
+        continue;
+      }
+      const basePayload = {
+        organizationId: log.organizationId,
+        userId: log.userId,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        action: log.action,
+        oldValues: log.oldValues,
+        newValues: log.newValues,
+        changes: log.changes,
+        clientIp: log.clientIp,
+        userAgent: log.userAgent,
+        createdAt: log.createdAt,
+      };
+      const chainOk = verifyAuditHash(
+        { ...basePayload, prevHash },
+        this.hashSecret,
+        log.hash,
+      );
+      const legacyOk = verifyAuditHashLegacy(basePayload, this.hashSecret, log.hash);
+      if (!chainOk && !legacyOk) {
+        compromisedIds.push(log.id);
+      }
+      prevHash = log.hash;
+    }
+    return {
+      total: logs.length,
+      compromisedCount: compromisedIds.length,
+      compromisedIds,
+    };
+  }
+
+  async verifyChain(): Promise<{
+    organizationsScanned: number;
+    compromisedOrganizations: number;
+    compromisedIds: string[];
+  }> {
+    const organizations = await this.prisma.organization.findMany({
+      select: { id: true },
+    });
+    const compromisedIds: string[] = [];
+    let compromisedOrganizations = 0;
+    for (const org of organizations) {
+      const r = await this.verifyOrganizationChain(org.id);
+      if (r.compromisedCount > 0) {
+        compromisedOrganizations += 1;
+        compromisedIds.push(...r.compromisedIds);
+      }
+    }
+    return {
+      organizationsScanned: organizations.length,
+      compromisedOrganizations,
+      compromisedIds,
+    };
+  }
+
   /**
    * Global platform audit row (organizationId = null). Idempotent per payment order id.
    */
@@ -503,7 +603,30 @@ export class AuditService {
         entityType: "platform.billing.payment_applied",
         entityId: orderId,
         action: "webhook",
-        newValues: payload as object,
+        newValues: this.dataMasking.maskDeep(payload) as object,
+      },
+    });
+  }
+
+  async logOrganizationSystemEvent(params: {
+    organizationId: string | null;
+    entityType: string;
+    entityId: string;
+    action: string;
+    payload?: Record<string, unknown>;
+  }): Promise<void> {
+    const newValues =
+      params.payload != null
+        ? (this.dataMasking.maskDeep(params.payload) as object)
+        : undefined;
+    await this.prisma.auditLog.create({
+      data: {
+        organizationId: params.organizationId,
+        userId: null,
+        entityType: params.entityType,
+        entityId: params.entityId,
+        action: params.action,
+        newValues,
       },
     });
   }

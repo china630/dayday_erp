@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   DefaultValuePipe,
@@ -10,6 +11,7 @@ import {
   Post,
   Query,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -21,6 +23,10 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { OrganizationId } from "../common/org-id.decorator";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { UserRole } from "@dayday/database";
+import { SubscriptionTier } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { SystemConfigService } from "../system-config/system-config.service";
 import { CheckoutDto } from "./dto/checkout.dto";
@@ -30,10 +36,13 @@ import { PricingService } from "../admin/pricing.service";
 import { BillingPaymentOrdersService } from "./billing-payment-orders.service";
 import { BillingPlatformService } from "./billing-platform.service";
 import { BillingToggleService } from "./billing-toggle.service";
+import { BillingService } from "./billing.service";
 
 @ApiTags("billing")
 @ApiBearerAuth("bearer")
 @Controller("billing")
+@UseGuards(RolesGuard)
+@Roles(UserRole.OWNER)
 export class BillingController {
   constructor(
     private readonly payment: PaymentProviderService,
@@ -44,6 +53,7 @@ export class BillingController {
     private readonly paymentOrders: BillingPaymentOrdersService,
     private readonly billingPlatform: BillingPlatformService,
     private readonly billingToggle: BillingToggleService,
+    private readonly billingService: BillingService,
   ) {}
 
   @Get("summary")
@@ -111,6 +121,33 @@ export class BillingController {
     };
   }
 
+  @Get("module-states")
+  @ApiOperation({
+    summary:
+      "Состояния модулей организации для Marketplace UX (pending deactivation badge)",
+  })
+  async moduleStates(
+    @CurrentUser() user: AuthUser,
+    @OrganizationId() organizationId: string,
+  ) {
+    await this.access.assertOwnerForBilling(user.userId, organizationId);
+    const rows = await this.prisma.organizationModule.findMany({
+      where: { organizationId },
+      select: {
+        moduleKey: true,
+        activatedAt: true,
+        pendingDeactivation: true,
+      },
+    });
+    return {
+      items: rows.map((r) => ({
+        moduleKey: r.moduleKey,
+        activatedAt: r.activatedAt.toISOString(),
+        pendingDeactivation: r.pendingDeactivation,
+      })),
+    };
+  }
+
   @Get("payment-orders")
   @ApiOperation({
     summary:
@@ -129,10 +166,40 @@ export class BillingController {
     return { currency: "AZN", prices };
   }
 
+  @Get("upgrade-preview")
+  @ApiOperation({
+    summary:
+      "Preview pro-rata amount for tier upgrade (e.g. STARTER -> ENTERPRISE)",
+  })
+  async upgradePreview(
+    @OrganizationId() organizationId: string,
+    @Query("newTier") newTierRaw: string,
+  ) {
+    const v = String(newTierRaw ?? "").trim().toUpperCase();
+    if (
+      v !== SubscriptionTier.STARTER &&
+      v !== SubscriptionTier.BUSINESS &&
+      v !== SubscriptionTier.ENTERPRISE
+    ) {
+      throw new BadRequestException("Unsupported tier");
+    }
+    const calc = await this.billingService.calculateUpgradePrice(
+      organizationId,
+      v as SubscriptionTier,
+    );
+    return {
+      amountToPay: calc.amountAzn.toFixed(2),
+      daysRemaining: calc.daysRemaining,
+      daysInPeriod: calc.daysInPeriod,
+      currentTier: calc.currentTier,
+      newTier: calc.newTier,
+    };
+  }
+
   @Post("toggle-module")
   @ApiOperation({
     summary:
-      "Включить/выключить модуль по каталогу pricing_modules; при включении — Pro-rata до конца месяца (заказ с monthsApplied=0)",
+      "Включить/выключить модуль по каталогу pricing_modules; при включении — immediate post-paid activation (без мгновенной оплаты)",
   })
   async toggleModule(
     @CurrentUser() user: AuthUser,

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@dayday/database";
 import { randomUUID } from "node:crypto";
 import { serializeForAudit } from "../audit/audit-serialize";
 import { GlobalCompanyDirectoryService } from "../global-directory/global-company-directory.service";
@@ -13,7 +14,9 @@ import {
   STORAGE_SERVICE,
   type StorageService,
 } from "../storage/storage.interface";
+import { mergeLockedPeriodUntil } from "../reporting/reporting-period.util";
 import type { PatchOrganizationSettingsDto } from "./dto/patch-organization-settings.dto";
+import { InventoryValuationMethod } from "@dayday/database";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -52,6 +55,27 @@ export class OrganizationSettingsService {
       throw new NotFoundException("Organization not found");
     }
 
+    const valuation =
+      dto.inventoryValuation ?? dto.valuationMethod ?? undefined;
+    const baseSettings =
+      org.settings && typeof org.settings === "object" && !Array.isArray(org.settings)
+        ? (org.settings as Record<string, unknown>)
+        : {};
+    const nextSettings =
+      valuation !== undefined
+        ? ({
+            ...baseSettings,
+            inventory: {
+              ...(baseSettings.inventory &&
+              typeof baseSettings.inventory === "object" &&
+              !Array.isArray(baseSettings.inventory)
+                ? (baseSettings.inventory as Record<string, unknown>)
+                : {}),
+              inventoryValuation: valuation,
+            },
+          } as Prisma.InputJsonValue)
+        : undefined;
+
     await this.prisma.$transaction(async (tx) => {
       await tx.organization.update({
         where: { id: organizationId },
@@ -65,8 +89,17 @@ export class OrganizationSettingsService {
             directorName: dto.directorName?.trim() || null,
           }),
           ...(dto.logoUrl !== undefined && { logoUrl: dto.logoUrl?.trim() || null }),
-          ...(dto.valuationMethod !== undefined && {
-            valuationMethod: dto.valuationMethod,
+          ...(valuation !== undefined && {
+            valuationMethod: valuation as InventoryValuationMethod,
+          }),
+          ...(nextSettings !== undefined && {
+            settings: nextSettings,
+          }),
+          ...(dto.lockedPeriodUntil !== undefined && {
+            settings: mergeLockedPeriodUntil(
+              nextSettings ?? org.settings,
+              dto.lockedPeriodUntil ? dto.lockedPeriodUntil.trim() : null,
+            ) as Prisma.InputJsonValue,
           }),
         },
       });
@@ -98,6 +131,27 @@ export class OrganizationSettingsService {
       phone: fresh.phone,
       directorName: fresh.directorName,
     });
+    return serializeForAudit(fresh);
+  }
+
+  async patchPeriodLock(organizationId: string, lockedPeriodUntil: string | null) {
+    const org = await this.prisma.organization.findFirst({
+      where: { id: organizationId, isDeleted: false },
+      select: { id: true, settings: true },
+    });
+    if (!org) {
+      throw new NotFoundException("Organization not found");
+    }
+    await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        settings: mergeLockedPeriodUntil(
+          org.settings,
+          lockedPeriodUntil ? lockedPeriodUntil.trim() : null,
+        ) as Prisma.InputJsonValue,
+      },
+    });
+    const fresh = await this.getSettingsRaw(organizationId);
     return serializeForAudit(fresh);
   }
 

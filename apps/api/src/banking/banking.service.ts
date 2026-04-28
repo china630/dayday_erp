@@ -5,6 +5,7 @@ import {
   BankStatementLineType,
   Decimal,
   LedgerType,
+  pickAccountDisplayName,
   type Prisma,
   type UserRole,
 } from "@dayday/database";
@@ -97,7 +98,7 @@ export class BankingService {
 
     const date = stmtDate ?? new Date();
 
-    return this.prisma.$transaction(async (tx) => {
+    const { out, createdLines } = await this.prisma.$transaction(async (tx) => {
       const stmt = await tx.bankStatement.create({
         data: {
           organizationId,
@@ -109,8 +110,9 @@ export class BankingService {
         },
       });
 
+      const createdLines: Array<{ id: string }> = [];
       for (const r of rows) {
-        await tx.bankStatementLine.create({
+        const line = await tx.bankStatementLine.create({
           data: {
             organizationId,
             bankStatementId: stmt.id,
@@ -123,13 +125,19 @@ export class BankingService {
             rawRow: r.raw as Prisma.InputJsonValue,
           },
         });
+        createdLines.push({ id: line.id });
       }
 
-      return tx.bankStatement.findUniqueOrThrow({
+      const out = await tx.bankStatement.findUniqueOrThrow({
         where: { id: stmt.id },
         include: { _count: { select: { lines: true } } },
       });
+      return { out, createdLines };
     });
+    for (const line of createdLines) {
+      await this.autoMatchOutgoingForLine(organizationId, line.id);
+    }
+    return out;
   }
 
   /**
@@ -147,7 +155,13 @@ export class BankingService {
 
     const accounts = await this.prisma.account.findMany({
       where: { organizationId, ledgerType },
-      select: { code: true, name: true, currency: true },
+      select: {
+        code: true,
+        nameAz: true,
+        nameRu: true,
+        nameEn: true,
+        currency: true,
+      },
     });
     const byCode = new Map(accounts.map((a) => [a.code, a]));
 
@@ -170,7 +184,9 @@ export class BankingService {
       accountsOut.push({
         segment: seg,
         accountCode: row.accountCode,
-        displayName: acc?.name ?? row.accountCode,
+        displayName: acc
+          ? pickAccountDisplayName(acc, "az")
+          : row.accountCode,
         maskedNumber: maskAccountCode(row.accountCode),
         balances: [{ currency: cur, amount: net.toFixed(2) }],
       });
@@ -289,6 +305,22 @@ export class BankingService {
       throw new BadRequestException("Invalid date (expected YYYY-MM-DD)");
     }
     const desc = dto.description?.trim() || "Manual bank entry";
+
+    // Capital contribution policy:
+    // - Bank contribution goes through manualBankEntry as Dr 221* / Cr 301.
+    // - Cash contribution goes through KMO in CashOrderService as Dr 101* / Cr 301.
+    if (offset === "301") {
+      if (dto.type !== BankStatementLineType.INFLOW) {
+        throw new BadRequestException(
+          "Capital contribution to equity (301) must be INFLOW for bank entry (Dr 221* / Cr 301)",
+        );
+      }
+      if (!(bank === "221" || bank.startsWith("221."))) {
+        throw new BadRequestException(
+          "Capital contribution to equity (301) must use settlement bank account 221*",
+        );
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const lines =
@@ -410,5 +442,73 @@ export class BankingService {
         },
       },
     });
+  }
+
+  listPaymentDrafts(organizationId: string) {
+    return (this.prisma as any).bankPaymentDraft.findMany({
+      where: { organizationId },
+      orderBy: [{ createdAt: "desc" }],
+    });
+  }
+
+  private async autoMatchOutgoingForLine(
+    organizationId: string,
+    lineId: string,
+  ): Promise<void> {
+    const line = await this.prisma.bankStatementLine.findFirst({
+      where: { id: lineId, organizationId },
+      select: { id: true, isMatched: true, type: true, amount: true },
+    });
+    if (!line || line.isMatched || line.type !== BankStatementLineType.OUTFLOW) {
+      return;
+    }
+    const amount = new Decimal(line.amount);
+
+    const sentDrafts = await (this.prisma as any).bankPaymentDraft.findMany({
+      where: { organizationId, status: "SENT" },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+    });
+    const draftMatch = sentDrafts.filter((d: { amount: unknown }) =>
+      new Decimal(d.amount).equals(amount),
+    );
+    if (draftMatch.length === 1) {
+      await this.prisma.$transaction(async (tx) => {
+        await (tx as any).bankPaymentDraft.update({
+          where: { id: draftMatch[0].id },
+          data: { status: "COMPLETED", completedAt: new Date() },
+        });
+        await tx.bankStatementLine.update({
+          where: { id: line.id },
+          data: { isMatched: true },
+        });
+      });
+      return;
+    }
+
+    const sentRegistries = await (this.prisma as any).salaryRegistry.findMany({
+      where: { organizationId, status: "SENT" },
+      include: { payrollRun: { include: { slips: { select: { net: true } } } } },
+      take: 100,
+    });
+    const salaryMatch = sentRegistries.filter((r: { payrollRun?: { slips?: Array<{ net: unknown }> } }) => {
+      const total = (r.payrollRun?.slips ?? []).reduce(
+        (sum, s) => sum.add(new Decimal(s.net)),
+        new Decimal(0),
+      );
+      return total.equals(amount);
+    });
+    if (salaryMatch.length === 1) {
+      await this.prisma.$transaction(async (tx) => {
+        await (tx as any).salaryRegistry.update({
+          where: { id: salaryMatch[0].id },
+          data: { status: "PAID" },
+        });
+        await tx.bankStatementLine.update({
+          where: { id: line.id },
+          data: { isMatched: true },
+        });
+      });
+    }
   }
 }

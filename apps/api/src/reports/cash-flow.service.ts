@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import {
   BankStatementLineOrigin,
   CashOrderStatus,
+  LedgerType,
   Prisma,
   type BankStatementLineType,
 } from "@dayday/database";
@@ -55,10 +56,12 @@ export class CashFlowService {
       dateTo: string;
       cashDeskId?: string;
       bankName?: string;
+      ledgerType?: LedgerType;
     },
   ): Promise<{
     dateFrom: string;
     dateTo: string;
+    ledgerType: LedgerType;
     source: {
       cashDeskId: string | null;
       bankName: string | null;
@@ -86,6 +89,7 @@ export class CashFlowService {
     const dateTo = params.dateTo.slice(0, 10);
     const cashDeskId = params.cashDeskId?.trim() || null;
     const bankName = params.bankName?.trim() || null;
+    const ledgerType = params.ledgerType ?? LedgerType.NAS;
 
     const df = new Date(`${dateFrom}T00:00:00.000Z`);
     const dt = new Date(`${dateTo}T23:59:59.999Z`);
@@ -121,6 +125,15 @@ export class CashFlowService {
       date: { gte: df, lte: dt },
       cashFlowItemId: { not: null },
       ...(cashDeskId ? { cashDeskId } : {}),
+      ...(ledgerType
+        ? {
+            postedTransaction: {
+              journalEntries: {
+                some: { organizationId, ledgerType },
+              },
+            },
+          }
+        : {}),
     };
 
     const cacheKey = [
@@ -129,11 +142,14 @@ export class CashFlowService {
       dateRangeKey(dateFrom, dateTo),
       cashDeskId ?? "-",
       bankName ?? "-",
+      ledgerType,
     ].join(":");
 
     const [countCashOrders, countBankLines] = await Promise.all([
       this.prisma.cashOrder.count({ where: cashOrderWhere }),
-      this.prisma.bankStatementLine.count({ where: bankLineWhere }),
+      ledgerType === LedgerType.IFRS
+        ? Promise.resolve(0)
+        : this.prisma.bankStatementLine.count({ where: bankLineWhere }),
     ]);
 
     const sourceCount = countCashOrders + countBankLines;
@@ -141,6 +157,7 @@ export class CashFlowService {
       const cached = await this.cache.getJson<{
         dateFrom: string;
         dateTo: string;
+        ledgerType: LedgerType;
         source: { cashDeskId: string | null; bankName: string | null };
         sections: Array<{
           section: CashFlowSection;
@@ -172,14 +189,16 @@ export class CashFlowService {
           cashFlowItem: { select: { id: true, code: true, name: true } },
         },
       }),
-      this.prisma.bankStatementLine.findMany({
-        where: bankLineWhere,
-        select: {
-          amount: true,
-          type: true,
-          cashFlowItem: { select: { id: true, code: true, name: true } },
-        },
-      }),
+      ledgerType === LedgerType.IFRS
+        ? Promise.resolve([])
+        : this.prisma.bankStatementLine.findMany({
+            where: bankLineWhere,
+            select: {
+              amount: true,
+              type: true,
+              cashFlowItem: { select: { id: true, code: true, name: true } },
+            },
+          }),
     ]);
 
     type Agg = {
@@ -275,11 +294,14 @@ export class CashFlowService {
     const totalNet = totalIn.sub(totalOut);
 
     const methodologyNote =
-      "Касса: проведённые ордера KMO/KXO со статьёй ДДС. Банк: строки выписки с origin FILE_IMPORT или MANUAL_BANK_ENTRY и статьёй ДДС; дата периода — valueDate, иначе дата выписки. Прочие origin (DIRECT_SYNC, WEBHOOK и т.д.) в отчёт не входят.";
+      ledgerType === LedgerType.IFRS
+        ? "IFRS-книга: учитываются только кассовые операции с проводками ledgerType=IFRS (по связанным posted transaction). Строки банковской выписки без проводок ГК в IFRS-режиме не включаются."
+        : "NAS-книга: касса — проведённые ордера KMO/KXO со статьёй ДДС. Банк — строки выписки с origin FILE_IMPORT или MANUAL_BANK_ENTRY и статьёй ДДС; дата периода — valueDate, иначе дата выписки. Прочие origin (DIRECT_SYNC, WEBHOOK и т.д.) в отчёт не входят.";
 
     const result = {
       dateFrom,
       dateTo,
+      ledgerType,
       source: { cashDeskId, bankName },
       sections,
       total: {
@@ -306,6 +328,7 @@ export class CashFlowService {
       dateTo: string;
       cashDeskId?: string;
       bankName?: string;
+      ledgerType?: LedgerType;
     },
   ) {
     return this.getDirectCashFlow(organizationId, params);

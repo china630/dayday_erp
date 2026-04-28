@@ -37,7 +37,7 @@ export class OrganizationSettingsController {
   ) {}
 
   @Get("settings")
-  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: "Organization profile + bank accounts" })
   getSettings(@OrganizationId() organizationId: string) {
     return this.settings.getSettings(organizationId);
@@ -51,6 +51,19 @@ export class OrganizationSettingsController {
     @Body() dto: PatchOrganizationSettingsDto,
   ) {
     return this.settings.patchSettings(organizationId, dto);
+  }
+
+  @Patch("settings/period-lock")
+  @Roles(UserRole.OWNER, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Set ledger period lock date (lockedPeriodUntil)" })
+  patchPeriodLock(
+    @OrganizationId() organizationId: string,
+    @Body() dto: PatchOrganizationSettingsDto,
+  ) {
+    return this.settings.patchPeriodLock(
+      organizationId,
+      dto.lockedPeriodUntil ? dto.lockedPeriodUntil : null,
+    );
   }
 
   @Post("settings/logo")

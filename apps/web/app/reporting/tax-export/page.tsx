@@ -1,43 +1,35 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiBaseUrl, apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { ModulePageLinks } from "../../../components/module-page-links";
 import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
 
-type VatValidationIssue = {
-  code: string;
-  message: string;
-  context?: Record<string, string>;
+type ExportStatus = "GENERATED" | "UPLOADED" | "CONFIRMED_BY_TAX";
+
+type TaxDeclarationExport = {
+  id: string;
+  taxType: string;
+  period: string;
+  generatedFileUrl: string;
+  receiptFileUrl: string | null;
+  status: ExportStatus;
+  createdAt: string;
 };
 
-type EtaxesPreview = {
-  package: unknown;
-  validation: {
-    errors: VatValidationIssue[];
-    readyToSubmit: boolean;
-  };
-};
-
-function parseApiErrorBody(data: Record<string, unknown>): string {
-  const m = data.message;
+function parseApiErrorBody(data: unknown): string {
+  if (!data || typeof data !== "object") return "Error";
+  const payload = data as Record<string, unknown>;
+  const m = payload.message;
   if (typeof m === "string") return m;
-  if (m && typeof m === "object" && !Array.isArray(m)) {
-    const o = m as Record<string, unknown>;
-    if (typeof o.message === "string") return o.message;
-    if (Array.isArray(o.errors)) {
-      return (o.errors as VatValidationIssue[])
-        .map((e) => e.message)
-        .join("; ");
-    }
-  }
   if (Array.isArray(m)) return m.join("; ");
-  if (typeof data.code === "string" && typeof data.message === "string")
-    return `${data.code}: ${data.message}`;
+  if (typeof payload.code === "string" && typeof payload.message === "string") {
+    return `${payload.code}: ${payload.message}`;
+  }
   try {
-    return JSON.stringify(data).slice(0, 400);
+    return JSON.stringify(payload).slice(0, 400);
   } catch {
     return "Error";
   }
@@ -46,115 +38,137 @@ function parseApiErrorBody(data: Record<string, unknown>): string {
 export default function TaxExportPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [quarter, setQuarter] = useState(
-    Math.floor(new Date().getMonth() / 3) + 1,
-  );
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [taxType, setTaxType] = useState("SIMPLIFIED_TAX");
+  const [items, setItems] = useState<TaxDeclarationExport[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [receiptFiles, setReceiptFiles] = useState<Record<string, File | null>>({});
 
-  const [etaxesOpen, setEtaxesOpen] = useState(false);
-  const [preview, setPreview] = useState<EtaxesPreview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewErr, setPreviewErr] = useState<string | null>(null);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [submitMsg, setSubmitMsg] = useState<string | null>(null);
-  const [submitErr, setSubmitErr] = useState<string | null>(null);
-
-  const download = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
+    setLoadingList(true);
     setErr(null);
-    const path = `/api/reporting/vat-appendix-xlsx?year=${year}&quarter=${quarter}`;
-    const url = path.startsWith("http") ? path : `${apiBaseUrl()}${path}`;
-    const headers = new Headers();
-    headers.set("Authorization", `Bearer ${token}`);
     try {
-      const res = await fetch(url, { credentials: "include", headers });
-      if (res.status === 401) {
-        sessionStorage.clear();
-        window.location.replace("/login");
-        return;
-      }
+      const res = await apiFetch("/api/reporting/tax-declarations");
+      const data = (await res.json()) as unknown;
       if (!res.ok) {
-        setErr(`${t("reporting.taxExportErr")}: ${res.status}`);
-        setLoading(false);
+        setErr(parseApiErrorBody(data));
+        setLoadingList(false);
         return;
       }
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition");
-      let name = `edv-${year}-Q${quarter}.xlsx`;
-      const m = cd?.match(/filename="([^"]+)"/);
-      if (m?.[1]) name = m[1];
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      setItems(Array.isArray(data) ? (data as TaxDeclarationExport[]) : []);
     } catch {
       setErr(t("reporting.taxExportErr"));
     }
-    setLoading(false);
-  }, [token, year, quarter, t]);
+    setLoadingList(false);
+  }, [token, t]);
 
-  const openEtaxesModal = useCallback(async () => {
-    setEtaxesOpen(true);
-    setPreview(null);
-    setPreviewErr(null);
-    setSubmitMsg(null);
-    setSubmitErr(null);
-    setPreviewLoading(true);
-    try {
-      const path = `/api/reporting/etaxes-vat-declaration?year=${year}&quarter=${quarter}`;
-      const res = await apiFetch(path);
-      const data = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) {
-        setPreviewErr(parseApiErrorBody(data));
-        setPreviewLoading(false);
-        return;
-      }
-      setPreview(data as unknown as EtaxesPreview);
-    } catch {
-      setPreviewErr(t("reporting.taxExportEtaxesLoadErr"));
-    }
-    setPreviewLoading(false);
-  }, [year, quarter, t]);
+  useEffect(() => {
+    if (!token) return;
+    void load();
+  }, [token, load]);
 
-  const submitEtaxes = useCallback(async () => {
-    setSubmitLoading(true);
-    setSubmitMsg(null);
-    setSubmitErr(null);
+  const generate = useCallback(async () => {
+    setGenerating(true);
+    setErr(null);
     try {
-      const path = `/api/reporting/etaxes-vat-declaration/submit?year=${year}&quarter=${quarter}`;
-      const res = await apiFetch(path, { method: "POST" });
-      const data = (await res.json()) as Record<string, unknown>;
-      if (res.status === 400) {
-        setSubmitErr(
-          parseApiErrorBody(data) || t("reporting.taxExportEtaxesErrValidation"),
-        );
-        setSubmitLoading(false);
-        return;
-      }
-      if (res.status === 503 || res.status === 502) {
-        setSubmitErr(
-          parseApiErrorBody(data) || t("reporting.taxExportEtaxesErrGateway"),
-        );
-        setSubmitLoading(false);
-        return;
-      }
+      const res = await apiFetch("/api/reporting/tax-declarations/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taxType, period }),
+      });
+      const data = (await res.json()) as unknown;
       if (!res.ok) {
-        setSubmitErr(parseApiErrorBody(data));
-        setSubmitLoading(false);
+        setErr(parseApiErrorBody(data));
+        setGenerating(false);
         return;
       }
-      const st =
-        typeof data.gatewayStatus === "number" ? data.gatewayStatus : res.status;
-      setSubmitMsg(t("reporting.taxExportEtaxesSuccess", { status: String(st) }));
+      await load();
     } catch {
-      setSubmitErr(t("reporting.taxExportErr"));
+      setErr(t("reporting.taxExportErr"));
     }
-    setSubmitLoading(false);
-  }, [year, quarter, t]);
+    setGenerating(false);
+  }, [taxType, period, load, t]);
+
+  const statusLabel = useMemo(
+    () => ({
+      GENERATED: "GENERATED",
+      UPLOADED: "UPLOADED",
+      CONFIRMED_BY_TAX: "CONFIRMED_BY_TAX",
+    }),
+    [],
+  );
+
+  const downloadDeclaration = useCallback(
+    async (id: string, periodValue: string) => {
+      if (!token) return;
+      setBusyId(id);
+      setErr(null);
+      const path = `/api/reporting/tax-declarations/${id}/download`;
+      const url = `${apiBaseUrl()}${path}`;
+      const headers = new Headers();
+      headers.set("Authorization", `Bearer ${token}`);
+      try {
+        const res = await fetch(url, { credentials: "include", headers });
+        if (!res.ok) {
+          let message = `${t("reporting.taxExportErr")}: ${res.status}`;
+          try {
+            const data = (await res.json()) as unknown;
+            message = parseApiErrorBody(data);
+          } catch {}
+          setErr(message);
+          setBusyId(null);
+          return;
+        }
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `SIMPLIFIED_TAX-${periodValue}.xml`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        await load();
+      } catch {
+        setErr(t("reporting.taxExportErr"));
+      }
+      setBusyId(null);
+    },
+    [token, t, load],
+  );
+
+  const uploadReceipt = useCallback(
+    async (id: string) => {
+      const file = receiptFiles[id];
+      if (!file) {
+        setErr("PDF file is required");
+        return;
+      }
+      setBusyId(id);
+      setErr(null);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await apiFetch(`/api/reporting/tax-declarations/${id}/receipt`, {
+          method: "POST",
+          body: form,
+        });
+        const data = (await res.json()) as unknown;
+        if (!res.ok) {
+          setErr(parseApiErrorBody(data));
+          setBusyId(null);
+          return;
+        }
+        setReceiptFiles((prev) => ({ ...prev, [id]: null }));
+        await load();
+      } catch {
+        setErr(t("reporting.taxExportErr"));
+      }
+      setBusyId(null);
+    },
+    [receiptFiles, load, t],
+  );
 
   if (!ready) {
     return (
@@ -165,12 +179,8 @@ export default function TaxExportPage() {
   }
   if (!token) return null;
 
-  const pkg = preview?.package as
-    | { appendixSales?: unknown[]; appendixPurchases?: unknown[] }
-    | undefined;
-
   return (
-    <div className="space-y-8 max-w-xl">
+    <div className="space-y-8 max-w-5xl">
       <ModulePageLinks
         items={[
           { href: "/", labelKey: "nav.home" },
@@ -191,149 +201,116 @@ export default function TaxExportPage() {
       <section className="bg-white p-6 shadow-sm rounded-xl border border-slate-100 space-y-4">
         <div className="flex flex-wrap gap-4 items-end">
           <label className="block text-sm font-medium text-gray-700">
-            {t("reporting.taxExportYear")}
+            {t("reporting.taxExportPeriod")}
             <input
-              type="number"
-              className="block w-28 mt-1 rounded-md border border-slate-200 px-2 py-1.5"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              type="month"
+              className="block w-40 mt-1 rounded-md border border-slate-200 px-2 py-1.5"
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
             />
           </label>
           <label className="block text-sm font-medium text-gray-700">
-            {t("reporting.taxExportQuarter")}
+            {t("reporting.taxExportType")}
             <select
-              className="block w-24 mt-1 rounded-md border border-slate-200 px-2 py-1.5"
-              value={quarter}
-              onChange={(e) => setQuarter(Number(e.target.value))}
+              className="block w-56 mt-1 rounded-md border border-slate-200 px-2 py-1.5"
+              value={taxType}
+              onChange={(e) => setTaxType(e.target.value)}
             >
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
+              <option value="SIMPLIFIED_TAX">Sadələşdirilmiş vergi / Simplified Tax</option>
             </select>
           </label>
           <button
             type="button"
-            disabled={loading}
-            onClick={() => void download()}
+            disabled={generating}
+            onClick={() => void generate()}
             className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}
           >
-            {loading ? "…" : t("reporting.taxExportDownload")}
+            {generating ? "…" : t("reporting.taxExportGenerate")}
           </button>
-          <button
-            type="button"
-            disabled={previewLoading}
-            onClick={() => void openEtaxesModal()}
-            className={[
-              SECONDARY_BUTTON_CLASS,
-              "border-2 border-emerald-700 text-emerald-900 hover:bg-emerald-50",
-              "focus:ring-emerald-700/30",
-              "disabled:opacity-50",
-            ].join(" ")}
-          >
-            {previewLoading ? "…" : t("reporting.taxExportEtaxesBtn")}
+          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => void load()}>
+            {loadingList ? "…" : t("common.refresh")}
           </button>
         </div>
       </section>
 
-      {etaxesOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="etaxes-modal-title"
-          onClick={() => setEtaxesOpen(false)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-slate-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-slate-100 flex justify-between items-start gap-4">
-              <h2 id="etaxes-modal-title" className="text-lg font-semibold text-gray-900">
-                {t("reporting.taxExportEtaxesModalTitle")}
-              </h2>
-              <button
-                type="button"
-                className="text-slate-500 hover:text-slate-800 text-sm"
-                onClick={() => setEtaxesOpen(false)}
-              >
-                {t("reporting.taxExportEtaxesClose")}
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto flex-1 space-y-4 text-sm">
-              {previewLoading && (
-                <p className="text-slate-600">{t("common.loading")}</p>
-              )}
-              {previewErr && (
-                <p className="text-red-600">{previewErr}</p>
-              )}
-              {preview && !previewLoading && (
-                <>
-                  <p className="text-slate-700">
-                    {t("reporting.taxExportEtaxesSummary", {
-                      sales: String(pkg?.appendixSales?.length ?? 0),
-                      purchases: String(pkg?.appendixPurchases?.length ?? 0),
-                      ready: preview.validation.readyToSubmit
-                        ? t("reporting.taxExportEtaxesReadyYes")
-                        : t("reporting.taxExportEtaxesReadyNo"),
-                    })}
-                  </p>
-                  {preview.validation.errors.length > 0 && (
-                    <div>
-                      <p className="font-medium text-gray-900 mb-2">
-                        {t("reporting.taxExportEtaxesValidationTitle")}
-                      </p>
-                      <ul className="list-disc pl-5 space-y-1 text-red-700">
-                        {preview.validation.errors.map((e, i) => (
-                          <li key={`${e.code}-${i}`}>{e.message}</li>
-                        ))}
-                      </ul>
+      <section className="bg-white p-6 shadow-sm rounded-xl border border-slate-100">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          {t("reporting.taxExportWorkflowTitle")}
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-600 border-b border-slate-200">
+                <th className="py-2 pr-4">{t("reporting.taxExportPeriod")}</th>
+                <th className="py-2 pr-4">{t("reporting.taxExportType")}</th>
+                <th className="py-2 pr-4">{t("reporting.taxExportStatus")}</th>
+                <th className="py-2 pr-4">{t("reporting.taxExportActions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-b border-slate-100 align-top">
+                  <td className="py-3 pr-4">{item.period}</td>
+                  <td className="py-3 pr-4">{item.taxType}</td>
+                  <td className="py-3 pr-4">{statusLabel[item.status]}</td>
+                  <td className="py-3 pr-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className={PRIMARY_BUTTON_CLASS}
+                        disabled={busyId === item.id}
+                        onClick={() => void downloadDeclaration(item.id, item.period)}
+                      >
+                        {busyId === item.id ? "…" : t("reporting.taxExportDownload")}
+                      </button>
+                      {item.status !== "CONFIRMED_BY_TAX" && (
+                        <>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) =>
+                              setReceiptFiles((prev) => ({
+                                ...prev,
+                                [item.id]: e.target.files?.[0] ?? null,
+                              }))
+                            }
+                            className="max-w-[220px]"
+                          />
+                          <button
+                            type="button"
+                            className={SECONDARY_BUTTON_CLASS}
+                            disabled={busyId === item.id}
+                            onClick={() => void uploadReceipt(item.id)}
+                          >
+                            {t("reporting.taxExportAttachReceipt")}
+                          </button>
+                        </>
+                      )}
                     </div>
-                  )}
-                  <div>
-                    <p className="font-medium text-gray-900 mb-2">
-                      {t("reporting.taxExportEtaxesPayloadTitle")}
-                    </p>
-                    <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto max-h-64 overflow-y-auto">
-                      {JSON.stringify(preview.package, null, 2)}
-                    </pre>
-                  </div>
-                  {submitMsg && (
-                    <p className="text-emerald-700 font-medium">{submitMsg}</p>
-                  )}
-                  {submitErr && (
-                    <p className="text-red-600">{submitErr}</p>
-                  )}
-                </>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && !loadingList && (
+                <tr>
+                  <td className="py-3 text-slate-500" colSpan={4}>
+                    {t("reporting.taxExportEmpty")}
+                  </td>
+                </tr>
               )}
-            </div>
-            <div className="p-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end">
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => setEtaxesOpen(false)}
-              >
-                {t("reporting.taxExportEtaxesClose")}
-              </button>
-              <button
-                type="button"
-                disabled={
-                  submitLoading ||
-                  previewLoading ||
-                  !preview?.validation.readyToSubmit
-                }
-                onClick={() => void submitEtaxes()}
-                className={[
-                  "px-4 py-2 rounded-[2px] text-sm font-semibold border-2 border-emerald-700 bg-white text-emerald-900",
-                  "hover:bg-emerald-50 disabled:opacity-50 shadow-sm",
-                ].join(" ")}
-              >
-                {submitLoading ? "…" : t("reporting.taxExportEtaxesSubmit")}
-              </button>
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
-      )}
+      </section>
+      <section className="bg-white p-6 shadow-sm rounded-xl border border-slate-100">
+        <h3 className="text-base font-semibold text-gray-900 mb-2">
+          {t("reporting.taxExportWorkflowHintTitle")}
+        </h3>
+        <ol className="list-decimal pl-5 space-y-1 text-sm text-slate-700">
+          <li>{t("reporting.taxExportStepGenerate")}</li>
+          <li>{t("reporting.taxExportStepDownload")}</li>
+          <li>{t("reporting.taxExportStepReceipt")}</li>
+        </ol>
+      </section>
     </div>
   );
 }

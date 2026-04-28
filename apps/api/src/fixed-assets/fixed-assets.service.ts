@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -7,12 +8,16 @@ import { Prisma } from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateFixedAssetDto } from "./dto/create-fixed-asset.dto";
 import { UpdateFixedAssetDto } from "./dto/update-fixed-asset.dto";
+import { DepreciationService } from "./depreciation.service";
 
 const Decimal = Prisma.Decimal;
 
 @Injectable()
 export class FixedAssetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly depreciation: DepreciationService,
+  ) {}
 
   list(organizationId: string) {
     return this.prisma.fixedAsset.findMany({
@@ -30,10 +35,18 @@ export class FixedAssetsService {
   }
 
   async create(organizationId: string, dto: CreateFixedAssetDto) {
+    const purchaseDateRaw = dto.purchaseDate ?? dto.commissioningDate;
+    const purchasePriceRaw = dto.purchasePrice ?? dto.initialCost;
+    if (!purchaseDateRaw) {
+      throw new BadRequestException("purchaseDate is required");
+    }
+    if (purchasePriceRaw == null) {
+      throw new BadRequestException("purchasePrice is required");
+    }
     const salvage = new Decimal(dto.salvageValue ?? 0);
-    const initial = new Decimal(dto.initialCost);
+    const initial = new Decimal(purchasePriceRaw);
     if (salvage.gte(initial)) {
-      throw new ConflictException("salvageValue must be less than initialCost");
+      throw new ConflictException("salvageValue must be less than purchasePrice");
     }
     try {
       return await this.prisma.fixedAsset.create({
@@ -41,10 +54,11 @@ export class FixedAssetsService {
           organizationId,
           name: dto.name.trim(),
           inventoryNumber: dto.inventoryNumber.trim(),
-          commissioningDate: new Date(dto.commissioningDate),
-          initialCost: initial,
+          purchaseDate: new Date(purchaseDateRaw),
+          purchasePrice: initial,
           usefulLifeMonths: dto.usefulLifeMonths,
           salvageValue: salvage,
+          status: dto.status,
         },
       });
     } catch (e) {
@@ -60,12 +74,15 @@ export class FixedAssetsService {
     const data: Record<string, unknown> = {};
     if (dto.name != null) data.name = dto.name.trim();
     if (dto.inventoryNumber != null) data.inventoryNumber = dto.inventoryNumber.trim();
-    if (dto.commissioningDate != null) {
-      data.commissioningDate = new Date(dto.commissioningDate);
+    const purchaseDateRaw = dto.purchaseDate ?? dto.commissioningDate;
+    if (purchaseDateRaw != null) {
+      data.purchaseDate = new Date(purchaseDateRaw);
     }
-    if (dto.initialCost != null) data.initialCost = new Decimal(dto.initialCost);
+    const purchasePriceRaw = dto.purchasePrice ?? dto.initialCost;
+    if (purchasePriceRaw != null) data.purchasePrice = new Decimal(purchasePriceRaw);
     if (dto.usefulLifeMonths != null) data.usefulLifeMonths = dto.usefulLifeMonths;
     if (dto.salvageValue != null) data.salvageValue = new Decimal(dto.salvageValue);
+    if (dto.status != null) data.status = dto.status;
     try {
       return await this.prisma.fixedAsset.update({
         where: { id },
@@ -89,5 +106,25 @@ export class FixedAssetsService {
       }
       throw e;
     }
+  }
+
+  async runMonthlyDepreciation(
+    organizationId: string,
+    period: { year: number; month: number },
+  ) {
+    if (period.year < 1900 || period.year > 2100) {
+      throw new ConflictException("year must be in range 1900-2100");
+    }
+    if (period.month < 1 || period.month > 12) {
+      throw new ConflictException("month must be in range 1-12");
+    }
+    return this.prisma.$transaction((tx) =>
+      this.depreciation.runMonthlyDepreciation(
+        tx,
+        organizationId,
+        period.year,
+        period.month,
+      ),
+    );
   }
 }

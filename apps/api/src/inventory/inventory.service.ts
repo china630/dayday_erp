@@ -4,12 +4,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  InventoryAdjustmentDocType,
+  InventoryAdjustmentStatus,
   Prisma,
   StockMovementReason,
   StockMovementType,
   UserRole,
 } from "@dayday/database";
 import { assertMayPostManualJournal } from "../auth/policies/invoice-finance.policy";
+import { AccessControlService } from "../access/access-control.service";
+import { getClosedPeriodKeys, monthKeyUtc } from "../reporting/reporting-period.util";
 import { randomUUID } from "node:crypto";
 import { AccountingService } from "../accounting/accounting.service";
 import {
@@ -31,7 +35,9 @@ import {
 } from "./inventory-settings";
 import type { PatchInventorySettingsDto } from "./dto/patch-inventory-settings.dto";
 import type { AdjustStockDto } from "./dto/adjust-stock.dto";
+import type { CreateInventoryAdjustmentDto } from "./dto/create-inventory-adjustment.dto";
 import type { CreateWarehouseDto } from "./dto/create-warehouse.dto";
+import type { CreateWarehouseBinDto } from "./dto/create-warehouse-bin.dto";
 
 type Decimal = Prisma.Decimal;
 const Decimal = Prisma.Decimal;
@@ -42,6 +48,7 @@ export class InventoryService {
     private readonly prisma: PrismaService,
     private readonly accounting: AccountingService,
     private readonly stock: StockService,
+    private readonly access: AccessControlService,
   ) {}
 
   async getInventorySettings(organizationId: string): Promise<
@@ -166,13 +173,40 @@ export class InventoryService {
     });
   }
 
+  listBins(organizationId: string, warehouseId?: string) {
+    return this.prisma.warehouseBin.findMany({
+      where: {
+        organizationId,
+        ...(warehouseId ? { warehouseId } : {}),
+      },
+      include: { warehouse: { select: { id: true, name: true } } },
+      orderBy: [{ warehouseId: "asc" }, { code: "asc" }],
+    });
+  }
+
+  async createBin(organizationId: string, dto: CreateWarehouseBinDto) {
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: dto.warehouseId, organizationId },
+      select: { id: true },
+    });
+    if (!warehouse) throw new NotFoundException("Warehouse not found");
+    return this.prisma.warehouseBin.create({
+      data: {
+        organizationId,
+        warehouseId: dto.warehouseId,
+        code: dto.code.trim(),
+        barcode: dto.barcode?.trim() || null,
+      },
+    });
+  }
+
   async listStock(organizationId: string, warehouseId?: string) {
     return this.prisma.stockItem.findMany({
       where: {
         organizationId,
         ...(warehouseId ? { warehouseId } : {}),
       },
-      include: { product: true, warehouse: true },
+      include: { product: true, warehouse: true, bin: true },
       orderBy: [{ warehouseId: "asc" }, { product: { name: "asc" } }],
     });
   }
@@ -187,7 +221,12 @@ export class InventoryService {
         ...(filters?.warehouseId ? { warehouseId: filters.warehouseId } : {}),
         ...(filters?.productId ? { productId: filters.productId } : {}),
       },
-      include: { product: true, warehouse: true, invoice: { select: { number: true, id: true } } },
+      include: {
+        product: true,
+        warehouse: true,
+        bin: true,
+        invoice: { select: { number: true, id: true } },
+      },
       orderBy: [{ documentDate: "desc" }, { createdAt: "desc" }],
       take: filters?.take ?? 200,
     });
@@ -214,6 +253,18 @@ export class InventoryService {
         const unit = new Decimal(line.unitPrice);
         const lineAmt = qty.mul(unit);
         total = total.add(lineAmt);
+
+        if (line.binId) {
+          const bin = await tx.warehouseBin.findFirst({
+            where: { id: line.binId, organizationId, warehouseId: dto.warehouseId },
+            select: { id: true },
+          });
+          if (!bin) {
+            throw new BadRequestException(
+              `Bin ${line.binId} not found for selected warehouse`,
+            );
+          }
+        }
 
         const existing = await tx.stockItem.findUnique({
           where: {
@@ -250,12 +301,14 @@ export class InventoryService {
             organizationId,
             warehouseId: dto.warehouseId,
             productId: line.productId,
+            ...(line.binId ? { binId: line.binId } : {}),
             quantity: newQty,
             averageCost: newAvg,
           },
           update: {
             quantity: newQty,
             averageCost: newAvg,
+            ...(line.binId ? { binId: line.binId } : {}),
           },
         });
 
@@ -268,6 +321,7 @@ export class InventoryService {
             reason: StockMovementReason.PURCHASE,
             quantity: qty,
             price: unit,
+            binId: line.binId ?? null,
             note: dto.reference ?? null,
             documentDate,
           },
@@ -306,7 +360,6 @@ export class InventoryService {
       where: { id: organizationId },
     });
     if (!org) throw new NotFoundException("Organization not found");
-    const allowNeg = !!parseInventorySettings(org.settings).allowNegativeStock;
 
     const fromW = await this.prisma.warehouse.findFirst({
       where: { id: dto.fromWarehouseId, organizationId },
@@ -332,7 +385,7 @@ export class InventoryService {
       });
       const avail = src?.quantity ?? new Decimal(0);
       const avgFrom = src?.averageCost ?? new Decimal(0);
-      if (avail.lt(qty) && !allowNeg) {
+      if (avail.lt(qty)) {
         throw new BadRequestException("Недостаточно товара для перемещения");
       }
 
@@ -455,11 +508,6 @@ export class InventoryService {
 
     const saleDocumentDate = inv.recognizedAt ?? inv.createdAt;
 
-    const org = await tx.organization.findUnique({
-      where: { id: organizationId },
-    });
-    const allowNeg = !!parseInventorySettings(org?.settings).allowNegativeStock;
-
     const lines = inv.items.filter((i) => i.productId != null);
     if (lines.length === 0) {
       await tx.invoice.update({
@@ -508,7 +556,7 @@ export class InventoryService {
         fallbackPrice.gt(0) ? fallbackPrice : avg,
       );
 
-      if (avail.lt(need) && !allowNeg) {
+      if (avail.lt(need)) {
         throw new BadRequestException(
           `Недостаточно товара на складе для отгрузки по счёту (product ${pid})`,
         );
@@ -787,6 +835,497 @@ export class InventoryService {
     return this.prisma.$transaction((tx) =>
       this.adjustStockInTransaction(tx, organizationId, dto),
     );
+  }
+
+  async listInventoryAdjustments(
+    organizationId: string,
+    warehouseId?: string,
+  ) {
+    return this.prisma.inventoryAdjustment.findMany({
+      where: {
+        organizationId,
+        ...(warehouseId ? { warehouseId } : {}),
+      },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      include: {
+        warehouse: { select: { id: true, name: true } },
+        _count: { select: { lines: true } },
+      },
+    });
+  }
+
+  async getInventoryAdjustment(organizationId: string, id: string) {
+    const row = await this.prisma.inventoryAdjustment.findFirst({
+      where: { id, organizationId },
+      include: {
+        warehouse: {
+          select: { id: true, name: true, inventoryAccountCode: true },
+        },
+        lines: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            product: { select: { id: true, name: true, sku: true, isService: true } },
+          },
+        },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException("Inventory adjustment not found");
+    }
+    return row;
+  }
+
+  async createInventoryAdjustment(
+    organizationId: string,
+    dto: CreateInventoryAdjustmentDto,
+  ) {
+    const wh = await this.prisma.warehouse.findFirst({
+      where: { id: dto.warehouseId, organizationId },
+      select: { id: true },
+    });
+    if (!wh) throw new NotFoundException("Warehouse not found");
+
+    const productIds = dto.lines.map((l) => l.productId);
+    if (new Set(productIds).size !== productIds.length) {
+      throw new BadRequestException("Duplicate productId in lines");
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { organizationId, id: { in: productIds } },
+      select: { id: true, isService: true },
+    });
+    if (products.length !== productIds.length) {
+      throw new BadRequestException("One or more products not found");
+    }
+    if (products.some((p) => p.isService)) {
+      throw new BadRequestException("Service products cannot be adjusted on stock");
+    }
+
+    const date = new Date(dto.date);
+
+    return this.prisma.$transaction(async (tx) => {
+      const lineCreates: Prisma.InventoryAdjustmentLineCreateWithoutAdjustmentInput[] =
+        [];
+
+      for (const line of dto.lines) {
+        const stock = await tx.stockItem.findUnique({
+          where: {
+            organizationId_warehouseId_productId: {
+              organizationId,
+              warehouseId: dto.warehouseId,
+              productId: line.productId,
+            },
+          },
+          select: { quantity: true },
+        });
+        const expected = stock?.quantity ?? new Decimal(0);
+        const actual = new Decimal(line.actualQuantity);
+        const delta = actual.sub(expected);
+        const unitCost =
+          line.unitCost != null ? new Decimal(line.unitCost) : new Decimal(0);
+        if (unitCost.lt(0)) {
+          throw new BadRequestException("unitCost must be >= 0");
+        }
+        lineCreates.push({
+          product: { connect: { id: line.productId } },
+          expectedQuantity: expected,
+          actualQuantity: actual,
+          deltaQuantity: delta,
+          unitCost,
+        });
+      }
+
+      return tx.inventoryAdjustment.create({
+        data: {
+          organization: { connect: { id: organizationId } },
+          warehouse: { connect: { id: dto.warehouseId } },
+          date,
+          status: InventoryAdjustmentStatus.DRAFT,
+          reason: dto.reason?.trim() ?? "",
+          docType: dto.docType,
+          lines: { create: lineCreates },
+        },
+        include: {
+          warehouse: {
+            select: { id: true, name: true, inventoryAccountCode: true },
+          },
+          lines: {
+            orderBy: { createdAt: "asc" },
+            include: {
+              product: { select: { id: true, name: true, sku: true, isService: true } },
+            },
+          },
+        },
+      });
+    });
+  }
+
+  /**
+   * Проведение документа физической инвентаризации / списания / оприходования:
+   * движения склада + одна сводная проводка (731/201 при недостаче, 201/631 при излишке).
+   * Списание по FIFO: {@link StockService.computeIssueUnitCost}.
+   */
+  async postAdjustment(
+    organizationId: string,
+    id: string,
+    actingUserId: string,
+    actingUserRole: UserRole,
+  ) {
+    assertMayPostManualJournal(actingUserRole);
+    await this.access.assertMayPostAccounting(actingUserId, organizationId);
+
+    const draft = await this.prisma.inventoryAdjustment.findFirst({
+      where: { id, organizationId, status: InventoryAdjustmentStatus.DRAFT },
+      include: {
+        warehouse: {
+          select: { id: true, name: true, inventoryAccountCode: true },
+        },
+        lines: {
+          include: {
+            product: { select: { id: true, isService: true } },
+          },
+        },
+      },
+    });
+    if (!draft) {
+      throw new NotFoundException("Draft inventory adjustment not found");
+    }
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    const closed = getClosedPeriodKeys(org?.settings);
+    const periodKey = monthKeyUtc(draft.date);
+    if (closed.includes(periodKey)) {
+      throw new BadRequestException(
+        `Период ${periodKey} закрыт: проведение документа недоступно`,
+      );
+    }
+
+    return this.prisma.$transaction((tx) =>
+      this.postAdjustmentInTransaction(tx, organizationId, draft),
+    );
+  }
+
+  private async postAdjustmentInTransaction(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    draft: {
+      id: string;
+      date: Date;
+      warehouseId: string;
+      docType: InventoryAdjustmentDocType;
+      warehouse: { id: string; name: string; inventoryAccountCode: string };
+      lines: Array<{
+        id: string;
+        productId: string;
+        actualQuantity: Decimal;
+        product: { isService: boolean };
+      }>;
+    },
+  ) {
+    const documentDate = new Date(
+      Date.UTC(
+        draft.date.getUTCFullYear(),
+        draft.date.getUTCMonth(),
+        draft.date.getUTCDate(),
+        12,
+        0,
+        0,
+        0,
+      ),
+    );
+
+    const org = await tx.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    const allowNeg = !!parseInventorySettings(org?.settings).allowNegativeStock;
+
+    const invAcc =
+      draft.warehouse.inventoryAccountCode === "204"
+        ? FINISHED_GOODS_ACCOUNT_CODE
+        : INVENTORY_GOODS_ACCOUNT_CODE;
+
+    const eps = new Decimal("0.0001");
+    let surplusTotal = new Decimal(0);
+    let shortageTotal = new Decimal(0);
+
+    type WorkLine = {
+      lineId: string;
+      productId: string;
+      expected: Decimal;
+      actual: Decimal;
+      delta: Decimal;
+    };
+
+    const work: WorkLine[] = [];
+
+    for (const line of draft.lines) {
+      if (line.product.isService) {
+        throw new BadRequestException(
+          `Product ${line.productId} is a service; remove from document`,
+        );
+      }
+      const existing = await tx.stockItem.findUnique({
+        where: {
+          organizationId_warehouseId_productId: {
+            organizationId,
+            warehouseId: draft.warehouseId,
+            productId: line.productId,
+          },
+        },
+      });
+      const expected = existing?.quantity ?? new Decimal(0);
+      const actual = new Decimal(line.actualQuantity ?? 0);
+      if (actual.lt(0)) {
+        throw new BadRequestException("actualQuantity must be >= 0");
+      }
+      const delta = actual.sub(expected);
+      work.push({ lineId: line.id, productId: line.productId, expected, actual, delta });
+    }
+
+    if (draft.docType === InventoryAdjustmentDocType.WRITE_OFF) {
+      if (work.some((w) => w.delta.gt(eps))) {
+        throw new BadRequestException(
+          "WRITE_OFF: все строки должны иметь разницу ≤ 0 (только недостача)",
+        );
+      }
+    }
+    if (draft.docType === InventoryAdjustmentDocType.SURPLUS) {
+      if (work.some((w) => w.delta.lt(eps.neg()))) {
+        throw new BadRequestException(
+          "SURPLUS: все строки должны иметь разницу ≥ 0 (только излишек)",
+        );
+      }
+    }
+
+    for (const w of work) {
+      if (w.delta.abs().lt(eps)) {
+        await tx.inventoryAdjustmentLine.update({
+          where: { id: w.lineId },
+          data: {
+            expectedQuantity: w.expected,
+            actualQuantity: w.actual,
+            deltaQuantity: w.delta,
+            unitCost: new Decimal(0),
+          },
+        });
+        continue;
+      }
+
+      if (w.delta.gt(0)) {
+        const qtyAbs = w.delta;
+        const existing = await tx.stockItem.findUnique({
+          where: {
+            organizationId_warehouseId_productId: {
+              organizationId,
+              warehouseId: draft.warehouseId,
+              productId: w.productId,
+            },
+          },
+        });
+        const q0 = existing?.quantity ?? new Decimal(0);
+        const c0 = existing?.averageCost ?? new Decimal(0);
+        const lineRow = await tx.inventoryAdjustmentLine.findUnique({
+          where: { id: w.lineId },
+          select: { unitCost: true },
+        });
+        const inputUnit =
+          lineRow?.unitCost && new Decimal(lineRow.unitCost).gt(0)
+            ? new Decimal(lineRow.unitCost)
+            : c0;
+        const amount = qtyAbs.mul(inputUnit);
+        surplusTotal = surplusTotal.add(amount);
+
+        const q1 = q0.add(qtyAbs);
+        const c1 =
+          q1.lte(0)
+            ? new Decimal(0)
+            : q0.lte(0)
+              ? inputUnit
+              : q0.mul(c0).add(qtyAbs.mul(inputUnit)).div(q1);
+
+        await tx.stockItem.upsert({
+          where: {
+            organizationId_warehouseId_productId: {
+              organizationId,
+              warehouseId: draft.warehouseId,
+              productId: w.productId,
+            },
+          },
+          create: {
+            organizationId,
+            warehouseId: draft.warehouseId,
+            productId: w.productId,
+            quantity: q1,
+            averageCost: c1,
+          },
+          update: {
+            quantity: q1,
+            averageCost: c1,
+          },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            organizationId,
+            warehouseId: draft.warehouseId,
+            productId: w.productId,
+            type: StockMovementType.IN,
+            reason: StockMovementReason.ADJUSTMENT,
+            quantity: qtyAbs,
+            price: inputUnit,
+            note: `INV_PHYS:${draft.id}`,
+            documentDate,
+          },
+        });
+
+        await tx.inventoryAdjustmentLine.update({
+          where: { id: w.lineId },
+          data: {
+            expectedQuantity: w.expected,
+            actualQuantity: w.actual,
+            deltaQuantity: w.delta,
+            unitCost: inputUnit,
+          },
+        });
+      } else {
+        const qtyAbs = w.delta.abs();
+        const existing = await tx.stockItem.findUnique({
+          where: {
+            organizationId_warehouseId_productId: {
+              organizationId,
+              warehouseId: draft.warehouseId,
+              productId: w.productId,
+            },
+          },
+        });
+        const avail = existing?.quantity ?? new Decimal(0);
+        const avg = existing?.averageCost ?? new Decimal(0);
+        if (avail.lt(qtyAbs) && !allowNeg) {
+          throw new BadRequestException(
+            `Недостаточно товара для списания (product ${w.productId})`,
+          );
+        }
+        const unit = await this.stock.computeIssueUnitCost(
+          tx,
+          organizationId,
+          draft.warehouseId,
+          w.productId,
+          qtyAbs,
+          avg,
+          avg,
+        );
+        const amount = qtyAbs.mul(unit);
+        shortageTotal = shortageTotal.add(amount);
+
+        const qNew = avail.sub(qtyAbs);
+
+        await tx.stockItem.upsert({
+          where: {
+            organizationId_warehouseId_productId: {
+              organizationId,
+              warehouseId: draft.warehouseId,
+              productId: w.productId,
+            },
+          },
+          create: {
+            organizationId,
+            warehouseId: draft.warehouseId,
+            productId: w.productId,
+            quantity: qNew,
+            averageCost: unit,
+          },
+          update: {
+            quantity: qNew,
+          },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            organizationId,
+            warehouseId: draft.warehouseId,
+            productId: w.productId,
+            type: StockMovementType.OUT,
+            reason: StockMovementReason.ADJUSTMENT,
+            quantity: qtyAbs,
+            price: unit,
+            note: `INV_PHYS:${draft.id}`,
+            documentDate,
+          },
+        });
+
+        await tx.inventoryAdjustmentLine.update({
+          where: { id: w.lineId },
+          data: {
+            expectedQuantity: w.expected,
+            actualQuantity: w.actual,
+            deltaQuantity: w.delta,
+            unitCost: unit,
+          },
+        });
+      }
+    }
+
+    const glLines: Array<{
+      accountCode: string;
+      debit: string | number;
+      credit: string | number;
+    }> = [
+      ...(surplusTotal.gt(0)
+        ? [
+            { accountCode: invAcc, debit: surplusTotal.toString(), credit: 0 },
+            {
+              accountCode: INVENTORY_SURPLUS_INCOME_ACCOUNT_CODE,
+              debit: 0,
+              credit: surplusTotal.toString(),
+            },
+          ]
+        : []),
+      ...(shortageTotal.gt(0)
+        ? [
+            {
+              accountCode: MISC_OPERATING_EXPENSE_ACCOUNT_CODE,
+              debit: shortageTotal.toString(),
+              credit: 0,
+            },
+            { accountCode: invAcc, debit: 0, credit: shortageTotal.toString() },
+          ]
+        : []),
+    ];
+
+    if (glLines.length) {
+      await this.accounting.postJournalInTransaction(tx, {
+        organizationId,
+        date: documentDate,
+        reference: `INV-PHYS-${draft.id}`,
+        description: `Инвентаризация / корректировка остатков (${draft.warehouse.name})`,
+        isFinal: true,
+        lines: glLines,
+      });
+    }
+
+    await tx.inventoryAdjustment.update({
+      where: { id: draft.id },
+      data: { status: InventoryAdjustmentStatus.POSTED },
+    });
+
+    return tx.inventoryAdjustment.findFirstOrThrow({
+      where: { id: draft.id, organizationId },
+      include: {
+        warehouse: {
+          select: { id: true, name: true, inventoryAccountCode: true },
+        },
+        lines: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            product: { select: { id: true, name: true, sku: true, isService: true } },
+          },
+        },
+      },
+    });
   }
 
   private async resolveDefaultWarehouseIdInTx(

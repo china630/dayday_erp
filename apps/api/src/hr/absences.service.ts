@@ -105,25 +105,40 @@ export class AbsencesService {
     private readonly absenceTypes: AbsenceTypesService,
   ) {}
 
-  list(organizationId: string) {
+  list(organizationId: string, departmentId?: string) {
     return this.prisma.absence.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(departmentId
+          ? { employee: { jobPosition: { departmentId } } }
+          : {}),
+      },
       orderBy: [{ startDate: "desc" }],
       include: { employee: true, absenceType: true },
     });
   }
 
-  async getOne(organizationId: string, id: string) {
+  async getOne(organizationId: string, id: string, departmentId?: string) {
     const row = await this.prisma.absence.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId,
+        ...(departmentId
+          ? { employee: { jobPosition: { departmentId } } }
+          : {}),
+      },
       include: { employee: true, absenceType: true },
     });
     if (!row) throw new NotFoundException("Absence not found");
     return row;
   }
 
-  async create(organizationId: string, dto: CreateAbsenceDto) {
-    await this.ensureEmployee(organizationId, dto.employeeId);
+  async create(
+    organizationId: string,
+    dto: CreateAbsenceDto,
+    departmentId?: string,
+  ) {
+    await this.ensureEmployee(organizationId, dto.employeeId, departmentId);
     const at = await this.absenceTypes.assertInOrg(
       organizationId,
       dto.absenceTypeId,
@@ -139,6 +154,7 @@ export class AbsencesService {
         `Absence longer than allowed for this type (max ${at.maxCalendarDays} calendar days)`,
       );
     }
+    await this.assertNoOverlap(organizationId, dto.employeeId, start, end, null);
     return this.prisma.absence.create({
       data: {
         organizationId,
@@ -152,10 +168,15 @@ export class AbsencesService {
     });
   }
 
-  async update(organizationId: string, id: string, dto: UpdateAbsenceDto) {
-    const existing = await this.getOne(organizationId, id);
+  async update(
+    organizationId: string,
+    id: string,
+    dto: UpdateAbsenceDto,
+    departmentId?: string,
+  ) {
+    const existing = await this.getOne(organizationId, id, departmentId);
     if (dto.employeeId != null) {
-      await this.ensureEmployee(organizationId, dto.employeeId);
+      await this.ensureEmployee(organizationId, dto.employeeId, departmentId);
     }
     let absenceTypeId = existing.absenceTypeId;
     if (dto.absenceTypeId != null) {
@@ -178,6 +199,13 @@ export class AbsencesService {
         `Absence longer than allowed for this type (max ${at.maxCalendarDays} calendar days)`,
       );
     }
+    await this.assertNoOverlap(
+      organizationId,
+      dto.employeeId ?? existing.employeeId,
+      start,
+      end,
+      id,
+    );
     return this.prisma.absence.update({
       where: { id },
       data: {
@@ -191,8 +219,8 @@ export class AbsencesService {
     });
   }
 
-  async remove(organizationId: string, id: string) {
-    await this.getOne(organizationId, id);
+  async remove(organizationId: string, id: string, departmentId?: string) {
+    await this.getOne(organizationId, id, departmentId);
     await this.prisma.absence.delete({ where: { id } });
   }
 
@@ -544,10 +572,51 @@ export class AbsencesService {
     return d;
   }
 
-  private async ensureEmployee(organizationId: string, employeeId: string) {
+  private async ensureEmployee(
+    organizationId: string,
+    employeeId: string,
+    departmentId?: string,
+  ) {
     const e = await this.prisma.employee.findFirst({
-      where: { id: employeeId, organizationId },
+      where: {
+        id: employeeId,
+        organizationId,
+        ...(departmentId ? { jobPosition: { departmentId } } : {}),
+      },
     });
     if (!e) throw new NotFoundException("Employee not found");
+  }
+
+  private async assertNoOverlap(
+    organizationId: string,
+    employeeId: string,
+    start: Date,
+    end: Date,
+    excludeId: string | null,
+  ) {
+    const overlap = await this.prisma.absence.findFirst({
+      where: {
+        organizationId,
+        employeeId,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      include: { absenceType: true },
+    });
+    if (overlap) {
+      throw new BadRequestException({
+        code: "ABSENCE_OVERLAP",
+        message: "Сотрудник уже имеет пересекающееся отсутствие",
+        conflict: {
+          id: overlap.id,
+          absenceTypeId: overlap.absenceTypeId,
+          absenceTypeCode: overlap.absenceType.code,
+          absenceTypeName: overlap.absenceType.nameAz,
+          startDate: overlap.startDate.toISOString().slice(0, 10),
+          endDate: overlap.endDate.toISOString().slice(0, 10),
+        },
+      });
+    }
   }
 }

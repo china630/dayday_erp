@@ -21,8 +21,21 @@ export class StockService {
   ): Promise<InventoryValuationMethod> {
     const org = await tx.organization.findUnique({
       where: { id: organizationId },
-      select: { valuationMethod: true },
+      select: { valuationMethod: true, settings: true },
     });
+    const settingsRaw = org?.settings;
+    if (settingsRaw && typeof settingsRaw === "object" && !Array.isArray(settingsRaw)) {
+      const inventory = (settingsRaw as Record<string, unknown>).inventory;
+      if (inventory && typeof inventory === "object" && !Array.isArray(inventory)) {
+        const fromSettings = (inventory as Record<string, unknown>).inventoryValuation;
+        if (fromSettings === InventoryValuationMethod.FIFO) {
+          return InventoryValuationMethod.FIFO;
+        }
+        if (fromSettings === InventoryValuationMethod.AVCO) {
+          return InventoryValuationMethod.AVCO;
+        }
+      }
+    }
     return org?.valuationMethod ?? InventoryValuationMethod.AVCO;
   }
 

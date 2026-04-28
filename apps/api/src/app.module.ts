@@ -11,13 +11,17 @@ import { AppController } from "./app.controller";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
+import { AuditorMutationGuard } from "./auth/guards/auditor-mutation.guard";
 import { SubscriptionReadOnlyGuard } from "./subscription/subscription-read-only.guard";
+import { BillingAccessGuard } from "./billing/billing-access.guard";
 import { BankingModule } from "./banking/banking.module";
 import { CounterpartiesModule } from "./counterparties/counterparties.module";
 import { FinanceModule } from "./finance/finance.module";
 import { FxModule } from "./fx/fx.module";
 import { FixedAssetsModule } from "./fixed-assets/fixed-assets.module";
+import { MigrationModule } from "./migration/migration.module";
 import { HrModule } from "./hr/hr.module";
+import { IntegrationsModule } from "./integrations/integrations.module";
 import { InventoryModule } from "./inventory/inventory.module";
 import { ManufacturingModule } from "./manufacturing/manufacturing.module";
 import { MailModule } from "./mail/mail.module";
@@ -61,6 +65,7 @@ const apiEnvFiles = apiEnvFilePaths();
     ProductsModule,
     InventoryModule,
     FixedAssetsModule,
+    MigrationModule,
     ManufacturingModule,
     InvoicesModule,
     BankingModule,
@@ -68,6 +73,7 @@ const apiEnvFiles = apiEnvFilePaths();
     FxModule,
     HrModule,
     ReportingModule,
+    IntegrationsModule,
     TaxModule,
     AuditModule,
     AdminModule,
@@ -88,6 +94,14 @@ const apiEnvFiles = apiEnvFilePaths();
     {
       provide: APP_GUARD,
       useClass: SubscriptionReadOnlyGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: BillingAccessGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AuditorMutationGuard,
     },
     {
       provide: APP_INTERCEPTOR,

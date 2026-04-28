@@ -22,8 +22,9 @@ type Fa = {
   id: string;
   name: string;
   inventoryNumber: string;
-  commissioningDate: string;
-  initialCost: unknown;
+  purchaseDate: string;
+  status: "ACTIVE" | "DISPOSED";
+  purchasePrice: unknown;
   usefulLifeMonths: number;
   salvageValue: unknown;
   bookedDepreciation: unknown;
@@ -37,6 +38,9 @@ function FixedAssetsPageContent() {
   const [rows, setRows] = useState<Fa[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [depYear, setDepYear] = useState(String(new Date().getUTCFullYear()));
+  const [depMonth, setDepMonth] = useState(String(new Date().getUTCMonth() + 1));
+  const [runningDep, setRunningDep] = useState(false);
   const load = useCallback(async () => {
     if (!token) {
       setRows([]);
@@ -78,6 +82,38 @@ function FixedAssetsPageContent() {
     await load();
   }
 
+  async function runDepreciation() {
+    if (!token) return;
+    setRunningDep(true);
+    try {
+      const res = await apiFetch("/api/fixed-assets/depreciation/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: Number(depYear),
+          month: Number(depMonth),
+        }),
+      });
+      if (!res.ok) {
+        alert(await res.text());
+        return;
+      }
+      const data = (await res.json()) as {
+        assetsCount: number;
+        totalAmount: string;
+      };
+      alert(
+        t("fixedAssets.deprRunDone", {
+          count: data.assetsCount,
+          amount: data.totalAmount,
+        }),
+      );
+      await load();
+    } finally {
+      setRunningDep(false);
+    }
+  }
+
   if (!ready) {
     return (
       <div className="text-gray-600">
@@ -97,9 +133,35 @@ function FixedAssetsPageContent() {
       />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-[#34495E]">{t("fixedAssets.title")}</h1>
-        <Link href="/fixed-assets/new" className={PRIMARY_BUTTON_CLASS}>
-          + {t("fixedAssets.newBtn")}
-        </Link>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1900}
+            max={2100}
+            value={depYear}
+            onChange={(e) => setDepYear(e.target.value)}
+            className="h-10 w-24 rounded-md border border-slate-300 px-2 text-sm"
+          />
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={depMonth}
+            onChange={(e) => setDepMonth(e.target.value)}
+            className="h-10 w-16 rounded-md border border-slate-300 px-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => void runDepreciation()}
+            disabled={runningDep}
+            className={PRIMARY_BUTTON_CLASS}
+          >
+            {runningDep ? "…" : t("fixedAssets.runDepreciation")}
+          </button>
+          <Link href="/fixed-assets/new" className={PRIMARY_BUTTON_CLASS}>
+            + {t("fixedAssets.newBtn")}
+          </Link>
+        </div>
       </div>
       {err && (
         <div className="rounded-xl border border-red-100 bg-red-50/80 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -144,10 +206,16 @@ function FixedAssetsPageContent() {
                   {t("fixedAssets.invNo")}: {r.inventoryNumber}
                 </div>
                 <div>
-                  {t("fixedAssets.initial")}: {formatMoneyAzn(r.initialCost)}
+                  {t("fixedAssets.initial")}: {formatMoneyAzn(r.purchasePrice)}
                 </div>
                 <div>
                   {t("fixedAssets.thBooked")}: {formatMoneyAzn(r.bookedDepreciation)}
+                </div>
+                <div>
+                  {t("fixedAssets.bookValue")}:{" "}
+                  {formatMoneyAzn(
+                    Number(r.purchasePrice) - Number(r.bookedDepreciation),
+                  )}
                 </div>
                 {!hideDestructive && (
                   <button
@@ -185,6 +253,9 @@ function FixedAssetsPageContent() {
                   <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
                     {t("fixedAssets.thBooked")}
                   </th>
+                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                    {t("fixedAssets.bookValue")}
+                  </th>
                   {!hideDestructive ? (
                     <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" />
                   ) : null}
@@ -195,10 +266,15 @@ function FixedAssetsPageContent() {
                   <tr key={r.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
                     <td>{r.name}</td>
                     <td>{r.inventoryNumber}</td>
-                    <td>{String(r.commissioningDate).slice(0, 10)}</td>
-                    <td>{formatMoneyAzn(r.initialCost)}</td>
+                    <td>{String(r.purchaseDate).slice(0, 10)}</td>
+                    <td>{formatMoneyAzn(r.purchasePrice)}</td>
                     <td>{r.usefulLifeMonths}</td>
                     <td>{formatMoneyAzn(r.bookedDepreciation)}</td>
+                    <td>
+                      {formatMoneyAzn(
+                        Number(r.purchasePrice) - Number(r.bookedDepreciation),
+                      )}
+                    </td>
                     {!hideDestructive && (
                       <td>
                         <button

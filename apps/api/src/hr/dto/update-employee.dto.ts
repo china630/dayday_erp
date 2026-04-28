@@ -12,7 +12,7 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import { FIN_CODE_PATTERN } from "../../common/fin-code.util";
+import { AZ_FIN_CODE_PATTERN } from "../../utils/validators/fin.validator";
 
 export class UpdateEmployeeDto {
   @ApiPropertyOptional({ enum: EmployeeKind })
@@ -29,7 +29,7 @@ export class UpdateEmployeeDto {
   @ApiPropertyOptional({ example: "1A2B3C4" })
   @IsOptional()
   @IsString()
-  @Matches(FIN_CODE_PATTERN, {
+  @Matches(AZ_FIN_CODE_PATTERN, {
     message: "finCode must be 7 chars (A–Z/0–9, excluding I and O)",
   })
   finCode?: string;
@@ -59,6 +59,13 @@ export class UpdateEmployeeDto {
   @IsDateString()
   startDate?: string;
 
+  @ApiPropertyOptional({
+    description: "Hire date (migration baseline for HR/Absences).",
+  })
+  @IsOptional()
+  @IsDateString()
+  hireDate?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
@@ -83,6 +90,27 @@ export class UpdateEmployeeDto {
   @IsNumber()
   @Min(0)
   initialSalaryBalance?: number | null;
+
+  @ApiPropertyOptional({
+    description: "Initial vacation days at migration date.",
+    example: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  initialVacationDays?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      "Average monthly salary for last 12 months (migration helper for vacation calculations).",
+    example: 2400,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  avgMonthlySalaryLastYear?: number | null;
 
   @ApiPropertyOptional({
     description: "Субсчёт подотчётного лица (244.xx) для кассы KXO",

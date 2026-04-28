@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Package } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,13 @@ import {
 } from "../../lib/design-system";
 
 type Warehouse = { id: string; name: string; location: string };
+type WarehouseBin = {
+  id: string;
+  warehouseId: string;
+  code: string;
+  barcode?: string | null;
+  warehouse?: { id: string; name: string };
+};
 
 type StockRow = {
   id: string;
@@ -38,6 +46,7 @@ type StockRow = {
   averageCost: unknown;
   product: { id: string; name: string; sku: string };
   warehouse: { id: string; name: string };
+  bin?: { id: string; code: string } | null;
 };
 
 type Movement = {
@@ -50,6 +59,7 @@ type Movement = {
   note: string | null;
   product: { name: string };
   warehouse: { name: string };
+  bin?: { id: string; code: string } | null;
   invoice: { number: string } | null;
 };
 
@@ -80,6 +90,7 @@ export default function InventoryPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [bins, setBins] = useState<WarehouseBin[]>([]);
   const [settings, setSettings] = useState<{
     allowNegativeStock?: boolean;
     defaultWarehouseId?: string | null;
@@ -93,6 +104,10 @@ export default function InventoryPage() {
 
   const [allowNeg, setAllowNeg] = useState(false);
   const [defWh, setDefWh] = useState("");
+  const [binWh, setBinWh] = useState("");
+  const [binCode, setBinCode] = useState("");
+  const [binBarcode, setBinBarcode] = useState("");
+  const [binSaving, setBinSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -103,11 +118,12 @@ export default function InventoryPage() {
     setError(null);
     try {
       const q = filterWh ? `?warehouseId=${encodeURIComponent(filterWh)}` : "";
-      const [w, s, m, cfg] = await Promise.all([
+      const [w, s, m, cfg, b] = await Promise.all([
         apiFetch("/api/inventory/warehouses"),
         apiFetch(`/api/inventory/stock${q}`),
         apiFetch("/api/inventory/movements?take=100"),
         apiFetch("/api/inventory/settings"),
+        apiFetch("/api/inventory/bins"),
       ]);
       if (!w.ok) throw new Error(`warehouses ${w.status}`);
       if (!s.ok) throw new Error(`stock ${s.status}`);
@@ -115,6 +131,10 @@ export default function InventoryPage() {
       setWarehouses(await w.json());
       setStock(await s.json());
       setMovements(await m.json());
+      if (b.ok) {
+        const binsData = (await b.json()) as WarehouseBin[];
+        setBins(binsData);
+      }
       if (cfg.ok) {
         const j = await cfg.json();
         setSettings(j);
@@ -122,6 +142,11 @@ export default function InventoryPage() {
         setDefWh(
           typeof j.defaultWarehouseId === "string" ? j.defaultWarehouseId : "",
         );
+        const fallbackWh =
+          (typeof j.defaultWarehouseId === "string" && j.defaultWarehouseId) ||
+          (typeof j.defaultWarehouseResolvedId === "string" && j.defaultWarehouseResolvedId) ||
+          "";
+        if (fallbackWh) setBinWh((v) => v || fallbackWh);
       }
     } catch (e) {
       setError(String(e));
@@ -159,6 +184,32 @@ export default function InventoryPage() {
     } finally {
       setSettingsSaving(false);
     }
+  }
+
+  async function createBin() {
+    if (!binWh || !binCode.trim()) {
+      toast.error(t("inventory.binNeedFields"));
+      return;
+    }
+    setBinSaving(true);
+    const res = await apiFetch("/api/inventory/bins", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        warehouseId: binWh,
+        code: binCode.trim(),
+        barcode: binBarcode.trim() || undefined,
+      }),
+    });
+    setBinSaving(false);
+    if (!res.ok) {
+      toast.error(t("common.saveErr"), { description: await res.text() });
+      return;
+    }
+    toast.success(t("common.save"));
+    setBinCode("");
+    setBinBarcode("");
+    await load();
   }
 
   if (!ready) {
@@ -217,6 +268,9 @@ export default function InventoryPage() {
           <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("auditHistory")}>
             {t("inventory.auditHistoryNav")}
           </button>
+          <Link href="/inventory/physical" className={SECONDARY_BUTTON_CLASS}>
+            {t("inventory.physicalNav")}
+          </Link>
         </div>
       </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -265,6 +319,69 @@ export default function InventoryPage() {
           )}
         </section>
       )}
+
+      <section className={`${CARD_CONTAINER_CLASS} p-6 space-y-4`}>
+        <h2 className="text-lg font-semibold text-[#34495E]">{t("inventory.topologyTitle")}</h2>
+        <p className="text-sm text-slate-600 m-0">{t("inventory.topologyHint")}</p>
+        <div className="grid gap-3 md:grid-cols-4">
+          <select
+            value={binWh}
+            onChange={(e) => setBinWh(e.target.value)}
+            className={INPUT_BORDERED_CLASS}
+          >
+            <option value="">{t("inventory.whSelect")}</option>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={binCode}
+            onChange={(e) => setBinCode(e.target.value)}
+            className={INPUT_BORDERED_CLASS}
+            placeholder={t("inventory.binCode")}
+          />
+          <input
+            value={binBarcode}
+            onChange={(e) => setBinBarcode(e.target.value)}
+            className={INPUT_BORDERED_CLASS}
+            placeholder={t("inventory.binBarcode")}
+          />
+          <button
+            type="button"
+            onClick={() => void createBin()}
+            disabled={binSaving}
+            className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}
+          >
+            {binSaving ? "…" : t("inventory.createBin")}
+          </button>
+        </div>
+        {bins.length > 0 ? (
+          <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white shadow-sm`}>
+            <table className="text-sm min-w-full">
+              <thead>
+                <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
+                  <th className="text-left p-2">{t("inventory.thWh")}</th>
+                  <th className="text-left p-2">{t("inventory.binCode")}</th>
+                  <th className="text-left p-2">{t("inventory.binBarcode")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bins.map((b) => (
+                  <tr key={b.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
+                    <td className="p-2">{b.warehouse?.name ?? b.warehouseId}</td>
+                    <td className="p-2">{b.code}</td>
+                    <td className="p-2">{b.barcode ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-600 m-0">{t("inventory.binsEmpty")}</p>
+        )}
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-[#34495E]">{t("inventory.stock")}</h2>
@@ -341,6 +458,7 @@ export default function InventoryPage() {
                   <th className="text-left p-2">{t("inventory.thProduct")}</th>
                   <th className="text-left p-2">{t("inventory.thSku")}</th>
                   <th className="text-left p-2">{t("inventory.thQty")}</th>
+                <th className="text-left p-2">{t("inventory.thBin")}</th>
                   <th className="text-right p-2">{t("inventory.thAvgCost")}</th>
                 </tr>
               </thead>
@@ -351,6 +469,7 @@ export default function InventoryPage() {
                     <td className="p-2">{r.product.name}</td>
                     <td className="p-2">{r.product.sku}</td>
                     <td className="p-2">{fmtQty(r.quantity)}</td>
+                    <td className="p-2">{r.bin?.code ?? "—"}</td>
                     <td className="p-2 text-right font-mono">{formatMoneyAzn(r.averageCost)}</td>
                   </tr>
                 ))}
@@ -408,6 +527,7 @@ export default function InventoryPage() {
                   <th className="text-left p-2">{t("inventory.thMovType")}</th>
                   <th className="text-left p-2">{t("inventory.thMovReason")}</th>
                   <th className="text-left p-2">{t("inventory.thQty")}</th>
+                  <th className="text-left p-2">{t("inventory.thBin")}</th>
                   <th className="text-right p-2">{t("inventory.thMovPrice")}</th>
                   <th className="text-left p-2">{t("inventory.thInvoice")}</th>
                 </tr>
@@ -421,6 +541,7 @@ export default function InventoryPage() {
                     <td className="p-2">{m.type}</td>
                     <td className="p-2">{m.reason}</td>
                     <td className="p-2">{fmtQty(m.quantity)}</td>
+                    <td className="p-2">{m.bin?.code ?? "—"}</td>
                     <td className="p-2 text-right font-mono">{formatMoneyAzn(m.price)}</td>
                     <td className="p-2">{m.invoice?.number ?? "—"}</td>
                   </tr>

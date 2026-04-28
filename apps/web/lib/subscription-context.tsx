@@ -45,6 +45,7 @@ export type SubscriptionSnapshot = {
   };
   expiresAt: string | null;
   isTrial: boolean;
+  billingStatus?: "ACTIVE" | "SOFT_BLOCK" | "HARD_BLOCK";
   /** Истёк оплаченный/демо-период (expiresAt < now) — только чтение в API. */
   readOnly: boolean;
   /** Оставшихся полных дней демо; null если не trial или срок истёк. */
@@ -84,6 +85,7 @@ function enterpriseBypassSnapshot(): SubscriptionSnapshot {
     },
     expiresAt: null,
     isTrial: false,
+    billingStatus: "ACTIVE",
     readOnly: false,
     trialDaysLeft: null,
   };

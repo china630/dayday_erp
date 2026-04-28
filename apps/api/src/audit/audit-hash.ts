@@ -12,6 +12,7 @@ export type AuditHashPayload = {
   clientIp: string | null;
   userAgent: string | null;
   createdAt: Date;
+  prevHash?: string | null;
 };
 
 export function canonicalAuditJsonString(p: AuditHashPayload): string {
@@ -27,6 +28,7 @@ export function canonicalAuditJsonString(p: AuditHashPayload): string {
     clientIp: p.clientIp,
     userAgent: p.userAgent,
     createdAt: p.createdAt.toISOString(),
+    prevHash: p.prevHash ?? null,
   });
 }
 
@@ -45,4 +47,33 @@ export function verifyAuditHash(
     return false;
   }
   return computeAuditHash(p, secret) === hash;
+}
+
+export function verifyAuditHashLegacy(
+  p: Omit<AuditHashPayload, "prevHash">,
+  secret: string,
+  hash: string | null | undefined,
+): boolean {
+  if (!hash) return false;
+  const legacyPayload = { ...p };
+  return (
+    createHash("sha256")
+      .update(
+        JSON.stringify({
+          organizationId: legacyPayload.organizationId,
+          userId: legacyPayload.userId,
+          entityType: legacyPayload.entityType,
+          entityId: legacyPayload.entityId,
+          action: legacyPayload.action,
+          oldValues: legacyPayload.oldValues,
+          newValues: legacyPayload.newValues,
+          changes: legacyPayload.changes,
+          clientIp: legacyPayload.clientIp,
+          userAgent: legacyPayload.userAgent,
+          createdAt: legacyPayload.createdAt.toISOString(),
+        }) + secret,
+        "utf8",
+      )
+      .digest("hex") === hash
+  );
 }

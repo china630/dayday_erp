@@ -1,5 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@dayday/database";
+import {
+  FixedAssetDepreciationMethod,
+  FixedAssetStatus,
+  Prisma,
+} from "@dayday/database";
 import { AccountingService } from "../accounting/accounting.service";
 import {
   ACCUMULATED_DEPRECIATION_ACCOUNT_CODE,
@@ -14,9 +18,18 @@ const Decimal = Prisma.Decimal;
 export class DepreciationService {
   constructor(private readonly accounting: AccountingService) {}
 
+  async runMonthlyDepreciation(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    year: number,
+    month: number,
+  ) {
+    return this.applyForClosedMonth(tx, organizationId, year, month);
+  }
+
   /**
    * Начисление линейной амортизации за указанный месяц (до блокировки периода).
-   * Одна проводка Дт 721 / Кт 112 на сумму по всем ОС.
+   * Одна проводка Дт 713 / Кт 112 на сумму по всем ОС.
    * Multi-GAAP: IFRS-тени создаёт AccountingService.translateToIFRS для 721 и 112,
    * если у всех задействованных NAS-счетов есть AccountMapping (как для зарплаты и склада).
    */
@@ -30,7 +43,11 @@ export class DepreciationService {
     const monthEnd = end;
 
     const assets = await tx.fixedAsset.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        status: FixedAssetStatus.ACTIVE,
+        depreciationMethod: FixedAssetDepreciationMethod.STRAIGHT_LINE,
+      },
     });
 
     type Row = { assetId: string; amount: Prisma.Decimal };
@@ -48,10 +65,10 @@ export class DepreciationService {
       });
       if (exists) continue;
 
-      const comm = a.commissioningDate;
+      const comm = a.purchaseDate;
       if (comm.getTime() > monthEnd.getTime()) continue;
 
-      const maxDep = new Decimal(a.initialCost).sub(a.salvageValue);
+      const maxDep = new Decimal(a.purchasePrice).sub(a.salvageValue);
       if (maxDep.lte(0)) continue;
 
       const booked = new Decimal(a.bookedDepreciation);

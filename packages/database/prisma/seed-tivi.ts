@@ -164,7 +164,9 @@ async function ensureAccountable244(
     create: {
       organizationId,
       code: "244",
-      name: "Подотчётные лица (группа)",
+      nameAz: "Hesab verən şəxslər (qrup)",
+      nameRu: "Подотчётные лица (группа)",
+      nameEn: "Accountable persons (group)",
       type: AccountType.ASSET,
       ledgerType: LedgerType.NAS,
       parentId: p215.id,
@@ -185,7 +187,9 @@ async function ensureAccountable244(
     create: {
       organizationId,
       code: "244.01",
-      name: "Подотчёт — сотрудники (демо)",
+      nameAz: "Təhtəlhesab — əməkdaşlar (demo)",
+      nameRu: "Подотчёт — сотрудники (демо)",
+      nameEn: "Accountable persons — staff (demo)",
       type: AccountType.ASSET,
       ledgerType: LedgerType.NAS,
       parentId: p244.id,

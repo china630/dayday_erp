@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -7,6 +9,7 @@ import {
   Matches,
   MaxLength,
 } from "class-validator";
+import { TemplateGroup } from "@dayday/database";
 
 export class CreateOrgDto {
   @ApiProperty({ example: "ООО Пример" })
@@ -24,6 +27,26 @@ export class CreateOrgDto {
   @IsString()
   @Length(3, 3)
   currency?: string;
+
+  @ApiPropertyOptional({
+    enum: TemplateGroup,
+    default: TemplateGroup.COMMERCIAL,
+    description:
+      "NAS chart template: COMMERCIAL (full), SMALL_BUSINESS (simplified), or GOVERNMENT (reserved / payroll profile)",
+  })
+  @IsOptional()
+  @IsEnum(TemplateGroup)
+  templateGroup?: TemplateGroup;
+
+  @ApiPropertyOptional({
+    enum: ["full", "small"],
+    default: "full",
+    description:
+      "NAS chart onboarding profile: `full` (commercial full) or `small` (simplified). Takes precedence over `templateGroup` when set.",
+  })
+  @IsOptional()
+  @IsIn(["full", "small"])
+  coaTemplate?: "full" | "small";
 
   @ApiPropertyOptional({
     description: "Опционально: привязать организацию к холдингу (владелец холдинга = текущий пользователь)",

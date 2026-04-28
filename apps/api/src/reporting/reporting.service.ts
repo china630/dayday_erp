@@ -8,7 +8,7 @@ import {
   DigitalSignatureStatus,
   InvoiceStatus,
   LedgerType,
-  PayrollRunStatus,
+  pickAccountDisplayName,
   Prisma,
   SignedDocumentKind,
 } from "@dayday/database";
@@ -32,6 +32,11 @@ import {
 } from "./reporting-period.util";
 import { verifyQrPublicBase } from "../common/verify-public-url";
 import { reconciliationDocumentUuid } from "../signature/reconciliation-document-id";
+import {
+  buildCounterpartyReconciliationPayload,
+  counterpartyReconciliationXlsxBuffer,
+  type CounterpartyReconciliationOptions,
+} from "./counterparty-reconciliation-build";
 import { renderReconciliationPdfAz } from "./reconciliation-pdf.render";
 
 /**
@@ -60,6 +65,23 @@ function splitDrCr(net: Decimal): { debit: Decimal; credit: Decimal } {
   return { debit: new Decimal(0), credit: net.neg() };
 }
 
+function parseClosedPeriodEnd(key: string): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(key.trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const month = Number(m[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return null;
+  }
+  const lastDay = new Date(Date.UTC(y, month, 0)).getUTCDate();
+  return new Date(Date.UTC(y, month - 1, lastDay, 0, 0, 0, 0));
+}
+
+function absDelta(a: Decimal, b: Decimal): Decimal {
+  const x = a.sub(b);
+  return x.gte(0) ? x : x.neg();
+}
+
 @Injectable()
 export class ReportingService {
   constructor(
@@ -74,6 +96,7 @@ export class ReportingService {
     dateToStr: string,
     ledgerType: LedgerType = LedgerType.NAS,
   ) {
+    const startedAt = Date.now();
     if (!dateFromStr?.trim() || !dateToStr?.trim()) {
       throw new BadRequestException("dateFrom and dateTo are required");
     }
@@ -106,40 +129,93 @@ export class ReportingService {
 
     const accountIds = accounts.map((a) => a.id);
 
-    const [openingAgg, periodAgg] = await Promise.all([
-      this.prisma.journalEntry.groupBy({
-        by: ["accountId"],
-        where: {
-          organizationId,
-          ledgerType,
-          accountId: { in: accountIds },
-          transaction: { date: { lt: dateFrom } },
-        },
-        _sum: { debit: true, credit: true },
-      }),
-      this.prisma.journalEntry.groupBy({
-        by: ["accountId"],
-        where: {
-          organizationId,
-          ledgerType,
-          accountId: { in: accountIds },
-          transaction: {
-            date: { gte: dateFrom, lte: dateTo },
-          },
-        },
-        _sum: { debit: true, credit: true },
-      }),
-    ]);
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    const closedKeys = getClosedPeriodKeys(org?.settings);
+    const closedEnds = closedKeys
+      .map(parseClosedPeriodEnd)
+      .filter((d): d is Date => d != null)
+      .filter((d) => d.getTime() < dateFrom.getTime())
+      .sort((a, b) => b.getTime() - a.getTime());
+    const snapshotDate = closedEnds[0] ?? null;
 
-    const openMap = new Map(
-      openingAgg.map((r) => [
-        r.accountId,
-        {
-          dr: d(r._sum.debit),
-          cr: d(r._sum.credit),
+    const periodAgg = await this.prisma.journalEntry.groupBy({
+      by: ["accountId"],
+      where: {
+        organizationId,
+        ledgerType,
+        accountId: { in: accountIds },
+        transaction: {
+          date: { gte: dateFrom, lte: dateTo },
+          isFinal: true,
         },
-      ]),
-    );
+      },
+      _sum: { debit: true, credit: true },
+    });
+
+    let openingMap = new Map<string, { dr: Decimal; cr: Decimal }>();
+    if (snapshotDate) {
+      const snaps = await this.prisma.accountBalance.findMany({
+        where: {
+          organizationId,
+          ledgerType,
+          balanceDate: snapshotDate,
+          accountId: { in: accountIds },
+        },
+        select: {
+          accountId: true,
+          debitBalance: true,
+          creditBalance: true,
+        },
+      });
+      openingMap = new Map(
+        snaps.map((s) => [
+          s.accountId,
+          { dr: d(s.debitBalance), cr: d(s.creditBalance) },
+        ]),
+      );
+      const missing = accountIds.filter((id) => !openingMap.has(id));
+      if (missing.length > 0) {
+        const fallbackAgg = await this.prisma.journalEntry.groupBy({
+          by: ["accountId"],
+          where: {
+            organizationId,
+            ledgerType,
+            accountId: { in: missing },
+            transaction: { date: { lt: dateFrom }, isFinal: true },
+          },
+          _sum: { debit: true, credit: true },
+        });
+        for (const r of fallbackAgg) {
+          openingMap.set(r.accountId, {
+            dr: d(r._sum.debit),
+            cr: d(r._sum.credit),
+          });
+        }
+      }
+    } else {
+      const openingAgg = await this.prisma.journalEntry.groupBy({
+        by: ["accountId"],
+        where: {
+          organizationId,
+          ledgerType,
+          accountId: { in: accountIds },
+          transaction: { date: { lt: dateFrom }, isFinal: true },
+        },
+        _sum: { debit: true, credit: true },
+      });
+      openingMap = new Map(
+        openingAgg.map((r) => [
+          r.accountId,
+          {
+            dr: d(r._sum.debit),
+            cr: d(r._sum.credit),
+          },
+        ]),
+      );
+    }
     const periodMap = new Map(
       periodAgg.map((r) => [
         r.accountId,
@@ -151,7 +227,7 @@ export class ReportingService {
     );
 
     const rows = accounts.map((acc) => {
-      const o = openMap.get(acc.id) ?? { dr: new Decimal(0), cr: new Decimal(0) };
+      const o = openingMap.get(acc.id) ?? { dr: new Decimal(0), cr: new Decimal(0) };
       const p = periodMap.get(acc.id) ?? { dr: new Decimal(0), cr: new Decimal(0) };
       const openingNet = netDrMinusCr(o.dr, o.cr);
       const periodDr = p.dr;
@@ -164,7 +240,7 @@ export class ReportingService {
       return {
         accountId: acc.id,
         accountCode: acc.code,
-        accountName: acc.name,
+        accountName: pickAccountDisplayName(acc, "ru"),
         accountType: acc.type,
         openingDebit: ob.debit.toFixed(4),
         openingCredit: ob.credit.toFixed(4),
@@ -175,11 +251,59 @@ export class ReportingService {
       };
     });
 
+    const totalPeriodDebit = rows.reduce(
+      (sum, r) => sum.add(new Decimal(r.periodDebit)),
+      new Decimal(0),
+    );
+    const totalPeriodCredit = rows.reduce(
+      (sum, r) => sum.add(new Decimal(r.periodCredit)),
+      new Decimal(0),
+    );
+    const isBalanced = absDelta(totalPeriodDebit, totalPeriodCredit).lte(
+      new Decimal("0.0001"),
+    );
+
+    const revenueRow = rows.find((r) => r.accountCode === REVENUE_ACCOUNT_CODE);
+    const cogsRow = rows.find((r) => r.accountCode === COGS_ACCOUNT_CODE);
+    const payrollRow = rows.find((r) => r.accountCode === PAYROLL_EXPENSE_ACCOUNT_CODE);
+    const fxRow = rows.find((r) => r.accountCode === FX_GAIN_ACCOUNT_CODE);
+    const trialBalanceProfitProxy = (revenueRow
+      ? new Decimal(revenueRow.periodCredit).sub(new Decimal(revenueRow.periodDebit))
+      : new Decimal(0))
+      .sub(
+        cogsRow
+          ? new Decimal(cogsRow.periodDebit).sub(new Decimal(cogsRow.periodCredit))
+          : new Decimal(0),
+      )
+      .sub(
+        payrollRow
+          ? new Decimal(payrollRow.periodDebit).sub(new Decimal(payrollRow.periodCredit))
+          : new Decimal(0),
+      )
+      .sub(
+        fxRow
+          ? new Decimal(fxRow.periodDebit).sub(new Decimal(fxRow.periodCredit))
+          : new Decimal(0),
+      );
+
     return {
       dateFrom: dateFromStr,
       dateTo: dateToStr,
       ledgerType,
+      openingSnapshotDate: snapshotDate?.toISOString().slice(0, 10) ?? null,
       rows,
+      totals: {
+        periodDebit: totalPeriodDebit.toFixed(4),
+        periodCredit: totalPeriodCredit.toFixed(4),
+        balanced: isBalanced,
+      },
+      crossValidation: {
+        netProfitProxy: trialBalanceProfitProxy.toFixed(4),
+      },
+      performance: {
+        accountRows: rows.length,
+        elapsedMs: Date.now() - startedAt,
+      },
     };
   }
 
@@ -194,6 +318,7 @@ export class ReportingService {
     ledgerType: LedgerType = LedgerType.NAS,
     departmentId?: string | null,
   ) {
+    const startedAt = Date.now();
     if (!dateFromStr?.trim() || !dateToStr?.trim()) {
       throw new BadRequestException("dateFrom and dateTo are required");
     }
@@ -258,7 +383,7 @@ export class ReportingService {
         organizationId,
         ledgerType,
         accountId: { in: ids },
-        transaction: transactionWhere,
+        transaction: { ...transactionWhere, isFinal: true },
       },
       _sum: { debit: true, credit: true },
     });
@@ -284,41 +409,7 @@ export class ReportingService {
     const cogsNet = r701.dr.sub(r701.cr);
 
     const r721 = pick(PAYROLL_EXPENSE_ACCOUNT_CODE);
-    let payrollExpenseNet = r721.dr.sub(r721.cr);
-    let payrollSource: "ledger" | "department_payroll" = "ledger";
-
-    if (deptFilter) {
-      const slips = await this.prisma.payrollSlip.findMany({
-        where: {
-          organizationId,
-          employee: {
-            jobPosition: { departmentId: deptFilter },
-          },
-          payrollRun: {
-            status: PayrollRunStatus.POSTED,
-            transaction: {
-              date: { gte: dateFrom, lte: dateTo },
-            },
-          },
-        },
-        select: {
-          gross: true,
-          dsmfEmployer: true,
-          itsEmployer: true,
-          unemploymentEmployer: true,
-        },
-      });
-      payrollExpenseNet = slips.reduce(
-        (acc, s) =>
-          acc
-            .add(s.gross)
-            .add(s.dsmfEmployer)
-            .add(s.itsEmployer)
-            .add(s.unemploymentEmployer),
-        new Decimal(0),
-      );
-      payrollSource = "department_payroll";
-    }
+    const payrollExpenseNet = r721.dr.sub(r721.cr);
 
     const r662 = pick(FX_GAIN_ACCOUNT_CODE);
     const fx662Net = r662.dr.sub(r662.cr);
@@ -328,9 +419,28 @@ export class ReportingService {
       .sub(payrollExpenseNet)
       .sub(fx662Net);
 
+    const trialBalanceView =
+      deptFilter == null
+        ? await this.trialBalance(
+            organizationId,
+            dateFromStr,
+            dateToStr,
+            ledgerType,
+          )
+        : null;
+    const tbProxy =
+      trialBalanceView != null
+        ? new Decimal(trialBalanceView.crossValidation?.netProfitProxy ?? "0")
+        : netProfit;
+    const crossValidationDelta = absDelta(netProfit, tbProxy);
+    const crossValidationOk =
+      trialBalanceView == null
+        ? true
+        : crossValidationDelta.lte(new Decimal("0.0100"));
+
     const payrollLabel =
-      payrollSource === "department_payroll"
-        ? `Расходы на ЗП по департаменту (${PAYROLL_EXPENSE_ACCOUNT_CODE}, по расчётам)`
+      deptFilter != null
+        ? `Расходы на ЗП по департаменту (${PAYROLL_EXPENSE_ACCOUNT_CODE})`
         : `Расходы на ЗП (${PAYROLL_EXPENSE_ACCOUNT_CODE})`;
 
     return {
@@ -338,7 +448,7 @@ export class ReportingService {
       dateTo: dateToStr,
       ledgerType,
       departmentId: deptFilter ?? null,
-      payrollExpenseSource: payrollSource,
+      payrollExpenseSource: "ledger",
       lines: [
         {
           accountCode: REVENUE_ACCOUNT_CODE,
@@ -368,12 +478,20 @@ export class ReportingService {
         fx662DebitMinusCredit: fx662Net.toFixed(4),
       },
       netProfit: netProfit.toFixed(4),
+      crossValidation: {
+        trialBalanceNetProfitProxy: tbProxy.toFixed(4),
+        delta: crossValidationDelta.toFixed(4),
+        ok: crossValidationOk,
+        scope: trialBalanceView == null ? "department-filtered" : "full-ledger",
+      },
+      performance: {
+        elapsedMs: Date.now() - startedAt,
+        rowsProcessed: agg.length,
+      },
       methodologyNote:
-        (payrollSource === "department_payroll"
-          ? "Строка расходов на персонал по выбранному департаменту посчитана по проведённым расчётным листкам (gross + взносы работодателя) за период дат проводок зарплаты; прочие строки P&L — по ГК. Сумма по 721 в ГК может включать не только ФОТ (напр. амортизацию)."
-          : "Чистая прибыль по начислению (обороты по счетам за период). Кассовая сверка «сумма оплат − себестоимость − налоги с ЗП» даст другой результат, если оплаты и начисления не совпадают по периодам.") +
+        "Чистая прибыль по начислению (обороты по счетам за период). Кассовая сверка «сумма оплат − себестоимость − налоги с ЗП» даст другой результат, если оплаты и начисления не совпадают по периодам." +
         (deptFilter
-          ? " При фильтре ЦФО обороты по выручке, себестоимости и 662 учитываются только по транзакциям с привязкой к этому департаменту."
+          ? " При фильтре ЦФО обороты по выручке, себестоимости, ФОТ и 662 учитываются только по транзакциям с привязкой к этому департаменту."
           : ""),
     };
   }
@@ -392,7 +510,6 @@ export class ReportingService {
         revenueRecognized: true,
         status: { not: InvoiceStatus.CANCELLED },
       },
-      include: { payments: { select: { amount: true } } },
     });
 
     const arAcc = await this.prisma.account.findFirst({
@@ -406,11 +523,7 @@ export class ReportingService {
 
     const byCp = new Map<string, Decimal>();
     for (const inv of invoices) {
-      const paid = inv.payments.reduce(
-        (s, p) => s.add(p.amount),
-        new Decimal(0),
-      );
-      const bal = inv.totalAmount.sub(paid);
+      const bal = inv.totalAmount.sub(inv.paidAmount ?? new Decimal(0));
       if (bal.lte(0)) continue;
       const prev = byCp.get(inv.counterpartyId) ?? new Decimal(0);
       byCp.set(inv.counterpartyId, prev.add(bal));
@@ -460,6 +573,7 @@ export class ReportingService {
 
   /**
    * Акт сверки взаиморасчётов с контрагентом (дебиторка по выставленным счетам и оплатам).
+   * Поле `transactions` — хронология с разворотом по строкам `JournalEntry` (NAS), где удалось сопоставить проводки.
    * Обороты 531 по контрагенту в модели не разнесены — только счета-фактуры и платежи.
    */
   async counterpartyReconciliation(
@@ -467,9 +581,12 @@ export class ReportingService {
     counterpartyId: string,
     dateFromStr: string,
     dateToStr: string,
+    options?: CounterpartyReconciliationOptions,
   ) {
     if (!dateFromStr?.trim() || !dateToStr?.trim()) {
-      throw new BadRequestException("dateFrom and dateTo are required");
+      throw new BadRequestException(
+        "dateFrom/dateTo or startDate/endDate are required (YYYY-MM-DD)",
+      );
     }
     let dateFrom: Date;
     let dateTo: Date;
@@ -477,9 +594,7 @@ export class ReportingService {
       dateFrom = parseIsoDateOnly(dateFromStr);
       dateTo = parseIsoDateOnly(dateToStr);
     } catch {
-      throw new BadRequestException(
-        "Invalid dateFrom/dateTo (expected YYYY-MM-DD)",
-      );
+      throw new BadRequestException("Invalid dates (expected YYYY-MM-DD)");
     }
     if (dateFrom.getTime() > dateTo.getTime()) {
       throw new BadRequestException("dateFrom must be <= dateTo");
@@ -497,133 +612,20 @@ export class ReportingService {
       select: { name: true, taxId: true },
     });
 
-    const dateToEnd = endOfUtcDay(dateTo);
-
-    const invsForOpening = await this.prisma.invoice.findMany({
-      where: {
-        organizationId,
-        counterpartyId,
-        revenueRecognized: true,
-        status: { not: InvoiceStatus.CANCELLED },
-        recognizedAt: { lt: dateFrom },
-      },
-      include: {
-        payments: { where: { date: { lt: dateFrom } } },
-      },
-    });
-
-    let opening = new Decimal(0);
-    for (const inv of invsForOpening) {
-      const paidBefore = inv.payments.reduce(
-        (s, p) => s.add(p.amount),
-        new Decimal(0),
-      );
-      opening = opening.add(inv.totalAmount.sub(paidBefore));
-    }
-
-    const invsRecognizedInPeriod = await this.prisma.invoice.findMany({
-      where: {
-        organizationId,
-        counterpartyId,
-        revenueRecognized: true,
-        status: { not: InvoiceStatus.CANCELLED },
-        recognizedAt: { gte: dateFrom, lte: dateToEnd },
-      },
-      orderBy: [{ recognizedAt: "asc" }, { number: "asc" }],
-    });
-
-    const paymentsInPeriod = await this.prisma.invoicePayment.findMany({
-      where: {
-        organizationId,
-        date: { gte: dateFrom, lte: dateTo },
-        invoice: { counterpartyId },
-      },
-      include: { invoice: { select: { number: true } } },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
-    });
-
-    type LineKind = "OPENING" | "INVOICE" | "PAYMENT";
-    type Line = {
-      kind: LineKind;
-      date: string;
-      reference: string;
-      description: string;
-      debit: string;
-      credit: string;
-      balanceAfter: string;
-    };
-
-    const lines: Line[] = [];
-    let running = opening;
-
-    lines.push({
-      kind: "OPENING",
-      date: dateFromStr,
-      reference: "—",
-      description: "Сальдо на начало периода (дебиторка)",
-      debit: "0.0000",
-      credit: "0.0000",
-      balanceAfter: running.toFixed(4),
-    });
-
-    const movementDates: { sort: number; line: Line }[] = [];
-
-    for (const inv of invsRecognizedInPeriod) {
-      const day = (inv.recognizedAt ?? inv.createdAt).toISOString().slice(0, 10);
-      const sort =
-        (inv.recognizedAt ?? inv.createdAt).getTime() * 10;
-      movementDates.push({
-        sort,
-        line: {
-          kind: "INVOICE",
-          date: day,
-          reference: inv.number,
-          description: `Счёт (начисление Дт 211)`,
-          debit: inv.totalAmount.toFixed(4),
-          credit: "0.0000",
-          balanceAfter: "0.0000",
-        },
-      });
-    }
-
-    for (const pay of paymentsInPeriod) {
-      const day = pay.date.toISOString().slice(0, 10);
-      const sort = pay.date.getTime() * 10 + 1;
-      movementDates.push({
-        sort,
-        line: {
-          kind: "PAYMENT",
-          date: day,
-          reference: pay.invoice.number,
-          description: "Оплата (Кт 211)",
-          debit: "0.0000",
-          credit: pay.amount.toFixed(4),
-          balanceAfter: "0.0000",
-        },
-      });
-    }
-
-    movementDates.sort((a, b) => a.sort - b.sort);
-
-    for (const { line } of movementDates) {
-      const debit = new Decimal(line.debit);
-      const credit = new Decimal(line.credit);
-      running = running.add(debit).sub(credit);
-      lines.push({
-        ...line,
-        balanceAfter: running.toFixed(4),
-      });
-    }
-
-    const closing = running;
-    const turnoverDebit = invsRecognizedInPeriod.reduce(
-      (s, i) => s.add(i.totalAmount),
-      new Decimal(0),
+    const built = await buildCounterpartyReconciliationPayload(
+      this.prisma,
+      organizationId,
+      counterpartyId,
+      dateFrom,
+      dateTo,
+      dateFromStr,
+      dateToStr,
+      options,
     );
-    const turnoverCredit = paymentsInPeriod.reduce(
-      (s, p) => s.add(p.amount),
-      new Decimal(0),
-    );
+
+    const opening = built.opening;
+    const closing = built.closing;
+    const primaryCurrency = built.primaryCurrency;
 
     return {
       organizationName: org?.name ?? "",
@@ -633,11 +635,28 @@ export class ReportingService {
       counterpartyTaxId: cp.taxId,
       dateFrom: dateFromStr,
       dateTo: dateToStr,
+      startDate: dateFromStr,
+      endDate: dateToStr,
+      currency: options?.currency?.trim().toUpperCase() ?? null,
+      ledgerType: options?.ledgerType ?? LedgerType.NAS,
       openingBalance: opening.toFixed(4),
-      turnoverDebit: turnoverDebit.toFixed(4),
-      turnoverCredit: turnoverCredit.toFixed(4),
       closingBalance: closing.toFixed(4),
-      lines,
+      openingBalanceDetail: {
+        signedAmount: opening.toFixed(4),
+        amount: opening.abs().toFixed(4),
+        currency: primaryCurrency,
+        side: opening.gte(0) ? ("DR" as const) : ("CR" as const),
+      },
+      closingBalanceDetail: {
+        signedAmount: closing.toFixed(4),
+        amount: closing.abs().toFixed(4),
+        currency: primaryCurrency,
+        side: closing.gte(0) ? ("DR" as const) : ("CR" as const),
+      },
+      turnoverDebit: built.turnoverDebit.toFixed(4),
+      turnoverCredit: built.turnoverCredit.toFixed(4),
+      lines: built.lines,
+      transactions: built.transactions,
       methodologyNote:
         "Сальдо: непогашенная дебиторская задолженность по счетам с признанной выручкой. Кредиторка (531) по поставщику в учёте не привязана к контрагенту — в акт не включена.",
       methodologyNoteAz:
@@ -645,17 +664,48 @@ export class ReportingService {
     };
   }
 
-  async counterpartyReconciliationPdf(
+  async counterpartyReconciliationXlsx(
     organizationId: string,
     counterpartyId: string,
     dateFromStr: string,
     dateToStr: string,
+    options?: CounterpartyReconciliationOptions,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const data = await this.counterpartyReconciliation(
       organizationId,
       counterpartyId,
       dateFromStr,
       dateToStr,
+      options,
+    );
+    const currencyLabel = data.currency ?? data.openingBalanceDetail.currency ?? "AZN";
+    return counterpartyReconciliationXlsxBuffer({
+      organizationName: data.organizationName,
+      organizationTaxId: data.organizationTaxId,
+      counterpartyName: data.counterpartyName,
+      counterpartyTaxId: data.counterpartyTaxId,
+      dateFrom: data.dateFrom,
+      dateTo: data.dateTo,
+      openingBalance: data.openingBalance,
+      closingBalance: data.closingBalance,
+      currencyLabel,
+      transactions: data.transactions,
+    });
+  }
+
+  async counterpartyReconciliationPdf(
+    organizationId: string,
+    counterpartyId: string,
+    dateFromStr: string,
+    dateToStr: string,
+    options?: CounterpartyReconciliationOptions,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const data = await this.counterpartyReconciliation(
+      organizationId,
+      counterpartyId,
+      dateFromStr,
+      dateToStr,
+      options,
     );
 
     const reconDocId = reconciliationDocumentUuid(
@@ -714,9 +764,9 @@ export class ReportingService {
     return { buffer, filename };
   }
 
-  /** Старение дебиторки по сроку просрочки от dueDate (дни). */
-  async accountsReceivableAging(organizationId: string) {
-    const today = new Date();
+  /** AR Aging: 0-30 / 31-60 / 61-90 / 90+ дней. */
+  async accountsReceivableAging(organizationId: string, asOfIso?: string) {
+    const today = asOfIso?.trim() ? parseIsoDateOnly(asOfIso) : new Date();
     const todayUtc = Date.UTC(
       today.getUTCFullYear(),
       today.getUTCMonth(),
@@ -733,23 +783,23 @@ export class ReportingService {
         },
       },
       include: {
-        payments: { select: { amount: true } },
         counterparty: { select: { id: true, name: true, taxId: true } },
       },
     });
 
-    type Bucket = { b0_30: Decimal; b31_60: Decimal; b61plus: Decimal };
+    type Bucket = {
+      b0_30: Decimal;
+      b31_60: Decimal;
+      b61_90: Decimal;
+      b90_plus: Decimal;
+    };
     const byCp = new Map<
       string,
       { name: string; taxId: string; buckets: Bucket }
     >();
 
     for (const inv of invoices) {
-      const paid = inv.payments.reduce(
-        (s, p) => s.add(p.amount),
-        new Decimal(0),
-      );
-      const outstanding = inv.totalAmount.sub(paid);
+      const outstanding = inv.totalAmount.sub(inv.paidAmount ?? new Decimal(0));
       if (outstanding.lte(0)) continue;
 
       const due = inv.dueDate;
@@ -763,7 +813,8 @@ export class ReportingService {
       let bucket: keyof Bucket;
       if (daysPastDue <= 30) bucket = "b0_30";
       else if (daysPastDue <= 60) bucket = "b31_60";
-      else bucket = "b61plus";
+      else if (daysPastDue <= 90) bucket = "b61_90";
+      else bucket = "b90_plus";
 
       const id = inv.counterpartyId;
       const cur =
@@ -774,7 +825,8 @@ export class ReportingService {
           buckets: {
             b0_30: new Decimal(0),
             b31_60: new Decimal(0),
-            b61plus: new Decimal(0),
+            b61_90: new Decimal(0),
+            b90_plus: new Decimal(0),
           },
         };
       cur.buckets[bucket] = cur.buckets[bucket].add(outstanding);
@@ -787,10 +839,12 @@ export class ReportingService {
       taxId: v.taxId,
       bucket0to30: v.buckets.b0_30.toFixed(4),
       bucket31to60: v.buckets.b31_60.toFixed(4),
-      bucket61plus: v.buckets.b61plus.toFixed(4),
+      bucket61to90: v.buckets.b61_90.toFixed(4),
+      bucket90plus: v.buckets.b90_plus.toFixed(4),
       total: v.buckets.b0_30
         .add(v.buckets.b31_60)
-        .add(v.buckets.b61plus)
+        .add(v.buckets.b61_90)
+        .add(v.buckets.b90_plus)
         .toFixed(4),
     }));
 
@@ -800,13 +854,15 @@ export class ReportingService {
       (acc, r) => ({
         bucket0to30: acc.bucket0to30.add(new Decimal(r.bucket0to30)),
         bucket31to60: acc.bucket31to60.add(new Decimal(r.bucket31to60)),
-        bucket61plus: acc.bucket61plus.add(new Decimal(r.bucket61plus)),
+        bucket61to90: acc.bucket61to90.add(new Decimal(r.bucket61to90)),
+        bucket90plus: acc.bucket90plus.add(new Decimal(r.bucket90plus)),
         total: acc.total.add(new Decimal(r.total)),
       }),
       {
         bucket0to30: new Decimal(0),
         bucket31to60: new Decimal(0),
-        bucket61plus: new Decimal(0),
+        bucket61to90: new Decimal(0),
+        bucket90plus: new Decimal(0),
         total: new Decimal(0),
       },
     );
@@ -817,11 +873,12 @@ export class ReportingService {
       totals: {
         bucket0to30: sum.bucket0to30.toFixed(4),
         bucket31to60: sum.bucket31to60.toFixed(4),
-        bucket61plus: sum.bucket61plus.toFixed(4),
+        bucket61to90: sum.bucket61to90.toFixed(4),
+        bucket90plus: sum.bucket90plus.toFixed(4),
         total: sum.total.toFixed(4),
       },
       methodologyNote:
-        "Интервалы по дням просрочки от срока оплаты (due date). Непросроченные счета попадают в колонку 0–30 дней.",
+        "Корзины просрочки по dueDate на дату asOf: 0-30, 31-60, 61-90 и 90+ дней.",
     };
   }
 
@@ -894,6 +951,7 @@ export class ReportingService {
               organizationId,
               ledgerType,
               accountId: { in: cashIds },
+              transaction: { isFinal: true },
             },
             _sum: { debit: true, credit: true },
           })
@@ -904,6 +962,7 @@ export class ReportingService {
               organizationId,
               ledgerType,
               accountId: taxAcc.id,
+              transaction: { isFinal: true },
             },
             _sum: { debit: true, credit: true },
           })
@@ -914,6 +973,7 @@ export class ReportingService {
               organizationId,
               ledgerType,
               accountId: pay531Acc.id,
+              transaction: { isFinal: true },
             },
             _sum: { debit: true, credit: true },
           })
@@ -950,7 +1010,7 @@ export class ReportingService {
           organizationId,
           ledgerType,
           accountId: exp721Acc.id,
-          transaction: { date: { gte: monthStart, lte: monthEnd } },
+          transaction: { date: { gte: monthStart, lte: monthEnd }, isFinal: true },
         },
         select: { debit: true, credit: true },
       });
@@ -1008,6 +1068,7 @@ export class ReportingService {
           accountId: revAcc.id,
           transaction: {
             date: { gte: from30, lte: toDay },
+            isFinal: true,
           },
         },
         select: {
@@ -1044,7 +1105,7 @@ export class ReportingService {
           organizationId,
           ledgerType,
           accountId: pay531Acc.id,
-          transaction: { counterpartyId: { not: null } },
+          transaction: { counterpartyId: { not: null }, isFinal: true },
         },
         include: {
           transaction: { select: { counterpartyId: true } },
@@ -1216,6 +1277,7 @@ export class ReportingService {
           accountId: { in: cashIds },
           transaction: {
             date: { gte: monthStart, lte: endOfUtcDay(monthEnd) },
+            isFinal: true,
           },
         },
         _sum: { debit: true, credit: true },
@@ -1243,7 +1305,7 @@ export class ReportingService {
     const { start, end } = monthRangeUtc(year, month);
 
     const dep = await this.prisma.$transaction(async (tx) => {
-      const d = await this.depreciation.applyForClosedMonth(
+      const depResult = await this.depreciation.applyForClosedMonth(
         tx,
         organizationId,
         year,
@@ -1258,6 +1320,40 @@ export class ReportingService {
         data: { isLocked: true },
       });
 
+      const snapshotDate = end;
+      const grouped = await tx.journalEntry.groupBy({
+        by: ["accountId", "ledgerType"],
+        where: {
+          organizationId,
+          transaction: { date: { lte: end }, isFinal: true },
+        },
+        _sum: { debit: true, credit: true },
+      });
+      for (const g of grouped) {
+        await tx.accountBalance.upsert({
+          where: {
+            organizationId_accountId_ledgerType_balanceDate: {
+              organizationId,
+              accountId: g.accountId,
+              ledgerType: g.ledgerType,
+              balanceDate: snapshotDate,
+            },
+          },
+          create: {
+            organizationId,
+            accountId: g.accountId,
+            ledgerType: g.ledgerType,
+            balanceDate: snapshotDate,
+            debitBalance: d(g._sum.debit),
+            creditBalance: d(g._sum.credit),
+          },
+          update: {
+            debitBalance: d(g._sum.debit),
+            creditBalance: d(g._sum.credit),
+          },
+        });
+      }
+
       const org = await tx.organization.findUnique({
         where: { id: organizationId },
       });
@@ -1267,7 +1363,7 @@ export class ReportingService {
         where: { id: organizationId },
         data: { settings: nextSettings as Prisma.InputJsonValue },
       });
-      return d;
+      return depResult;
     });
 
     return {

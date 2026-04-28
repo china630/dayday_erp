@@ -10,5 +10,9 @@
     "skipLibCheck": true,
     "moduleResolution": "node"
   },
-  "include": ["prisma/chart-seed.ts", "prisma/pricing-module-seed.ts"]
+  "include": [
+    "prisma/nas-chart-commercial-data.ts",
+    "prisma/chart-seed.ts",
+    "prisma/pricing-module-seed.ts"
+  ]
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { accountDisplayName } from "../../../lib/account-display-name";
 import { apiFetch } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
@@ -17,15 +18,30 @@ import {
 type AccountRow = {
   id: string;
   code: string;
-  name: string;
+  nameAz: string;
+  nameRu: string;
+  nameEn: string;
+  displayName?: string;
   type: string;
 };
 
 type MappingRow = {
   id: string;
   ratio: string;
-  nasAccount: { id: string; code: string; name: string };
-  ifrsAccount: { id: string; code: string; name: string };
+  nasAccount: {
+    id: string;
+    code: string;
+    nameAz: string;
+    nameRu: string;
+    nameEn: string;
+  };
+  ifrsAccount: {
+    id: string;
+    code: string;
+    nameAz: string;
+    nameRu: string;
+    nameEn: string;
+  };
 };
 
 function canEditMappings(role: string | undefined): boolean {
@@ -33,7 +49,7 @@ function canEditMappings(role: string | undefined): boolean {
 }
 
 function AccountMappingContent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { token, ready } = useRequireAuth();
   const { user } = useAuth();
   const edit = canEditMappings(user?.role ?? undefined);
@@ -54,9 +70,10 @@ function AccountMappingContent() {
     if (!token) return;
     setLoading(true);
     setErr(null);
+    const loc = encodeURIComponent(i18n.language || "az");
     const [rNas, rIfrs, rMap] = await Promise.all([
-      apiFetch("/api/accounts?ledgerType=NAS"),
-      apiFetch("/api/accounts?ledgerType=IFRS"),
+      apiFetch(`/api/accounts?ledgerType=NAS&locale=${loc}`),
+      apiFetch(`/api/accounts?ledgerType=IFRS&locale=${loc}`),
       apiFetch("/api/account-mappings"),
     ]);
     if (!rNas.ok || !rIfrs.ok || !rMap.ok) {
@@ -70,7 +87,7 @@ function AccountMappingContent() {
       setMappings((await rMap.json()) as MappingRow[]);
     }
     setLoading(false);
-  }, [token, t]);
+  }, [token, t, i18n.language]);
 
   useEffect(() => {
     if (!ready || !token) return;
@@ -194,7 +211,8 @@ function AccountMappingContent() {
                 <option value="">{t("mapping.select")}</option>
                 {nas.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.code} — {a.name}
+                    {a.code} —{" "}
+                    {a.displayName ?? accountDisplayName(a, i18n.language)}
                   </option>
                 ))}
               </select>
@@ -210,7 +228,8 @@ function AccountMappingContent() {
                 <option value="">{t("mapping.select")}</option>
                 {ifrs.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.code} — {a.name}
+                    {a.code} —{" "}
+                    {a.displayName ?? accountDisplayName(a, i18n.language)}
                   </option>
                 ))}
               </select>
@@ -261,10 +280,12 @@ function AccountMappingContent() {
                 {mappings.map((m) => (
                   <tr key={m.id} className="border-t border-slate-100">
                     <td className="p-2">
-                      {m.nasAccount.code} — {m.nasAccount.name}
+                      {m.nasAccount.code} —{" "}
+                      {accountDisplayName(m.nasAccount, i18n.language)}
                     </td>
                     <td className="p-2">
-                      {m.ifrsAccount.code} — {m.ifrsAccount.name}
+                      {m.ifrsAccount.code} —{" "}
+                      {accountDisplayName(m.ifrsAccount, i18n.language)}
                     </td>
                     <td className="p-2 font-mono">{m.ratio}</td>
                     {edit && (

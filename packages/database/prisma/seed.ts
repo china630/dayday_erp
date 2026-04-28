@@ -1,9 +1,12 @@
 import { PricingKind } from "@prisma/client";
 import { closePrismaPool, createPrismaClient } from "./prisma-client";
+import { TemplateGroup } from "@prisma/client";
 import {
   loadChartJson,
+  loadNasSmallBusinessAccountsSync,
   seedChartOfAccountsCatalogEntries,
   syncAzChartForOrganization,
+  upsertGlobalNasTemplateAccounts,
 } from "./chart-seed";
 import {
   PRICING_MODULE_SEED_DEFAULTS,
@@ -116,9 +119,12 @@ async function main() {
     return;
   }
 
-  await seedChartOfAccountsCatalogEntries(prisma, accounts);
+  await seedChartOfAccountsCatalogEntries(prisma, accounts, TemplateGroup.COMMERCIAL);
+  const smb = loadNasSmallBusinessAccountsSync();
+  await seedChartOfAccountsCatalogEntries(prisma, smb, TemplateGroup.SMALL_BUSINESS);
+  const tplN = await upsertGlobalNasTemplateAccounts(prisma);
   console.info(
-    `[seed] chart_of_accounts_entries upserted (${accounts.length} codes from JSON)`,
+    `[seed] chart_of_accounts_entries upserted (COMMERCIAL ${accounts.length} + SMALL_BUSINESS ${smb.length}); template_accounts ${tplN}`,
   );
 
   if (process.env.SEED_SYNC_CHART_ALL === "1") {

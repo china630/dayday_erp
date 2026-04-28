@@ -55,7 +55,8 @@ export class ManufacturingController {
 
   @Post("release")
   @ApiOperation({
-    summary: "Выпуск продукции: списание компонентов (Дт 204 — Кт 201) по средней",
+    summary:
+      "Выпуск продукции по recipeId: списание компонентов с wasteFactor, оприходование выпуска и проводка Дт 204 — Кт 201",
   })
   release(
     @OrganizationId() organizationId: string,

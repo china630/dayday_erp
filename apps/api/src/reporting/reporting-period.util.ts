@@ -45,6 +45,19 @@ export function getClosedPeriodKeys(settingsJson: unknown): string[] {
   return cp.filter((x): x is string => typeof x === "string");
 }
 
+export function getLockedPeriodUntil(settingsJson: unknown): Date | null {
+  if (!settingsJson || typeof settingsJson !== "object") return null;
+  const ledger = (settingsJson as Record<string, unknown>).ledger;
+  if (!ledger || typeof ledger !== "object") return null;
+  const value = (ledger as Record<string, unknown>).lockedPeriodUntil;
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return parseIsoDateOnly(value);
+  } catch {
+    return null;
+  }
+}
+
 /** YYYY-MM-DD по UTC-календарю (для API отчётов). */
 export function dateToIsoYmdUtc(d: Date): string {
   const y = d.getUTCFullYear();
@@ -107,5 +120,26 @@ export function mergeClosedPeriod(
   if (!prev.includes(key)) prev.push(key);
   rep.closedPeriods = prev.sort();
   base.reporting = rep;
+  return base;
+}
+
+export function mergeLockedPeriodUntil(
+  settingsJson: unknown,
+  lockedPeriodUntil: string | null,
+): Record<string, unknown> {
+  const base =
+    settingsJson && typeof settingsJson === "object"
+      ? { ...(settingsJson as Record<string, unknown>) }
+      : {};
+  const ledger =
+    base.ledger && typeof base.ledger === "object"
+      ? { ...(base.ledger as Record<string, unknown>) }
+      : {};
+  if (lockedPeriodUntil) {
+    ledger.lockedPeriodUntil = lockedPeriodUntil;
+  } else {
+    delete ledger.lockedPeriodUntil;
+  }
+  base.ledger = ledger;
   return base;
 }

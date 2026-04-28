@@ -1,12 +1,23 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AccountType, LedgerType, Prisma } from "@dayday/database";
+import type { TemplateAccount } from "@prisma/client";
+import {
+  AccountType,
+  CoaTemplateProfile,
+  LedgerType,
+  pickAccountDisplayName,
+  Prisma,
+  TemplateGroup,
+} from "@dayday/database";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CreateAccountMappingDto } from "./dto/create-account-mapping.dto";
 import type { CreateBankAccountDto } from "./dto/create-bank-account.dto";
+import type { CreateIfrsMappingRuleDto } from "./dto/create-ifrs-mapping-rule.dto";
+import type { UpdateIfrsMappingRuleDto } from "./dto/update-ifrs-mapping-rule.dto";
 
 /** Клиент БД для операций счетов внутри `prisma.$transaction`. */
 export type AccountsDb = PrismaService | Prisma.TransactionClient;
@@ -17,27 +28,252 @@ const Decimal = Prisma.Decimal;
 export class AccountsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listAccounts(organizationId: string, ledgerType: LedgerType) {
-    return this.prisma.account.findMany({
-      where: { organizationId, ledgerType },
-      orderBy: { code: "asc" },
+  listAccounts(organizationId: string, ledgerType: LedgerType, locale?: string | null) {
+    return this.prisma.account
+      .findMany({
+        where: { organizationId, ledgerType },
+        orderBy: { code: "asc" },
+        select: {
+          id: true,
+          code: true,
+          nameAz: true,
+          nameRu: true,
+          nameEn: true,
+          type: true,
+          ledgerType: true,
+          currency: true,
+        },
+      })
+      .then((rows) =>
+        rows.map((r) => ({
+          ...r,
+          displayName: pickAccountDisplayName(r, locale),
+        })),
+      );
+  }
+
+  /**
+   * Глобальный справочник кассы: приоритет `template_accounts`, иначе legacy
+   * `chart_of_accounts_entries`.
+   */
+  async listCashChartCatalogEntries(locale?: string | null) {
+    const tplCount = await this.prisma.templateAccount.count({
+      where: { isDeprecated: false, cashProfile: { not: null } },
+    });
+    if (tplCount > 0) {
+      const rows = await this.prisma.templateAccount.findMany({
+        where: { isDeprecated: false, cashProfile: { not: null } },
+        orderBy: [{ cashProfile: "asc" }, { code: "asc" }],
+        select: {
+          code: true,
+          nameAz: true,
+          nameRu: true,
+          nameEn: true,
+          cashProfile: true,
+        },
+      });
+      return rows.map((r) => ({
+        ...r,
+        displayName: pickAccountDisplayName(r, locale),
+      }));
+    }
+
+    return this.prisma.chartOfAccountsEntry
+      .findMany({
+        where: { isDeprecated: false, cashProfile: { not: null } },
+        orderBy: [{ cashProfile: "asc" }, { code: "asc" }],
+        select: {
+          code: true,
+          nameAz: true,
+          nameRu: true,
+          nameEn: true,
+          cashProfile: true,
+        },
+      })
+      .then((rows) =>
+        rows.map((r) => ({
+          ...r,
+          displayName: pickAccountDisplayName(r, locale),
+        })),
+      );
+  }
+
+  /**
+   * Счета из глобального `template_accounts`, которых ещё нет среди NAS-счетов организации.
+   */
+  async listNasTemplateCatalogForImport(
+    organizationId: string,
+    opts: {
+      search?: string;
+      locale?: string | null;
+      templateProfile?: CoaTemplateProfile;
+    },
+  ) {
+    const existingCodes = (
+      await this.prisma.account.findMany({
+        where: { organizationId, ledgerType: LedgerType.NAS },
+        select: { code: true },
+      })
+    ).map((a) => a.code);
+
+    const where: Prisma.TemplateAccountWhereInput = {
+      isDeprecated: false,
+      ...(existingCodes.length > 0 ? { code: { notIn: existingCodes } } : {}),
+    };
+
+    if (opts.templateProfile) {
+      where.templateGroups = { has: opts.templateProfile };
+    }
+
+    const s = opts.search?.trim();
+    if (s) {
+      where.AND = [
+        {
+          OR: [
+            { code: { contains: s, mode: "insensitive" } },
+            { nameAz: { contains: s, mode: "insensitive" } },
+            { nameRu: { contains: s, mode: "insensitive" } },
+            { nameEn: { contains: s, mode: "insensitive" } },
+          ],
+        },
+      ];
+    }
+
+    const rows = await this.prisma.templateAccount.findMany({
+      where,
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+      take: 250,
       select: {
         id: true,
         code: true,
-        name: true,
-        type: true,
-        ledgerType: true,
-        currency: true,
+        nameAz: true,
+        nameRu: true,
+        nameEn: true,
+        accountType: true,
+        parentCode: true,
+        templateGroups: true,
       },
     });
+    return rows.map((r) => ({
+      ...r,
+      displayName: pickAccountDisplayName(r, opts.locale),
+    }));
   }
 
-  /** Глобальный справочник: только счета кассы (cashProfile AZN / FX). */
-  listCashChartCatalogEntries() {
-    return this.prisma.chartOfAccountsEntry.findMany({
-      where: { isDeprecated: false, cashProfile: { not: null } },
-      orderBy: [{ cashProfile: "asc" }, { code: "asc" }],
-      select: { code: true, name: true, cashProfile: true },
+  /**
+   * Добавляет в локальный NAS-план строку из глобального шаблона (с цепочкой родителей при необходимости).
+   */
+  async importNasAccountFromTemplate(
+    organizationId: string,
+    templateAccountId: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const leaf = await tx.templateAccount.findUnique({
+        where: { id: templateAccountId },
+      });
+      if (!leaf || leaf.isDeprecated) {
+        throw new NotFoundException("Template account not found");
+      }
+
+      const existingLeaf = await tx.account.findFirst({
+        where: {
+          organizationId,
+          ledgerType: LedgerType.NAS,
+          code: leaf.code,
+        },
+      });
+      if (existingLeaf) {
+        throw new ConflictException(`NAS account ${leaf.code} already exists`);
+      }
+
+      const chain: TemplateAccount[] = [];
+      let cur: TemplateAccount | null = leaf;
+      while (cur) {
+        chain.unshift(cur);
+        const pc = (cur.parentCode ?? "").trim();
+        if (!pc) break;
+        const parentTpl: TemplateAccount | null = await tx.templateAccount.findUnique({
+          where: { code: pc },
+        });
+        if (!parentTpl) {
+          throw new BadRequestException(
+            `Parent template for code ${cur.code} not found (${pc})`,
+          );
+        }
+        cur = parentTpl;
+      }
+
+      const idByCode = new Map<string, string>();
+
+      for (const row of chain) {
+        const acc = await tx.account.findFirst({
+          where: {
+            organizationId,
+            ledgerType: LedgerType.NAS,
+            code: row.code,
+          },
+        });
+        if (acc) {
+          idByCode.set(row.code, acc.id);
+          continue;
+        }
+
+        const parentId = row.parentCode?.trim()
+          ? idByCode.get(row.parentCode.trim()) ?? null
+          : null;
+
+        const catalogRow = await tx.chartOfAccountsEntry.findFirst({
+          where: { templateGroup: TemplateGroup.COMMERCIAL, code: row.code },
+        });
+
+        const created = await tx.account.create({
+          data: {
+            organizationId,
+            code: row.code,
+            nameAz: row.nameAz,
+            nameRu: row.nameRu,
+            nameEn: row.nameEn,
+            type: row.accountType,
+            ledgerType: LedgerType.NAS,
+            parentId,
+            chartEntryId: catalogRow?.id ?? null,
+            templateAccountId: row.id,
+          },
+          select: {
+            id: true,
+            code: true,
+            nameAz: true,
+            nameRu: true,
+            nameEn: true,
+            type: true,
+            ledgerType: true,
+            parentId: true,
+            templateAccountId: true,
+          },
+        });
+        idByCode.set(row.code, created.id);
+      }
+
+      await this.mirrorNasToIfrs(organizationId, tx);
+
+      return tx.account.findFirstOrThrow({
+        where: {
+          organizationId,
+          ledgerType: LedgerType.NAS,
+          code: leaf.code,
+        },
+        select: {
+          id: true,
+          code: true,
+          nameAz: true,
+          nameRu: true,
+          nameEn: true,
+          type: true,
+          ledgerType: true,
+          parentId: true,
+          templateAccountId: true,
+        },
+      });
     });
   }
 
@@ -85,7 +321,9 @@ export class AccountsService {
           data: {
             organizationId,
             code: n.code,
-            name: n.name,
+            nameAz: n.nameAz,
+            nameRu: n.nameRu,
+            nameEn: n.nameEn,
             type: n.type,
             currency: n.currency,
             ledgerType: LedgerType.IFRS,
@@ -147,7 +385,9 @@ export class AccountsService {
         data: {
           organizationId,
           code: "1200",
-          name: "Дебиторская задолженность (IFRS)",
+          nameAz: "Debitor borcu (IFRS)",
+          nameRu: "Дебиторская задолженность (IFRS)",
+          nameEn: "Trade receivables (IFRS)",
           type: AccountType.ASSET,
           ledgerType: LedgerType.IFRS,
         },
@@ -166,7 +406,9 @@ export class AccountsService {
         data: {
           organizationId,
           code: "4000",
-          name: "Выручка (IFRS Revenue)",
+          nameAz: "Gəlir (IFRS)",
+          nameRu: "Выручка (IFRS Revenue)",
+          nameEn: "Revenue (IFRS)",
           type: AccountType.REVENUE,
           ledgerType: LedgerType.IFRS,
         },
@@ -211,10 +453,24 @@ export class AccountsService {
       where: { organizationId },
       include: {
         nasAccount: {
-          select: { id: true, code: true, name: true, ledgerType: true },
+          select: {
+            id: true,
+            code: true,
+            nameAz: true,
+            nameRu: true,
+            nameEn: true,
+            ledgerType: true,
+          },
         },
         ifrsAccount: {
-          select: { id: true, code: true, name: true, ledgerType: true },
+          select: {
+            id: true,
+            code: true,
+            nameAz: true,
+            nameRu: true,
+            nameEn: true,
+            ledgerType: true,
+          },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -265,10 +521,24 @@ export class AccountsService {
       },
       include: {
         nasAccount: {
-          select: { id: true, code: true, name: true, ledgerType: true },
+          select: {
+            id: true,
+            code: true,
+            nameAz: true,
+            nameRu: true,
+            nameEn: true,
+            ledgerType: true,
+          },
         },
         ifrsAccount: {
-          select: { id: true, code: true, name: true, ledgerType: true },
+          select: {
+            id: true,
+            code: true,
+            nameAz: true,
+            nameRu: true,
+            nameEn: true,
+            ledgerType: true,
+          },
         },
       },
     });
@@ -282,6 +552,72 @@ export class AccountsService {
       throw new NotFoundException("Mapping not found");
     }
     await this.prisma.accountMapping.delete({ where: { id } });
+  }
+
+  listIfrsMappingRules(organizationId: string) {
+    return this.prisma.ifrsMappingRule.findMany({
+      where: { organizationId },
+      orderBy: [
+        { sourceNasAccountCode: "asc" },
+        { targetIfrsAccountCode: "asc" },
+      ],
+    });
+  }
+
+  async createIfrsMappingRule(
+    organizationId: string,
+    dto: CreateIfrsMappingRuleDto,
+  ) {
+    const source = dto.sourceNasAccountCode.trim();
+    const target = dto.targetIfrsAccountCode.trim();
+    if (!source || !target) {
+      throw new BadRequestException("sourceNasAccountCode and targetIfrsAccountCode are required");
+    }
+    return this.prisma.ifrsMappingRule.create({
+      data: {
+        organizationId,
+        sourceNasAccountCode: source,
+        targetIfrsAccountCode: target,
+        isActive: dto.isActive ?? true,
+      },
+    });
+  }
+
+  async updateIfrsMappingRule(
+    organizationId: string,
+    id: string,
+    dto: UpdateIfrsMappingRuleDto,
+  ) {
+    const existing = await this.prisma.ifrsMappingRule.findFirst({
+      where: { id, organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException("IFRS mapping rule not found");
+
+    const data: Prisma.IfrsMappingRuleUpdateInput = {};
+    if (dto.sourceNasAccountCode !== undefined) {
+      data.sourceNasAccountCode = dto.sourceNasAccountCode.trim();
+    }
+    if (dto.targetIfrsAccountCode !== undefined) {
+      data.targetIfrsAccountCode = dto.targetIfrsAccountCode.trim();
+    }
+    if (dto.isActive !== undefined) {
+      data.isActive = dto.isActive;
+    }
+
+    return this.prisma.ifrsMappingRule.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async deleteIfrsMappingRule(organizationId: string, id: string): Promise<void> {
+    const existing = await this.prisma.ifrsMappingRule.findFirst({
+      where: { id, organizationId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException("IFRS mapping rule not found");
+    await this.prisma.ifrsMappingRule.delete({ where: { id } });
   }
 
   async createBankAccount(organizationId: string, dto: CreateBankAccountDto) {
@@ -316,12 +652,22 @@ export class AccountsService {
           organizationId,
           ledgerType: LedgerType.NAS,
           code,
-          name,
+          nameAz: name,
+          nameRu: name,
+          nameEn: name,
           type: AccountType.ASSET,
           currency: dto.currency ?? "AZN",
           parentId: parent.id,
         },
-        select: { id: true, code: true, name: true, currency: true, ledgerType: true },
+        select: {
+          id: true,
+          code: true,
+          nameAz: true,
+          nameRu: true,
+          nameEn: true,
+          currency: true,
+          ledgerType: true,
+        },
       });
     });
   }

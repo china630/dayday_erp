@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsEnum,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   Length,
@@ -8,6 +10,7 @@ import {
   MaxLength,
   MinLength,
 } from "class-validator";
+import { TemplateGroup } from "@dayday/database";
 
 export class RegisterOrgDto {
   @ApiProperty({ example: "ООО Пример" })
@@ -25,6 +28,26 @@ export class RegisterOrgDto {
   @IsString()
   @Length(3, 3)
   currency?: string;
+
+  @ApiPropertyOptional({
+    enum: TemplateGroup,
+    default: TemplateGroup.COMMERCIAL,
+    description:
+      "NAS chart template: COMMERCIAL (full), SMALL_BUSINESS (simplified), or GOVERNMENT (reserved / payroll profile)",
+  })
+  @IsOptional()
+  @IsEnum(TemplateGroup)
+  templateGroup?: TemplateGroup;
+
+  @ApiPropertyOptional({
+    enum: ["full", "small"],
+    default: "full",
+    description:
+      "NAS chart onboarding profile: `full` or `small`. When set, overrides `templateGroup` for chart copy.",
+  })
+  @IsOptional()
+  @IsIn(["full", "small"])
+  coaTemplate?: "full" | "small";
 
   @ApiProperty({ example: "owner@company.com" })
   @IsEmail()

@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { Prisma } from "@dayday/database";
 import { InvoiceStatus, LedgerType } from "@dayday/database";
 import { AccountingService } from "../../src/accounting/accounting.service";
@@ -136,5 +137,88 @@ describe("NettingService.createNetting (взаимозачёт)", () => {
       data: { status: InvoiceStatus };
     };
     expect(upd.data.status).toBe(InvoiceStatus.PAID);
+  });
+
+  it("logs server-side when posted amount differs from previewSuggestedAmount", async () => {
+    const logSpy = jest.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
+    const accounting = {
+      postJournalInTransaction: jest.fn().mockResolvedValue({ transactionId: "txn-net-2" }),
+    } as unknown as AccountingService;
+
+    const invoiceRow = {
+      id: invId,
+      totalAmount: new Decimal(200),
+      status: InvoiceStatus.SENT,
+      revenueRecognized: true,
+      dueDate: new Date(),
+      payments: [] as { amount: Decimal }[],
+    };
+    const snapshotInvoices = () => [
+      {
+        ...invoiceRow,
+        payments: invoiceRow.payments.map((p) => ({ amount: p.amount })),
+      },
+    ];
+    const tx = {
+      invoice: {
+        findMany: jest.fn(async () => snapshotInvoices()),
+        findFirstOrThrow: jest.fn(async () => ({
+          id: invoiceRow.id,
+          totalAmount: invoiceRow.totalAmount,
+          status: invoiceRow.status,
+          payments: invoiceRow.payments.map((p) => ({ amount: p.amount })),
+        })),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      invoicePayment: {
+        create: jest.fn(
+          async ({ data }: { data: { amount: Decimal } }) => {
+            invoiceRow.payments.push({ amount: data.amount });
+          },
+        ),
+      },
+    };
+    const prisma = {
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({ settings: {} }),
+      },
+      counterparty: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: cpId,
+          name: "Test CP",
+          isVatPayer: false,
+        }),
+      },
+      invoice: {
+        findMany: jest.fn(async () => snapshotInvoices()),
+      },
+      account: {
+        findFirst: jest.fn(
+          async ({ where: { code } }: { where: { code: string } }) => {
+            if (code === RECEIVABLE_ACCOUNT_CODE) return { id: "acc-211" };
+            if (code === PAYABLE_SUPPLIERS_ACCOUNT_CODE) return { id: "acc-531" };
+            return null;
+          },
+        ),
+      },
+      journalEntry: {
+        findMany: jest.fn().mockResolvedValue([
+          { debit: new Decimal(0), credit: new Decimal(200) },
+        ]),
+      },
+      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    } as unknown as PrismaService;
+
+    const svc = new NettingService(prisma, accounting);
+    await svc.createNetting(orgId, cpId, 50, LedgerType.NAS, undefined, {
+      userId: "user-1",
+      previewSuggestedAmount: 200,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Netting amount manually adjusted"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("userId=user-1"));
+    logSpy.mockRestore();
   });
 });

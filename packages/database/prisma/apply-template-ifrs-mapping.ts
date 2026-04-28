@@ -4,7 +4,7 @@
  * Stores per-org applied version in OrganizationSubscription.customConfig:
  *   { templates: { ifrsMapping: { version: number } } }
  */
-import { LedgerType, AccountType } from "@prisma/client";
+import { LedgerType, AccountType, TemplateGroup } from "@prisma/client";
 import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import { loadTemplateIfrsMappingPackage } from "./template-ifrs";
 
@@ -52,13 +52,20 @@ async function ensureIfrsAccount(params: {
     where: { organizationId, ledgerType: LedgerType.IFRS, code },
   });
   if (existing) return existing;
-  const catalog = await prisma.chartOfAccountsEntry.findUnique({ where: { code } });
+  const catalog = await prisma.chartOfAccountsEntry.findFirst({
+    where: { templateGroup: TemplateGroup.COMMERCIAL, code },
+  });
+  const fbAz = fallbackName;
+  const fbRu = fallbackName;
+  const fbEn = fallbackName;
   return prisma.account.create({
     data: {
       organizationId,
       ledgerType: LedgerType.IFRS,
       code,
-      name: catalog?.name ?? fallbackName,
+      nameAz: catalog?.nameAz ?? fbAz,
+      nameRu: catalog?.nameRu ?? fbRu,
+      nameEn: catalog?.nameEn ?? fbEn,
       type,
     },
   });
@@ -105,7 +112,7 @@ async function applyToOrganization(orgId: string, targetVersion: number) {
     const ifrs = await ensureIfrsAccount({
       organizationId: orgId,
       code: ifrsCode,
-      fallbackName: `${nas.name} (IFRS)`,
+      fallbackName: `${nas.nameRu} (IFRS)`,
       type: nas.type,
     });
 

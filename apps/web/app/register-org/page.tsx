@@ -11,6 +11,8 @@ import type { AuthUser, OrgSummary } from "../../lib/auth-context";
 import { useAuth } from "../../lib/auth-context";
 import { LanguageSwitcher } from "../language-switcher";
 
+type TemplateGroup = "COMMERCIAL" | "SMALL_BUSINESS";
+
 export default function RegisterOrgPage() {
   const { t } = useTranslation();
   const { login, token, ready, user } = useAuth();
@@ -21,6 +23,7 @@ export default function RegisterOrgPage() {
   const [adminLastName, setAdminLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [templateGroup, setTemplateGroup] = useState<TemplateGroup>("COMMERCIAL");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,6 +53,8 @@ export default function RegisterOrgPage() {
           adminLastName: adminLastName.trim(),
           adminEmail,
           adminPassword,
+          templateGroup,
+          coaTemplate: templateGroup === "SMALL_BUSINESS" ? "small" : "full",
         }),
       });
       if (!res.ok) {
@@ -104,6 +109,55 @@ export default function RegisterOrgPage() {
               className={FORM_INPUT_CLASS}
             />
           </label>
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-medium text-gray-700">
+              {t("auth.organizationType")}
+            </legend>
+            <label
+              className={`block rounded-[2px] border p-3 cursor-pointer transition ${
+                templateGroup === "COMMERCIAL"
+                  ? "border-[#2980B9] bg-[#2980B9]/10"
+                  : "border-[#D5DADF] bg-white hover:border-[#B8C0C8]"
+              }`}
+            >
+              <input
+                type="radio"
+                name="organizationType"
+                value="COMMERCIAL"
+                checked={templateGroup === "COMMERCIAL"}
+                onChange={() => setTemplateGroup("COMMERCIAL")}
+                className="sr-only"
+              />
+              <p className="text-sm font-semibold text-[#34495E]">
+                {t("auth.organizationTypeCommercial")}
+              </p>
+              <p className="text-xs text-[#7F8C8D] mt-1">
+                {t("auth.organizationTypeCommercialDesc")}
+              </p>
+            </label>
+            <label
+              className={`block rounded-[2px] border p-3 cursor-pointer transition ${
+                templateGroup === "SMALL_BUSINESS"
+                  ? "border-[#2980B9] bg-[#2980B9]/10"
+                  : "border-[#D5DADF] bg-white hover:border-[#B8C0C8]"
+              }`}
+            >
+              <input
+                type="radio"
+                name="organizationType"
+                value="SMALL_BUSINESS"
+                checked={templateGroup === "SMALL_BUSINESS"}
+                onChange={() => setTemplateGroup("SMALL_BUSINESS")}
+                className="sr-only"
+              />
+              <p className="text-sm font-semibold text-[#34495E]">
+                {t("auth.organizationTypeSmallBusiness")}
+              </p>
+              <p className="text-xs text-[#7F8C8D] mt-1">
+                {t("auth.organizationTypeSmallBusinessDesc")}
+              </p>
+            </label>
+          </fieldset>
           <label className="block text-sm font-medium text-gray-700">
             {t("auth.firstName")}
             <input

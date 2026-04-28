@@ -30,6 +30,26 @@ function parseRecipeLines(text: string): { componentProductId: string; quantityP
   return lines;
 }
 
+function parseByproducts(
+  text: string,
+): { productId: string; quantityPerUnit: number; costFactor?: number }[] {
+  const out: { productId: string; quantityPerUnit: number; costFactor?: number }[] = [];
+  const re =
+    /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*[,;\s]+\s*([\d.]+)(?:\s*[,;\s]+\s*([\d.]+))?\s*$/i;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = re.exec(line);
+    if (!m) throw new Error(`Bad byproduct line: ${line}`);
+    const q = Number(m[2]);
+    const c = m[3] ? Number(m[3]) : 0;
+    if (!Number.isFinite(q) || q <= 0) throw new Error(`Bad byproduct qty: ${line}`);
+    if (!Number.isFinite(c) || c < 0 || c > 1) throw new Error(`Bad byproduct costFactor: ${line}`);
+    out.push({ productId: m[1], quantityPerUnit: q, costFactor: c });
+  }
+  return out;
+}
+
 const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
 
 function ManufacturingRecipeContent() {
@@ -39,6 +59,7 @@ function ManufacturingRecipeContent() {
   const [err, setErr] = useState<string | null>(null);
   const [finId, setFinId] = useState("");
   const [linesText, setLinesText] = useState("");
+  const [byproductsText, setByproductsText] = useState("");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -62,8 +83,10 @@ function ManufacturingRecipeContent() {
     e.preventDefault();
     if (!token || !finId) return;
     let lines: { componentProductId: string; quantityPerUnit: number }[];
+    let byproducts: { productId: string; quantityPerUnit: number; costFactor?: number }[];
     try {
       lines = parseRecipeLines(linesText);
+      byproducts = parseByproducts(byproductsText);
     } catch (e) {
       alert(String(e));
       return;
@@ -71,7 +94,7 @@ function ManufacturingRecipeContent() {
     const res = await apiFetch("/api/manufacturing/recipes", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ finishedProductId: finId, lines }),
+      body: JSON.stringify({ finishedProductId: finId, lines, byproducts }),
     });
     if (!res.ok) {
       alert(await res.text());
@@ -146,6 +169,16 @@ function ManufacturingRecipeContent() {
               className={textareaFieldClass}
               rows={6}
               placeholder="uuid-component  2.5"
+            />
+          </label>
+          <label className="block">
+            <span className={lbl}>{t("manufacturing.byproductsLines")}</span>
+            <textarea
+              value={byproductsText}
+              onChange={(e) => setByproductsText(e.target.value)}
+              className={textareaFieldClass}
+              rows={4}
+              placeholder="uuid-byproduct 0.2 0.0"
             />
           </label>
           <p className="text-xs text-slate-500">{t("manufacturing.hintRecipe")}</p>

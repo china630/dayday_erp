@@ -108,7 +108,10 @@ export default function NewEmployeePage() {
       try {
         const j = JSON.parse(raw) as { code?: string; message?: unknown };
         if (j.code === "QUOTA_EXCEEDED") {
-          if (res.status === 402) return;
+          if (res.status === 402) {
+            alert(t("employees.staffLimitExceeded", { defaultValue: "Штатный лимит по этой должности исчерпан" }));
+            return;
+          }
           const msg =
             typeof j.message === "string"
               ? j.message

@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsDateString,
   IsEnum,
   IsOptional,
   IsString,
@@ -70,8 +71,16 @@ export class PatchOrganizationSettingsDto {
   valuationMethod?: InventoryValuationMethod;
 
   @IsOptional()
+  @IsEnum(InventoryValuationMethod)
+  inventoryValuation?: InventoryValuationMethod;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrganizationBankAccountInputDto)
   bankAccounts?: OrganizationBankAccountInputDto[];
+
+  @IsOptional()
+  @IsDateString()
+  lockedPeriodUntil?: string | null;
 }

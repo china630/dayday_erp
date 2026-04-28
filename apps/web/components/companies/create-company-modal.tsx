@@ -26,12 +26,14 @@ export function CreateCompanyModal({
 
   const [orgName, setOrgName] = useState("");
   const [taxId, setTaxId] = useState("");
+  const [coaTemplate, setCoaTemplate] = useState<"full" | "small">("full");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setOrgName("");
     setTaxId("");
+    setCoaTemplate("full");
     setBusy(false);
   }, [open]);
 
@@ -51,6 +53,7 @@ export function CreateCompanyModal({
           organizationName: orgName.trim(),
           taxId: taxId.replace(/\D/g, "").slice(0, 10),
           currency: "AZN",
+          coaTemplate,
         }),
       });
       if (!res.ok) {
@@ -117,6 +120,27 @@ export function CreateCompanyModal({
                 autoComplete="off"
               />
             </div>
+            <fieldset className="grid gap-2 border-0 p-0 m-0">
+              <legend className={FORM_LABEL_CLASS}>{t("companiesPage.coaTemplateLabel")}</legend>
+              <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                <input
+                  type="radio"
+                  name="coaTemplate"
+                  checked={coaTemplate === "full"}
+                  onChange={() => setCoaTemplate("full")}
+                />
+                {t("companiesPage.coaTemplateFull")}
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                <input
+                  type="radio"
+                  name="coaTemplate"
+                  checked={coaTemplate === "small"}
+                  onChange={() => setCoaTemplate("small")}
+                />
+                {t("companiesPage.coaTemplateSmall")}
+              </label>
+            </fieldset>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">

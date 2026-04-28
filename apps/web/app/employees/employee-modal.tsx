@@ -143,7 +143,7 @@ export function EmployeeModal({
       try {
         const j = JSON.parse(raw) as { code?: string; message?: unknown };
         if (j.code === "QUOTA_EXCEEDED") {
-          toast.error(t("employees.quotaExceeded"));
+          toast.error(t("employees.staffLimitExceeded", { defaultValue: "Штатный лимит по этой должности исчерпан" }));
           return;
         }
       } catch {

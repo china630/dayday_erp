@@ -3,16 +3,22 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Query,
   StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
+  ApiBody,
   ApiBearerAuth,
+  ApiConsumes,
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { UserRole } from "@dayday/database";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -25,8 +31,16 @@ import { FinanceService } from "../finance/finance.service";
 import { ClosePeriodDto } from "./dto/close-period.dto";
 import { CreateNettingDto } from "./dto/create-netting.dto";
 import { ETaxesIntegrationService } from "./etaxes-integration.service";
+import { GenerateTaxDeclarationDto } from "./dto/generate-tax-declaration.dto";
 import { ReportingService } from "./reporting.service";
+import { TaxExportService } from "./tax-export.service";
 import { VatAppendixExportService } from "./vat-appendix-export.service";
+import {
+  plPdfBuffer,
+  plXlsxBuffer,
+  trialBalancePdfBuffer,
+  trialBalanceXlsxBuffer,
+} from "../reports/report-export.util";
 
 @ApiTags("reporting")
 @ApiBearerAuth("bearer")
@@ -36,6 +50,7 @@ export class ReportingController {
     private readonly reporting: ReportingService,
     private readonly vatAppendix: VatAppendixExportService,
     private readonly etaxes: ETaxesIntegrationService,
+    private readonly taxExport: TaxExportService,
     private readonly finance: FinanceService,
   ) {}
 
@@ -55,7 +70,46 @@ export class ReportingController {
     );
   }
 
+  @Get("trial-balance/export")
+  @ApiOperation({ summary: "Export Trial Balance to PDF/XLSX" })
+  async trialBalanceExport(
+    @OrganizationId() organizationId: string,
+    @Query("dateFrom") dateFrom: string,
+    @Query("dateTo") dateTo: string,
+    @Query("format") format: string,
+    @Query("ledgerType") ledgerType?: string,
+  ): Promise<StreamableFile> {
+    const data = await this.reporting.trialBalance(
+      organizationId,
+      dateFrom,
+      dateTo,
+      parseLedgerTypeQuery(ledgerType),
+    );
+    const fmt = (format ?? "").toLowerCase();
+    if (fmt === "xlsx") {
+      const buffer = await trialBalanceXlsxBuffer(data);
+      return new StreamableFile(buffer, {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        disposition: `attachment; filename="trial-balance-${dateFrom}-${dateTo}.xlsx"`,
+      });
+    }
+    const buffer = await trialBalancePdfBuffer(data);
+    return new StreamableFile(buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="trial-balance-${dateFrom}-${dateTo}.pdf"`,
+    });
+  }
+
   @Get("pl")
+  @UseGuards(RolesGuard)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.ADMIN,
+    UserRole.ACCOUNTANT,
+    UserRole.USER,
+    UserRole.AUDITOR,
+    UserRole.WAREHOUSE_KEEPER,
+  )
   @ApiOperation({ summary: "P&L по проводкам (начисление)" })
   profitAndLoss(
     @OrganizationId() organizationId: string,
@@ -63,14 +117,70 @@ export class ReportingController {
     @Query("dateTo") dateTo: string,
     @Query("ledgerType") ledgerType?: string,
     @Query("departmentId") departmentId?: string,
+    @CurrentUser() user?: AuthUser,
   ) {
+    const requestedDepartment = departmentId?.trim();
+    const role = user ? requireOrgRole(user) : null;
+    if (
+      requestedDepartment &&
+      role !== UserRole.OWNER &&
+      role !== UserRole.ACCOUNTANT
+    ) {
+      throw new BadRequestException(
+        "Department filter is available only for OWNER and ACCOUNTANT",
+      );
+    }
     return this.reporting.profitAndLoss(
       organizationId,
       dateFrom,
       dateTo,
       parseLedgerTypeQuery(ledgerType),
-      departmentId,
+      requestedDepartment,
     );
+  }
+
+  @Get("pl/export")
+  @ApiOperation({ summary: "Export Profit&Loss to PDF/XLSX" })
+  async profitAndLossExport(
+    @OrganizationId() organizationId: string,
+    @Query("dateFrom") dateFrom: string,
+    @Query("dateTo") dateTo: string,
+    @Query("format") format: string,
+    @Query("ledgerType") ledgerType?: string,
+    @Query("departmentId") departmentId?: string,
+    @CurrentUser() user?: AuthUser,
+  ): Promise<StreamableFile> {
+    const requestedDepartment = departmentId?.trim();
+    const role = user ? requireOrgRole(user) : null;
+    if (
+      requestedDepartment &&
+      role !== UserRole.OWNER &&
+      role !== UserRole.ACCOUNTANT
+    ) {
+      throw new BadRequestException(
+        "Department filter is available only for OWNER and ACCOUNTANT",
+      );
+    }
+    const data = await this.reporting.profitAndLoss(
+      organizationId,
+      dateFrom,
+      dateTo,
+      parseLedgerTypeQuery(ledgerType),
+      requestedDepartment,
+    );
+    const fmt = (format ?? "").toLowerCase();
+    if (fmt === "xlsx") {
+      const buffer = await plXlsxBuffer(data);
+      return new StreamableFile(buffer, {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        disposition: `attachment; filename="pl-${dateFrom}-${dateTo}.xlsx"`,
+      });
+    }
+    const buffer = await plPdfBuffer(data);
+    return new StreamableFile(buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="pl-${dateFrom}-${dateTo}.pdf"`,
+    });
   }
 
   @Get("dashboard")
@@ -172,6 +282,10 @@ export class ReportingController {
       dto.amount,
       parseLedgerTypeQuery(ledgerType),
       requireOrgRole(user),
+      {
+        userId: user.userId,
+        previewSuggestedAmount: dto.previewSuggestedAmount,
+      },
     );
   }
 
@@ -183,14 +297,29 @@ export class ReportingController {
   reconciliation(
     @OrganizationId() organizationId: string,
     @Query("counterpartyId") counterpartyId: string,
-    @Query("dateFrom") dateFrom: string,
-    @Query("dateTo") dateTo: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("currency") currency?: string,
+    @Query("ledgerType") ledgerType?: string,
   ) {
+    const from = dateFrom ?? startDate;
+    const to = dateTo ?? endDate;
+    if (!from?.trim() || !to?.trim()) {
+      throw new BadRequestException(
+        "dateFrom/dateTo or startDate/endDate are required (YYYY-MM-DD)",
+      );
+    }
     return this.reporting.counterpartyReconciliation(
       organizationId,
       counterpartyId,
-      dateFrom,
-      dateTo,
+      from,
+      to,
+      {
+        currency: currency ?? null,
+        ledgerType: parseLedgerTypeQuery(ledgerType) ?? undefined,
+      },
     );
   }
 
@@ -202,15 +331,30 @@ export class ReportingController {
   async reconciliationPdf(
     @OrganizationId() organizationId: string,
     @Query("counterpartyId") counterpartyId: string,
-    @Query("dateFrom") dateFrom: string,
-    @Query("dateTo") dateTo: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("currency") currency?: string,
+    @Query("ledgerType") ledgerType?: string,
   ): Promise<StreamableFile> {
+    const from = dateFrom ?? startDate;
+    const to = dateTo ?? endDate;
+    if (!from?.trim() || !to?.trim()) {
+      throw new BadRequestException(
+        "dateFrom/dateTo or startDate/endDate are required (YYYY-MM-DD)",
+      );
+    }
     const { buffer, filename } =
       await this.reporting.counterpartyReconciliationPdf(
         organizationId,
         counterpartyId,
-        dateFrom,
-        dateTo,
+        from,
+        to,
+        {
+          currency: currency ?? null,
+          ledgerType: parseLedgerTypeQuery(ledgerType) ?? undefined,
+        },
       );
     return new StreamableFile(buffer, {
       type: "application/pdf",
@@ -219,9 +363,27 @@ export class ReportingController {
   }
 
   @Get("aging")
-  @ApiOperation({ summary: "Старение дебиторской задолженности (0–30 / 31–60 / 61+ дн.)" })
-  aging(@OrganizationId() organizationId: string) {
-    return this.reporting.accountsReceivableAging(organizationId);
+  @ApiOperation({
+    summary:
+      "AR Aging: старение дебиторки (0-30 / 31-60 / 61-90 / 90+), date asOf optional",
+  })
+  aging(
+    @OrganizationId() organizationId: string,
+    @Query("asOf") asOf?: string,
+  ) {
+    return this.reporting.accountsReceivableAging(organizationId, asOf);
+  }
+
+  @Get("ar-aging")
+  @ApiOperation({
+    summary:
+      "AR Aging Report: неоплаченные инвойсы по корзинам просрочки 0-30 / 31-60 / 61-90 / 90+",
+  })
+  arAging(
+    @OrganizationId() organizationId: string,
+    @Query("asOf") asOf?: string,
+  ) {
+    return this.reporting.accountsReceivableAging(organizationId, asOf);
   }
 
   @Get("vat-appendix-xlsx")
@@ -276,6 +438,8 @@ export class ReportingController {
   }
 
   @Post("etaxes-vat-declaration/submit")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary: "ƏDV paketini vergi şlüzünə göndər (E_TAXES_VAT_SUBMIT_URL)",
   })
@@ -293,6 +457,69 @@ export class ReportingController {
       throw new BadRequestException("Invalid quarter (1–4)");
     }
     return this.etaxes.submitDeclarationToGateway(organizationId, year, quarter);
+  }
+
+  @Get("tax-declarations")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary: "List e-Taxes declaration exports with workflow statuses",
+  })
+  listTaxDeclarations(@OrganizationId() organizationId: string) {
+    return this.taxExport.list(organizationId);
+  }
+
+  @Post("tax-declarations/generate")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary: "Generate declaration file for e-taxes (status: GENERATED)",
+  })
+  generateTaxDeclaration(
+    @OrganizationId() organizationId: string,
+    @Body() dto: GenerateTaxDeclarationDto,
+  ) {
+    return this.taxExport.generate(organizationId, dto);
+  }
+
+  @Get("tax-declarations/:id/download")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary: "Download generated declaration file and mark as UPLOADED",
+  })
+  async downloadTaxDeclaration(
+    @OrganizationId() organizationId: string,
+    @Param("id") id: string,
+  ): Promise<StreamableFile> {
+    const out = await this.taxExport.downloadGenerated(organizationId, id);
+    return new StreamableFile(out.buffer, {
+      type: out.contentType,
+      disposition: `attachment; filename="${out.filename}"`,
+    });
+  }
+
+  @Post("tax-declarations/:id/receipt")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: { file: { type: "string", format: "binary" } },
+      required: ["file"],
+    },
+  })
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiOperation({
+    summary: "Attach Elektron Bildiriş PDF and mark declaration CONFIRMED_BY_TAX",
+  })
+  attachReceipt(
+    @OrganizationId() organizationId: string,
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.taxExport.attachReceipt(organizationId, id, file);
   }
 
   @Post("close-period")

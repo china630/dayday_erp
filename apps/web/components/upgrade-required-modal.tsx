@@ -3,8 +3,19 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { apiFetch } from "../lib/api-client";
 
 type ModalReason = "quota" | "read_only";
+type CustomUpgradeDetail = {
+  title?: string;
+  body?: string;
+};
+type UpgradePreviewResponse = {
+  amountToPay: string;
+  daysRemaining: number;
+  currentTier: string;
+  newTier: string;
+};
 
 /**
  * Shown on 402 QUOTA_EXCEEDED: upgrade / subscription (PRD §7.12).
@@ -14,6 +25,8 @@ export function UpgradePlanModalHost() {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ModalReason>("quota");
   const [quotaDetail, setQuotaDetail] = useState<unknown>(null);
+  const [custom, setCustom] = useState<CustomUpgradeDetail | null>(null);
+  const [preview, setPreview] = useState<UpgradePreviewResponse | null>(null);
 
   const onQuota = useCallback((ev: Event) => {
     const ce = ev as CustomEvent<unknown>;
@@ -23,18 +36,46 @@ export function UpgradePlanModalHost() {
   }, []);
 
   const onReadOnly = useCallback(() => {
+    setCustom(null);
     setReason("read_only");
+    setOpen(true);
+  }, []);
+
+  const onCustomUpgrade = useCallback((ev: Event) => {
+    const ce = ev as CustomEvent<CustomUpgradeDetail>;
+    setCustom(ce.detail ?? null);
     setOpen(true);
   }, []);
 
   useEffect(() => {
     window.addEventListener("dayday:subscription-read-only", onReadOnly);
     window.addEventListener("dayday:quota-upgrade", onQuota);
+    window.addEventListener("dayday:upgrade-modal-custom", onCustomUpgrade);
     return () => {
       window.removeEventListener("dayday:subscription-read-only", onReadOnly);
       window.removeEventListener("dayday:quota-upgrade", onQuota);
+      window.removeEventListener("dayday:upgrade-modal-custom", onCustomUpgrade);
     };
-  }, [onQuota, onReadOnly]);
+  }, [onCustomUpgrade, onQuota, onReadOnly]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await apiFetch("/api/billing/upgrade-preview?newTier=ENTERPRISE");
+      if (cancelled || !res.ok) {
+        if (!cancelled) setPreview(null);
+        return;
+      }
+      const data = (await res.json()) as UpgradePreviewResponse;
+      if (!cancelled) {
+        setPreview(data);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -55,6 +96,8 @@ export function UpgradePlanModalHost() {
     reason === "quota"
       ? quotaMsg || t("upgradeModal.quotaBody")
       : t("upgradeModal.body");
+  const title = custom?.title?.trim() || (reason === "quota" ? t("upgradeModal.quotaTitle") : t("upgradeModal.title"));
+  const text = custom?.body?.trim() || body;
 
   return (
     <div
@@ -68,9 +111,23 @@ export function UpgradePlanModalHost() {
           id="upgrade-plan-modal-title"
           className="text-lg font-semibold text-slate-900"
         >
-          {reason === "quota" ? t("upgradeModal.quotaTitle") : t("upgradeModal.title")}
+          {title}
         </h2>
-        <p className="text-sm text-slate-600 leading-relaxed">{body}</p>
+        <p className="text-sm text-slate-600 leading-relaxed">{text}</p>
+        {preview && (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+              {t("upgradeModal.previewTitle")}
+            </p>
+            <p className="mt-1 text-sm text-emerald-900">
+              {t("upgradeModal.previewBody", {
+                amount: preview.amountToPay,
+                daysRemaining: preview.daysRemaining,
+                currentTier: preview.currentTier,
+              })}
+            </p>
+          </div>
+        )}
         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
           <button
             type="button"

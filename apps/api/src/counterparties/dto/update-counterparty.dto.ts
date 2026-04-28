@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
 } from "class-validator";
 
 export class UpdateCounterpartyDto {
@@ -42,6 +43,12 @@ export class UpdateCounterpartyDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  @ApiPropertyOptional({ description: "Counterparty IBAN (optional)" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  iban?: string;
 
   @ApiPropertyOptional({ description: "Плательщик НДС по данным e-taxes lookup" })
   @IsOptional()

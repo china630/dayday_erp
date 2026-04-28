@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { FixedAssetStatus } from "@dayday/database";
 import { Type } from "class-transformer";
 import {
+  IsEnum,
   IsDateString,
   IsInt,
   IsNotEmpty,
@@ -21,15 +23,32 @@ export class CreateFixedAssetDto {
   @IsNotEmpty()
   inventoryNumber!: string;
 
-  @ApiProperty({ example: "2024-01-15" })
+  @ApiProperty({
+    example: "2024-01-15",
+    description: "Дата покупки/ввода в эксплуатацию (purchaseDate)",
+  })
+  @IsOptional()
   @IsDateString()
-  commissioningDate!: string;
+  purchaseDate?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: "Legacy alias: commissioningDate" })
+  @IsOptional()
+  @IsDateString()
+  commissioningDate?: string;
+
+  @ApiProperty({ description: "Стоимость приобретения (purchasePrice)" })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0.0001)
+  purchasePrice?: number;
+
+  @ApiPropertyOptional({ description: "Legacy alias: initialCost" })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.0001)
-  initialCost!: number;
+  initialCost?: number;
 
   @ApiProperty({ description: "Срок полезного использования, месяцев" })
   @Type(() => Number)
@@ -43,4 +62,9 @@ export class CreateFixedAssetDto {
   @IsNumber()
   @Min(0)
   salvageValue?: number;
+
+  @ApiPropertyOptional({ enum: FixedAssetStatus, default: FixedAssetStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(FixedAssetStatus)
+  status?: FixedAssetStatus;
 }

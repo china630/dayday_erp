@@ -6,6 +6,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { ReportingController } from "./reporting.controller";
 import { ReportingService } from "./reporting.service";
 import { ETaxesIntegrationService } from "./etaxes-integration.service";
+import { TaxExportService } from "./tax-export.service";
 import { VatAppendixExportService } from "./vat-appendix-export.service";
 import { VatQuarterDataService } from "./vat-quarter-data.service";
 
@@ -17,6 +18,7 @@ import { VatQuarterDataService } from "./vat-quarter-data.service";
     VatQuarterDataService,
     VatAppendixExportService,
     ETaxesIntegrationService,
+    TaxExportService,
     RolesGuard,
   ],
   exports: [ReportingService],

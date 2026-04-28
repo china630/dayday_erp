@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
@@ -30,12 +31,17 @@ import { parseLedgerTypeQuery } from "../common/ledger-type.util";
 import { BankIntegrationService } from "./bank-integration.service";
 import { BankMatchService } from "./bank-match.service";
 import { BankingService } from "./banking.service";
+import { BankingGatewayService } from "./banking-gateway.service";
 import { CashOutDto } from "./dto/cash-out.dto";
 import { ManualBankEntryDto } from "./dto/manual-bank-entry.dto";
 import { MatchBankLineDto } from "./dto/match-line.dto";
+import { SendBankPaymentDraftDto } from "./dto/send-bank-payment-draft.dto";
+import { ValidateIbanDto } from "./dto/validate-iban.dto";
 import { RequiresModule } from "../subscription/requires-module.decorator";
 import { SubscriptionGuard } from "../subscription/subscription.guard";
 import { ModuleEntitlement } from "../subscription/subscription.constants";
+import { IbanValidationService } from "./iban-validation.service";
+import { IntegrationReliabilityService } from "../integrations/integration-reliability.service";
 
 @ApiTags("banking")
 @ApiBearerAuth("bearer")
@@ -45,8 +51,11 @@ import { ModuleEntitlement } from "../subscription/subscription.constants";
 export class BankingController {
   constructor(
     private readonly banking: BankingService,
+    private readonly gateway: BankingGatewayService,
     private readonly bankMatch: BankMatchService,
     private readonly bankIntegration: BankIntegrationService,
+    private readonly ibanValidation: IbanValidationService,
+    private readonly reliability: IntegrationReliabilityService,
   ) {}
 
   @Get("account-cards")
@@ -60,6 +69,15 @@ export class BankingController {
   ) {
     const lt = parseLedgerTypeQuery(ledgerType);
     return this.banking.getAccountCards(organizationId, lt);
+  }
+
+  @Get("balances")
+  @ApiOperation({
+    summary:
+      "Unified balances across connected bank providers (Pasha/ABB/Birbank) by organization bankKey",
+  })
+  balances(@OrganizationId() organizationId: string) {
+    return this.gateway.getBalances(organizationId);
   }
 
   @Post("import")
@@ -130,6 +148,18 @@ export class BankingController {
     return this.banking.manualBankEntry(organizationId, dto);
   }
 
+  @Post("validate-iban")
+  @ApiOperation({
+    summary:
+      "Deep IBAN validation via provider (available for ENTERPRISE or banking_pro module)",
+  })
+  validateIban(
+    @OrganizationId() organizationId: string,
+    @Body() dto: ValidateIbanDto,
+  ) {
+    return this.ibanValidation.validateViaProvider(organizationId, dto.iban);
+  }
+
   private parseStatementChannel(raw: string | undefined): BankStatementChannel {
     const u = (raw ?? "").trim().toUpperCase();
     if (u === "" || u === "BANK") return BankStatementChannel.BANK;
@@ -143,12 +173,49 @@ export class BankingController {
     return this.banking.listStatements(organizationId);
   }
 
+  @Get("payment-drafts")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Исходящие платежные драфты в банк" })
+  listPaymentDrafts(@OrganizationId() organizationId: string) {
+    return this.banking.listPaymentDrafts(organizationId);
+  }
+
+  @Post("payment-drafts/send")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Отправка исходящего платежа в direct banking адаптер" })
+  sendPaymentDraft(
+    @OrganizationId() organizationId: string,
+    @Body() dto: SendBankPaymentDraftDto,
+  ) {
+    return this.gateway.sendPaymentDraft(organizationId, {
+      fromAccountIban: dto.fromAccountIban,
+      recipientIban: dto.recipientIban,
+      amount: dto.amount.toFixed(4),
+      currency: dto.currency,
+      purpose: dto.purpose,
+      provider: dto.provider,
+    });
+  }
+
   @Post("sync")
   @ApiOperation({
     summary:
       "Direct Banking: ручная синхронизация (mock Pasha + ABB), автосверка уникальных кандидатов",
   })
-  triggerDirectSync(@OrganizationId() organizationId: string) {
+  async triggerDirectSync(
+    @OrganizationId() organizationId: string,
+    @CurrentUser() user: AuthUser,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ) {
+    await this.reliability.executeWithPolicies({
+      provider: "banking_manual_sync",
+      operation: "direct_sync",
+      writeIdempotencyKey:
+        idempotencyKey?.trim() || `${organizationId}:${user.userId}:direct_sync`,
+      request: async () => Promise.resolve({ ok: true }),
+    });
     return this.bankIntegration.runDirectSync(organizationId, "manual");
   }
 

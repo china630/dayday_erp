@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Query,
   Res,
@@ -13,6 +15,8 @@ import type { Response } from "express";
 import { Public } from "../auth/decorators/public.decorator";
 import { PaymentWebhookDto } from "./dto/payment-webhook.dto";
 import { PaymentProviderService } from "./payment-provider.service";
+
+const SUPPORTED_PROVIDERS = new Set(["mock", "pasha", "pasha_bank", "stripe"]);
 
 @ApiTags("billing-public")
 @Public()
@@ -54,6 +58,23 @@ export class BillingPublicController {
       "Callback шлюза (PAŞA Bank): body { orderId, status, signature, externalId? }",
   })
   async webhook(@Body() body: PaymentWebhookDto) {
+    return this.payment.handleWebhook(body);
+  }
+
+  @Post("webhook/:provider")
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      "Public provider webhook for billing auto-resume: marks invoice/order PAID and restores organization billingStatus to ACTIVE.",
+  })
+  async providerWebhook(
+    @Param("provider") provider: string,
+    @Body() body: PaymentWebhookDto,
+  ) {
+    const p = provider.trim().toLowerCase();
+    if (!SUPPORTED_PROVIDERS.has(p)) {
+      throw new BadRequestException("Unknown payment provider");
+    }
     return this.payment.handleWebhook(body);
   }
 }

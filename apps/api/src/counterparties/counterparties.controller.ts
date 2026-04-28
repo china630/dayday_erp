@@ -7,18 +7,30 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { CounterpartyRole } from "@dayday/database";
+import { CounterpartyRole, UserRole } from "@dayday/database";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCounterpartyDto } from "./dto/create-counterparty.dto";
+import { MergeCounterpartiesDto } from "./dto/merge-counterparties.dto";
 import { UpdateCounterpartyDto } from "./dto/update-counterparty.dto";
 import { CounterpartiesService } from "./counterparties.service";
+
+function buildBankAccountsPayload(ibanRaw?: string | null): Array<{ iban: string }> {
+  const iban = ibanRaw?.trim();
+  if (!iban) return [];
+  return [{ iban }];
+}
 
 @ApiTags("counterparties")
 @ApiBearerAuth("bearer")
 @Controller("counterparties")
+@UseGuards(RolesGuard)
+@Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.USER)
 export class CounterpartiesController {
   constructor(
     private readonly prisma: PrismaService,
@@ -55,6 +67,7 @@ export class CounterpartiesController {
   }
 
   @Post()
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: "Создать контрагента" })
   async create(
     @OrganizationId() orgId: string,
@@ -92,6 +105,9 @@ export class CounterpartiesController {
           role: dto.role ?? CounterpartyRole.CUSTOMER,
           address: dto.address ?? null,
           email: dto.email?.trim() || null,
+          ...(dto.iban !== undefined && {
+            bankAccounts: buildBankAccountsPayload(dto.iban),
+          }),
           isVatPayer: dto.isVatPayer ?? linked.isVatPayer ?? null,
           ...(dto.portalLocale !== undefined && {
             portalLocale: dto.portalLocale,
@@ -101,7 +117,20 @@ export class CounterpartiesController {
       });
       await this.svc.syncDirectoryAfterLocalSave(orgId, updated.id);
       return updated;
-    } catch {
+    } catch (e) {
+      await this.prisma.auditLog.create({
+        data: {
+          organizationId: orgId,
+          userId: null,
+          entityType: "Counterparty",
+          entityId: taxId,
+          action: "DEGRADED_MODE_ETAXES_FALLBACK",
+          newValues: {
+            reason: e instanceof Error ? e.message : String(e),
+            taxId,
+          } as object,
+        },
+      });
       // fallback to legacy local-only create
     }
     const created = await this.prisma.counterparty.create({
@@ -113,6 +142,9 @@ export class CounterpartiesController {
         role: dto.role ?? CounterpartyRole.CUSTOMER,
         address: dto.address ?? null,
         email: dto.email?.trim() || null,
+        ...(dto.iban !== undefined && {
+          bankAccounts: buildBankAccountsPayload(dto.iban),
+        }),
         isVatPayer: dto.isVatPayer ?? null,
         ...(dto.portalLocale !== undefined && {
           portalLocale: dto.portalLocale,
@@ -125,6 +157,7 @@ export class CounterpartiesController {
   }
 
   @Patch(":id")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: "Обновить контрагента" })
   async update(
     @OrganizationId() orgId: string,
@@ -160,6 +193,9 @@ export class CounterpartiesController {
         ...(dto.role !== undefined && { role: dto.role }),
         ...(dto.address !== undefined && { address: dto.address || null }),
         ...(dto.email !== undefined && { email: dto.email?.trim() || null }),
+        ...(dto.iban !== undefined && {
+          bankAccounts: buildBankAccountsPayload(dto.iban),
+        }),
         ...(dto.isVatPayer !== undefined && { isVatPayer: dto.isVatPayer }),
         ...(dto.portalLocale !== undefined && {
           portalLocale: dto.portalLocale,
@@ -169,5 +205,19 @@ export class CounterpartiesController {
     });
     await this.svc.syncDirectoryAfterLocalSave(orgId, updated.id);
     return updated;
+  }
+
+  @Post("merge")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Слить дубликаты контрагентов (source -> target)" })
+  async merge(
+    @OrganizationId() orgId: string,
+    @Body() dto: MergeCounterpartiesDto,
+  ) {
+    return this.svc.mergeCounterparties({
+      organizationId: orgId,
+      sourceId: dto.sourceId,
+      targetId: dto.targetId,
+    });
   }
 }

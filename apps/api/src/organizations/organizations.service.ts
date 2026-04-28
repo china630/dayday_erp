@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { UserRole, syncAzChartForOrganization, type Prisma } from "@dayday/database";
+import {
+  CoaTemplateProfile,
+  UserRole,
+  provisionNasAccountsForOrganization,
+  type Prisma,
+} from "@dayday/database";
 import { AccountsService } from "../accounts/accounts.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AccessControlService } from "../access/access-control.service";
@@ -17,15 +22,16 @@ export class OrganizationsService {
   ) {}
 
   /**
-   * Copies the platform NAS chart template (`chart_of_accounts_entries` + JSON) into this
-   * organization's `accounts`, then bootstraps multi-GAAP (IFRS mirror). Call inside the same
-   * `prisma.$transaction` as `organization.create` so onboarding stays atomic.
+   * Копирует глобальный NAS (`template_accounts`, иначе legacy `chart_of_accounts_entries`) в
+   * `accounts` организации по профилю Small/Full, затем Multi-GAAP bootstrap. Вызывать в той же
+   * `prisma.$transaction`, что и `organization.create`.
    */
   async provisionChartOfAccountsFromTemplate(
     tx: Prisma.TransactionClient,
     organizationId: string,
+    profile: CoaTemplateProfile = CoaTemplateProfile.COMMERCIAL_FULL,
   ): Promise<void> {
-    await syncAzChartForOrganization(tx, organizationId);
+    await provisionNasAccountsForOrganization(tx, organizationId, profile);
     await this.accounts.bootstrapMultiGaapForNewOrganization(organizationId, tx);
   }
 

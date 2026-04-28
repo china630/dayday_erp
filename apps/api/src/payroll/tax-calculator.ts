@@ -17,6 +17,8 @@ export type TaxCalculatorOrgSettings = {
   dsmfEmployerPreferential?: boolean;
 };
 
+export type PayrollTemplateGroup = "COMMERCIAL" | "GOVERNMENT";
+
 export function parsePayrollTaxSettings(settings: unknown): TaxCalculatorOrgSettings {
   const s = (settings ?? {}) as Record<string, unknown>;
   const payroll = (s.payroll ?? {}) as Record<string, unknown>;
@@ -79,6 +81,77 @@ export function calculatePrivateNonOilPayrollV161(
     unemploymentWorker,
     unemploymentEmployer,
     contractorSocialWithheld: new Decimal(0),
+    net,
+  };
+}
+
+/**
+ * Government profile baseline:
+ * - Income tax: 14% on gross
+ * - DSMF worker/employer: 3% / 22%
+ * - ITS worker/employer: 2% / 2%
+ * - Unemployment worker/employer: 0.5% / 0.5%
+ */
+export function calculateGovernmentPayrollV1(
+  grossRaw: Decimal,
+): PayrollBreakdownPrivate {
+  const gross = roundMoney2(grossRaw);
+  const incomeTax = roundMoney2(gross.mul(0.14));
+  const dsmfWorker = roundMoney2(gross.mul(0.03));
+  const dsmfEmployer = roundMoney2(gross.mul(0.22));
+  const itsWorker = roundMoney2(gross.mul(0.02));
+  const itsEmployer = roundMoney2(gross.mul(0.02));
+  const unemploymentWorker = roundMoney2(gross.mul(0.005));
+  const unemploymentEmployer = roundMoney2(gross.mul(0.005));
+  const net = roundMoney2(
+    gross.sub(incomeTax).sub(dsmfWorker).sub(itsWorker).sub(unemploymentWorker),
+  );
+  return {
+    gross,
+    incomeTax,
+    dsmfWorker,
+    dsmfEmployer,
+    itsWorker,
+    itsEmployer,
+    unemploymentWorker,
+    unemploymentEmployer,
+    contractorSocialWithheld: new Decimal(0),
+    net,
+  };
+}
+
+export function calculatePayrollByTemplateGroup(
+  grossRaw: Decimal,
+  templateGroup: PayrollTemplateGroup,
+  orgSettings?: TaxCalculatorOrgSettings,
+): PayrollBreakdownPrivate {
+  if (templateGroup === "GOVERNMENT") {
+    return calculateGovernmentPayrollV1(grossRaw);
+  }
+  return calculatePrivateNonOilPayrollV161(grossRaw, orgSettings);
+}
+
+export function calculateContractorMicroPayrollTax(
+  grossRaw: Decimal,
+  monthlyFixedSocialAzn?: Decimal | null,
+): PayrollBreakdownPrivate {
+  const gross = roundMoney2(grossRaw);
+  const incomeTax = roundMoney2(gross.mul(0.05));
+  const fixed =
+    monthlyFixedSocialAzn != null && monthlyFixedSocialAzn.gt(0)
+      ? roundMoney2(monthlyFixedSocialAzn)
+      : new Decimal(0);
+  const net = roundMoney2(gross.sub(incomeTax).sub(fixed));
+  return {
+    gross,
+    incomeTax,
+    dsmfWorker: new Decimal(0),
+    dsmfEmployer: new Decimal(0),
+    itsWorker: new Decimal(0),
+    itsEmployer: new Decimal(0),
+    unemploymentWorker: new Decimal(0),
+    unemploymentEmployer: new Decimal(0),
+    contractorSocialWithheld: fixed,
     net,
   };
 }

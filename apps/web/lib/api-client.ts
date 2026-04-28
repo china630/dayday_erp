@@ -91,6 +91,14 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
             }),
           );
         }
+        if (
+          data &&
+          typeof data === "object" &&
+          "code" in data &&
+          (data as { code?: string }).code === "MODULE_NOT_ENTITLED"
+        ) {
+          skipApiErrorToast = true;
+        }
       } catch {
         /* ignore */
       }

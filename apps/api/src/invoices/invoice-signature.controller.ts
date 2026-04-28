@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
+import { UserRole } from "@dayday/database";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { SignatureService } from "../signature/signature.service";
 import { InitiateSignatureDto } from "./dto/initiate-signature.dto";
@@ -19,6 +22,8 @@ export class InvoiceSignatureController {
   ) {}
 
   @Post(":id/signature/initiate")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "Запуск ЭЦП: ASAN İmza (мобильное подтверждение) или SİMA (биометрия; в ответе simQrPayload для QR). SIGNATURE_GATEWAY_MOCK=1 — авто-завершение ~2 с при опросе. SIMA_QR_PAYLOAD_URL — URL от шлюза вместо mock JSON.",

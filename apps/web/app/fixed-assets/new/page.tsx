@@ -18,8 +18,8 @@ function NewFixedAssetForm() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [invNo, setInvNo] = useState("");
-  const [commission, setCommission] = useState("");
-  const [initial, setInitial] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState("");
   const [life, setLife] = useState("60");
   const [salvage, setSalvage] = useState("0");
   const [busy, setBusy] = useState(false);
@@ -34,8 +34,8 @@ function NewFixedAssetForm() {
       body: JSON.stringify({
         name: name.trim(),
         inventoryNumber: invNo.trim(),
-        commissioningDate: commission,
-        initialCost: Number(initial),
+        purchaseDate,
+        purchasePrice: Number(purchasePrice),
         usefulLifeMonths: Number(life),
         salvageValue: Number(salvage || 0),
       }),
@@ -89,8 +89,8 @@ function NewFixedAssetForm() {
           <span className={lbl}>{t("fixedAssets.commission")}</span>
           <input
             type="date"
-            value={commission}
-            onChange={(e) => setCommission(e.target.value)}
+            value={purchaseDate}
+            onChange={(e) => setPurchaseDate(e.target.value)}
             className={inputFieldClass}
           />
         </div>
@@ -99,8 +99,8 @@ function NewFixedAssetForm() {
           <input
             type="number"
             step="0.01"
-            value={initial}
-            onChange={(e) => setInitial(e.target.value)}
+            value={purchasePrice}
+            onChange={(e) => setPurchasePrice(e.target.value)}
             className={inputFieldClass}
             required
           />

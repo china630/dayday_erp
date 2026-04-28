@@ -1,10 +1,13 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { AccountsModule } from "../accounts/accounts.module";
 import { AccessControlModule } from "../access/access-control.module";
+import { BankingModule } from "../banking/banking.module";
 import { FxModule } from "../fx/fx.module";
 import { GlobalCompanyDirectoryModule } from "../global-directory/global-company-directory.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { ReportingModule } from "../reporting/reporting.module";
+import { TaxModule } from "../tax/tax.module";
+import { AuthModule } from "../auth/auth.module";
 import { OrganizationsController } from "./organizations.controller";
 import { OrganizationsService } from "./organizations.service";
 import { HoldingsController } from "./holdings.controller";
@@ -18,9 +21,12 @@ import { OrganizationSettingsService } from "./organization-settings.service";
     PrismaModule,
     AccountsModule,
     AccessControlModule,
+    BankingModule,
     ReportingModule,
     FxModule,
+    TaxModule,
     GlobalCompanyDirectoryModule,
+    forwardRef(() => AuthModule),
   ],
   controllers: [
     OrganizationsController,

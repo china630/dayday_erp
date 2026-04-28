@@ -1,0 +1,1822 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PRD</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; padding: 0 1rem; color: #222; }
+    .toc { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; background: #fafafa; }
+    .toc h2 { margin: 0 0 .5rem 0; font-size: 1.1rem; }
+    .toc ul { margin: 0; padding-left: 1.25rem; }
+    .toc li { margin: .25rem 0; }
+    .toc a { text-decoration: none; color: #0b57d0; }
+    .toc a:hover { text-decoration: underline; }
+    code { background: #f0f0f0; padding: .1rem .3rem; border-radius: 4px; }
+    pre { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; overflow: auto; }
+    pre code { display: block; background: transparent; padding: 0; }
+    blockquote { border-left: 4px solid #ddd; margin: 1rem 0; padding: .25rem 1rem; color: #555; }
+    hr { border: none; border-top: 1px solid #e5e5e5; margin: 1.5rem 0; }
+    img { max-width: 100%; height: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: .5rem .65rem; vertical-align: top; }
+    thead th { background: #f5f5f5; }
+    ul, ol { padding-left: 1.5rem; }
+    h1, h2 { scroll-margin-top: 1rem; }
+    .headerlink { margin-left: .35rem; font-size: .85em; color: #999; text-decoration: none; }
+    .math-display { margin: 1rem 0; overflow-x: auto; }
+  </style>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+<nav class="toc">
+<h2>Содержание</h2>
+<ul>
+<li><a href="#product-requirements-document-prd-dayday-erp">Product Requirements Document (PRD): DayDay ERP</a><ul>
+<li><a href="#_1">Метаданные продукта</a></li>
+<li><a href="#1">1. Видение и ценностное предложение</a><ul>
+<li><a href="#11">1.1. Холдинг и консолидация валют отчётности</a></li>
+</ul>
+</li>
+<li><a href="#2">2. Цели и задачи</a><ul>
+<li><a href="#21">2.1. Ядро продукта</a></li>
+<li><a href="#22-3x">2.2. Версия 3.x (экосистема) — продуктовые цели</a></li>
+<li><a href="#23-4x-v81">2.3. Версия 4.x (коммерция) и v8.1 (конструктор)</a></li>
+</ul>
+</li>
+<li><a href="#3">3. Архитектурные принципы</a><ul>
+<li><a href="#31-multi-tenancy">3.1. Изоляция данных (Multi-tenancy)</a></li>
+<li><a href="#32-many-to-many">3.2. Модель доступа: «Пользователь — Организация» (Many-to-Many)</a></li>
+<li><a href="#33-double-entry-bookkeeping">3.3. Финансовый движок (Double-Entry Bookkeeping)</a></li>
+<li><a href="#34-v3">3.4. Интеграции (v3+, ориентир)</a></li>
+</ul>
+</li>
+<li><a href="#4-core-mvp">4. Продуктовые модули (Core MVP и смежные возможности)</a><ul>
+<li><a href="#41-1-iam-multi-tenancy">4.1. Модуль 1: IAM &amp; Multi-tenancy</a></li>
+<li><a href="#42-2-ledger-finance-core">4.2. Модуль 2: Ledger &amp; Finance Core</a></li>
+<li><a href="#43-3-crm-counterparties">4.3. Модуль 3: CRM &amp; Counterparties</a></li>
+<li><a href="#44-4-sales-invoicing">4.4. Модуль 4: Sales &amp; Invoicing</a></li>
+<li><a href="#441-guest-access">4.4.1. Публичный портал счёта для клиента (Guest Access)</a></li>
+<li><a href="#45-5-cash-management-treasury">4.5. Модуль 5: Cash Management (Treasury)</a></li>
+<li><a href="#46-6-hr-payroll">4.6. Модуль 6: HR &amp; Payroll (локализация АР)</a></li>
+<li><a href="#47-7-reporting">4.7. Модуль 7: Reporting</a></li>
+<li><a href="#48-8-compliance-security">4.8. Модуль 8: Неизменяемый аудит (Compliance &amp; Security)</a></li>
+<li><a href="#49-hr-org-structure">4.9. Организационный менеджмент (HR &amp; Org Structure) — целевое развитие</a></li>
+<li><a href="#410-9">4.10. Модуль 9: Складская коррекция и инвентаризация (целевое развитие)</a></li>
+<li><a href="#411">4.11. Взаимозачёт (схлопывание встречных долгов)</a></li>
+<li><a href="#412-erp-2026">4.12. Реализованные доработки по плану улучшения ERP (синхронизация продукт ↔ код, 2026)</a></li>
+<li><a href="#413-management-reports-cash-flow-direct-method">4.13. Management Reports: Cash Flow (Direct method)</a></li>
+</ul>
+</li>
+<li><a href="#5-v2-scope">5. Дорожная карта: расширения (v2 — конкурентный scope)</a><ul>
+<li><a href="#50-bridge-sprint-security-rbac-hardening">5.0. Bridge Sprint (Security &amp; RBAC Hardening) — статус выполнения</a></li>
+<li><a href="#51-v11-v20">5.1. Системные шаблоны плана счетов и онбординг организации (v1.1 / v2.0)</a></li>
+<li><a href="#5d-fixed-assets-v2">5.D. Fixed Assets v2: реестр ОС и амортизация</a></li>
+<li><a href="#52-v31-roadmap">5.2. v3.1 — масштабируемость и производительность (Roadmap)</a></li>
+</ul>
+</li>
+<li><a href="#6-v3-azerbaijan-digital-ecosystem">6. Дорожная карта: v3 — «Azerbaijan Digital Ecosystem»</a><ul>
+<li><a href="#61">6.1. Государственные сервисы</a></li>
+<li><a href="#60-external-iban-validation-api">6.0. External IBAN Validation API</a></li>
+<li><a href="#62-asan-imza-sima">6.2. Цифровое доверие (ASAN İmza / SİMA)</a></li>
+<li><a href="#63-direct-banking">6.3. Direct Banking</a></li>
+<li><a href="#64">6.4. Умный комплаенс</a></li>
+<li><a href="#65-ga">6.5. Метрики успеха (ориентиры после GA фич)</a></li>
+<li><a href="#66-v3">6.6. Вехи v3 (план)</a></li>
+<li><a href="#67-v32-10k-concurrency-b2bb2g">6.7. Архитектурное расширение v3.2+ (10k+ concurrency, B2B/B2G)</a></li>
+</ul>
+</li>
+<li><a href="#7-v4-commercial-saas-monetization">7. Дорожная карта: v4 — Commercial SaaS &amp; Monetization</a><ul>
+<li><a href="#71-v81-v88-hybrid-lego-v100">7.1. Модель подписки: Конструктор тарифов (v8.1, расширение v8.8) и Hybrid LEGO (v10.0)</a></li>
+<li><a href="#72">7.2. Продуктовые механизмы</a></li>
+<li><a href="#73-prd-v41">7.3. Демо-режим (PRD v4.1)</a></li>
+<li><a href="#731">7.3.1. Главная страница (дашборд организации)</a></li>
+<li><a href="#74-v4">7.4. Критерии успеха v4</a></li>
+<li><a href="#75-v4">7.5. Вне объёма v4</a></li>
+<li><a href="#76-super-admin-back-office">7.6. Платформа: Super-Admin Back-office</a></li>
+<li><a href="#77-v56-data-safety">7.7. Платформа (v5.6): гарантированная изоляция тенантов (Data Safety)</a></li>
+<li><a href="#78-v57-ux-data-integrity">7.8. Платформа (v5.7): консистентность данных и UX (Data Integrity)</a></li>
+<li><a href="#79-v58-advanced-rbac">7.9. Платформа (v5.8): матрица полномочий (Advanced RBAC)</a></li>
+<li><a href="#710-v59-final-consistency-rc1">7.10. Процессная инвентаризация (v5.9 — Final Consistency / RC1)</a></li>
+<li><a href="#711-v60">7.11. Платформа (v6.0): усиление атомарности (неделимый блок БД)</a></li>
+<li><a href="#712-billing-subscription-v100-hybrid-lego">7.12. Billing &amp; Subscription (v10.0) — владение, Hybrid LEGO, квоты, счета платформы</a></li>
+</ul>
+</li>
+<li><a href="#8">8. Рамки и правила актуализации документа</a></li>
+<li><a href="#9">9. Сущности базы данных (сводно)</a></li>
+<li><a href="#10">10. Нефункциональные требования</a><ul>
+<li><a href="#100-owner">10.0. Журнал безопасности (роль OWNER)</a></li>
+<li><a href="#101-ux-ui-standards-v89">10.1. UX / UI Standards (v8.9)</a></li>
+<li><a href="#103">10.3. Масштабируемость и нагрузки</a></li>
+</ul>
+</li>
+<li><a href="#11-core-mvp">11. Критерии приёмки Core MVP</a><ul>
+<li><a href="#110-v190-v250">11.0. Профиль организации, объектное хранилище и метод оценки запасов (v19.0 / v25.0)</a></li>
+</ul>
+</li>
+<li><a href="#12">12. Зафиксированные решения (скоуп, тенанты, валюты, периоды, локаль)</a></li>
+<li><a href="#13-prd">13. История версий документа PRD</a><ul>
+<li><a href="#131">13.1. Принцип ведения истории (дальше)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+<main>
+<h1 id="product-requirements-document-prd-dayday-erp"><a class="toclink" href="#product-requirements-document-prd-dayday-erp">Product Requirements Document (PRD): DayDay ERP</a></h1>
+<p>Единый документ продукта: объединяет базовое ядро (исходный PRD), направления v2, экосистему v3 и коммерческую модель v4. Детализация реализации — в <a href="./TZ.md">TZ.md</a> (единый ТЗ).</p>
+<hr>
+<h2 id="_1"><a class="toclink" href="#_1">Метаданные продукта</a></h2>
+<table>
+<thead>
+<tr>
+<th>Параметр</th>
+<th>Значение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Продукт</strong></td>
+<td>Модульная SaaS-платформа для управления финансами и бизнес-процессами (B2B / B2B2C)</td>
+</tr>
+<tr>
+<td><strong>Целевая аудитория</strong></td>
+<td>Малый и средний бизнес в Азербайджане, индивидуальные предприниматели, государственные учреждения и бюджетные организации (B2G)</td>
+</tr>
+<tr>
+<td><strong>Технологический стек</strong></td>
+<td>Next.js, NestJS, Prisma, PostgreSQL, Redis, BullMQ, Docker Compose</td>
+</tr>
+<tr>
+<td><strong>Репозиторий</strong></td>
+<td>Monorepo: <code>apps/web</code>, <code>apps/api</code>, <code>packages/database</code></td>
+</tr>
+<tr>
+<td><strong>Связанные документы</strong></td>
+<td><a href="./TZ.md">TZ.md</a></td>
+</tr>
+<tr>
+<td><strong>Карта разделов</strong></td>
+<td>§1–2 — видение и цели; §3 — архитектура; §4 — модули продукта <strong>1–9</strong> и <strong>§4.12</strong> — зафиксированные доработки по плану улучшения ERP; §5–7 — дорожная карта (v2–v4), в т.ч. <strong>§5.1</strong> — системные шаблоны и онбординг (v1.1 / v2.0); §8 — рамки текущей редакции; §9 — модель данных; §10–11 — NFR и приёмка; §12 — зафиксированные решения</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="1"><a class="toclink" href="#1">1. Видение и ценностное предложение</a></h2>
+<h3 id="11"><a class="toclink" href="#11">1.1. Холдинг и консолидация валют отчётности</a></h3>
+<p><strong>Единая валюта отчётности:</strong> при просмотре <strong>сводных</strong> показателей по <strong>холдингу</strong> (агрегация нескольких организаций — см. §4.12) денежные суммы приводятся к <strong>базовой валюте холдинга</strong> (по умолчанию <strong>AZN</strong>) по <strong>официальному курсу ЦБА (ARMB)</strong>.</p>
+<p><strong>Стандарт точности (сводный P&amp;L по холдингу): Monthly Slices (помесячная нарезка).</strong> Период отчёта <code>[dateFrom, dateTo]</code> разбивается на <strong>непересекающиеся календарные фрагменты внутри месяцев</strong> (UTC). Для каждого фрагмента считается чистая прибыль организации за этот подпериод и переводится в валюту холдинга <strong><code>convert(amount, orgCurrency, holdingBase, fxAsOf)</code></strong>, где <strong><code>fxAsOf</code></strong> — <strong>последний день фрагмента</strong> (конец «куска» в пределах месяца). Суммы по фрагментам <strong>складываются</strong>. Отдельно: <strong>дашборд cash/bank</strong> по холдингу может использовать <strong>одну дату <code>asOf</code></strong> для сравнения «на дату» — это не отменяет политику Monthly Slices для <strong>сводного P&amp;L за интервал</strong>. Реализация: <code>HoldingsReportingService.consolidatedProfitAndLoss</code>, <code>CurrencyConverterService</code> — см. <a href="./TZ.md">TZ.md</a> §1.1.</p>
+<p><strong>Иерархия холдинга:</strong> организации могут быть объединены в холдинг через <code>Organization.holdingId</code> (nullable). UI показывает структуру <strong>Holding → дочерние компании</strong> и отдельную секцию «свободных компаний» (не входящих в холдинг). Внутри продукта предусмотрен отдельный дашборд <code>/holding</code> с агрегированными показателями по холдингу (cash/bank в базовой валюте) и модальным созданием холдинга (кнопка «Новый холдинг»).</p>
+<p><strong>Направление:</strong> от надёжного ядра двойной записи и модулей учёта — к платформе, конкурентоспособной с классическими ERP за счёт скорости, соответствия локальным и при необходимости международным стандартам (МСФО), интеграций с госсервисами и банками Азербайджана.</p>
+<table>
+<thead>
+<tr>
+<th>Персона</th>
+<th>Ценность</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Бухгалтер</strong></td>
+<td>«Закрытие месяца за 10 минут» (автосверки, амортизация, шаблоны для e-taxes) — целевое состояние дорожной карты</td>
+</tr>
+<tr>
+<td><strong>Владелец</strong></td>
+<td>Прозрачная дебиторка: кто, сколько и как долго должен</td>
+</tr>
+<tr>
+<td><strong>Инвестор / управление</strong></td>
+<td>Отчётность по мировым стандартам при параллельном учёте (Multi-GAAP) — как опция</td>
+</tr>
+<tr>
+<td><strong>Администратор SaaS (v4)</strong></td>
+<td>Предсказуемые тарифы, лимиты и оплата без «тихих» превышений квот</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Core MVP</strong> — модули <strong>1–7</strong> (PRD §4.1–4.7); <strong>модуль 8</strong> (аудит) — §4.8; <strong>модуль 9</strong> (склад/инвентаризация) — §4.10; дорожная карта и платформа — <strong>§5–§7</strong>. Полная детализация под все продукты 1С до старта кодирования не делается.</p>
+<hr>
+<h2 id="2"><a class="toclink" href="#2">2. Цели и задачи</a></h2>
+<h3 id="21"><a class="toclink" href="#21">2.1. Ядро продукта</a></h3>
+<table>
+<thead>
+<tr>
+<th>Цель</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Универсальное ядро</strong></td>
+<td>Отказоустойчивый движок учёта на базе двойной записи</td>
+</tr>
+<tr>
+<td><strong>Мультитенантность</strong></td>
+<td>Строгая изоляция данных между организациями</td>
+</tr>
+<tr>
+<td><strong>Масштабируемость</strong></td>
+<td>Подключение новых модулей (Склад, Производство и т.д.) без переписывания ядра</td>
+</tr>
+<tr>
+<td><strong>Локализация</strong></td>
+<td>Специфика учёта Азербайджанской Республики (АР)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-3x"><a class="toclink" href="#22-3x">2.2. Версия 3.x (экосистема) — продуктовые цели</a></h3>
+<table>
+<thead>
+<tr>
+<th>Цель</th>
+<th>Смысл</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>G1</strong></td>
+<td>Устранение ручного ввода: обмен данными с налоговой и банками по API, где доступно</td>
+</tr>
+<tr>
+<td><strong>G2</strong></td>
+<td>Юридическая значимость: цифровая подпись для безбумажного документооборота</td>
+</tr>
+<tr>
+<td><strong>G3</strong></td>
+<td>Точность: верификация контрагентов по госреестрам при доступности API</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-4x-v81"><a class="toclink" href="#23-4x-v81">2.3. Версия 4.x (коммерция) и v8.1 (конструктор)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Цель</th>
+<th>Смысл</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Облачный сервис</strong></td>
+<td>Платная подписка, разграничение доступа к модулям, лимиты на уровне организации</td>
+</tr>
+<tr>
+<td><strong>Конструктор тарифов (v8.1+)</strong></td>
+<td><strong>Фундамент (Core)</strong> — бесплатный или минимальный набор (главная книга, контакты); <strong>Add-ons</strong> — платные модули (Banking Pro, Manufacturing, HR Full, Fixed Assets и др.) с индивидуальной ценой; <strong>Quotas</strong> — слайдеры лимитов (сотрудники, инвойсы, облако); <strong>период оплаты</strong> — скидка <strong>20%</strong> при годовой оплате. Устаревшая маркетинговая схема «три жёстких тарифа» заменяется гибкой сборкой плана (tier остаётся в БД для совместимости и аналитики).</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="3"><a class="toclink" href="#3">3. Архитектурные принципы</a></h2>
+<h3 id="31-multi-tenancy"><a class="toclink" href="#31-multi-tenancy">3.1. Изоляция данных (Multi-tenancy)</a></h3>
+<ul>
+<li>Таблицы (кроме системных справочников) содержат <code>organizationId</code> (UUID).</li>
+<li>Запросы к API проходят через middleware / interceptor: из JWT извлекается <code>organizationId</code>, выборка ограничена текущей организацией.</li>
+<li>Глобальный фильтр Prisma: <code>findMany</code> / <code>findUnique</code> с <code>where: { organizationId }</code> (см. <a href="./TZ.md">TZ.md</a> §2).</li>
+</ul>
+<h3 id="32-many-to-many"><a class="toclink" href="#32-many-to-many">3.2. Модель доступа: «Пользователь — Организация» (Many-to-Many)</a></h3>
+<p><strong>Цель:</strong> одно физическое лицо может управлять несколькими бизнес-единицами или работать в них под едиными учётными данными.</p>
+<ul>
+<li><strong>Изоляция identity:</strong> профиль пользователя (email, пароль) отделён от данных организаций.</li>
+<li><strong>Владение (ownership):</strong> при создании организации пользователь автоматически получает роль <strong>OWNER</strong>.</li>
+<li><strong>Присоединение к компании:</strong> поиск существующей организации по <strong>VÖEN</strong>; если она уже зарегистрирована, отправляется <strong>запрос на доступ (Access Request)</strong> владельцу; владелец получает уведомление и может подтвердить или отклонить запрос, назначив роль.</li>
+<li><strong>Интерфейс переключения:</strong> глобальный <strong>селектор организаций (Switcher)</strong> в UI, позволяющий менять контекст без повторного логина.</li>
+</ul>
+<h3 id="33-double-entry-bookkeeping"><a class="toclink" href="#33-double-entry-bookkeeping">3.3. Финансовый движок (Double-Entry Bookkeeping)</a></h3>
+<p><strong>План счетов (Accounts)</strong> — дерево; атрибуты: <code>code</code>, <code>name</code>, <code>type</code> (Asset, Liability, Equity, Revenue, Expense).</p>
+<p><strong>Транзакция</strong> — группирующая сущность: дата, описание, ссылка на документ-основание.</p>
+<p><strong>Проводка (Journal Entry)</strong> — <code>accountId</code>, <code>debit</code>, <code>credit</code>.</p>
+<p><strong>Инвариант:</strong> в одной транзакции Σ Debit = Σ Credit; финансовые операции в БД-транзакциях (ACID).</p>
+<h3 id="34-v3"><a class="toclink" href="#34-v3">3.4. Интеграции (v3+, ориентир)</a></h3>
+<ul>
+<li>Интеграции выносятся в адаптеры / отдельные границы; при падении внешнего API ядро остаётся доступным, интеграции показывают статус «недоступно».</li>
+<li>Тяжёлые задачи: <strong>BullMQ + Redis</strong> (ЗП, импорт, синхронизация банков, массовые операции).</li>
+</ul>
+<hr>
+<h2 id="4-core-mvp"><a class="toclink" href="#4-core-mvp">4. Продуктовые модули (Core MVP и смежные возможности)</a></h2>
+<p>Нумерация модулей <strong>1–9</strong> совпадает с <a href="./TZ.md">TZ.md</a> (§2–§10). Расширения дорожной карты — в §5–§7.</p>
+<h3 id="41-1-iam-multi-tenancy"><a class="toclink" href="#41-1-iam-multi-tenancy">4.1. Модуль 1: IAM &amp; Multi-tenancy</a></h3>
+<ul>
+<li>Связь <strong>пользователь — организация</strong> в модели <strong>many-to-many</strong>; переключение активной организации без повторного входа (см. §3.2).</li>
+<li>Регистрация организации и администратора; при необходимости — запрос доступа к уже существующей организации по VÖEN.</li>
+<li>На этапе регистрации организации выбор типа шаблона учёта <strong>обязателен</strong>: <code>templateGroup = COMMERCIAL | GOVERNMENT</code> (Commercial / Government).</li>
+<li>RBAC (базовые + операционные роли): <strong>Owner</strong>, <strong>Admin</strong>, <strong>Accountant</strong>, <strong>User</strong>, <strong>PROCUREMENT</strong>, <strong>AUDITOR</strong>, <strong>WAREHOUSE_KEEPER</strong>, <strong>HR_OFFICER</strong>, <strong>HR_MANAGER</strong>, <strong>DEPARTMENT_HEAD</strong>; платформенная роль <strong>SUPER_ADMIN</strong> вынесена отдельно (см. §5.1, §7.6).</li>
+<li>Auth: Access JWT с контекстом организации; Refresh в <strong>HttpOnly Cookie</strong>.</li>
+</ul>
+<h4 id="411-v301-update"><a class="toclink" href="#411-v301-update">4.1.1. Регистрация и онбординг (v3.0.1 Update)</a></h4>
+<ul>
+<li><strong>Функциональное требование:</strong> в форме регистрации организации (<strong>RegisterOrg</strong>) добавлено обязательное поле <strong><code>organizationType</code></strong> (тип учёта).</li>
+<li><strong>Логика выбора:</strong> пользователь выбирает профиль <strong>«Коммерческая»</strong> (значение по умолчанию) или <strong>«Государственная/Бюджетная»</strong>.</li>
+<li><strong>UI-реализация:</strong> выбор выполняется через radio/cards с пояснениями профиля (коммерческий: стандартный план для ООО/ИП; государственный: бюджетный план для школ/клиник/госорганов).</li>
+<li><strong>Связь с §5.1.3:</strong> выбранный <code>organizationType</code> напрямую определяет <code>templateGroup</code> для онбординга (<code>provisionChartOfAccountsFromTemplate</code>), что предотвращает применение неверного плана счетов для типа организации.</li>
+</ul>
+<h4 id="412-onboarding-20-migration-mode"><a class="toclink" href="#412-onboarding-20-migration-mode">4.1.2. Onboarding 2.0 (Migration Mode)</a></h4>
+<ul>
+<li><strong>Migration Mode:</strong> при регистрации доступен выбор сценария запуска: <strong>Start from scratch</strong> или <strong>Migrate from 1C/Legacy</strong>.</li>
+<li><strong>Opening Balances (касса/банк):</strong> начальные остатки денежных средств загружаются как стартовые сальдо по счетам кассы/банка в контролируемом режиме миграции.</li>
+<li><strong>Inventory Opening (склад):</strong> начальные остатки номенклатуры импортируются как стартовые количества/оценки с трассировкой источника загрузки.</li>
+<li><strong>HR Salary Debt:</strong> начальная задолженность по зарплате и связанным обязательствам фиксируется отдельно, чтобы не искажать текущий payroll-период.</li>
+<li><strong>MDM Lookup 2.0:</strong> при вводе VÖEN система автоматически определяет статус плательщика НДС (<strong>ƏDV ödəyicisi</strong>) и подтягивает юридический адрес/данные руководителя из интеграционного контура.</li>
+</ul>
+<h4 id="413-opening-balances-wizard-v1"><a class="toclink" href="#413-opening-balances-wizard-v1">4.1.3. Opening Balances Wizard (детальная рамка v1)</a></h4>
+<ul>
+<li><strong>Назначение:</strong> пошаговый мастер миграции для контролируемого ввода стартовых остатков без ручного ввода проводок.</li>
+<li><strong>Шаги мастера:</strong> <code>Cash/Bank</code> -&gt; <code>Inventory</code> -&gt; <code>HR Salary Debt</code> -&gt; <code>Preview</code> -&gt; <code>Post</code>.</li>
+<li><strong>Финальный инвариант:</strong> проведение выполняется только в одном атомарном транзакционном блоке (<code>all-or-nothing</code>), с запретом частичной фиксации.</li>
+<li><strong>Роли:</strong> подготовка данных — <code>OWNER/ADMIN/ACCOUNTANT/PROCUREMENT</code>; <code>Post/Approve</code> — только <code>OWNER/ADMIN/ACCOUNTANT</code>; <code>AUDITOR</code> — read-only.</li>
+<li><strong>UX-критерий:</strong> пользователь получает детальный <code>Preview</code> (итоги по счетам и предупреждения валидации) до окончательного <code>Post</code>.</li>
+<li><strong>Критерий успеха v1:</strong> после проведения wizard стартовый баланс сходится в Trial Balance и не допускает повторного дублирующего постинга.</li>
+<li>[x] <strong>COMPLETED (Backend API):</strong> реализованы endpoints <code>POST /api/migration/opening-balances/finance</code>, <code>.../hr</code>, <code>.../inventory</code>.</li>
+<li>[x] <strong>COMPLETED (Early Balance Guard):</strong> <code>validateBalance()</code> вызывается <strong>до</strong> любых записей в БД (включая <code>StockMovement</code> и <code>JournalPosting</code>) для ранней блокировки транзакции при дисбалансе.</li>
+<li>[x] <strong>COMPLETED (Inventory Tests):</strong> endpoint <code>POST /api/migration/opening-balances/inventory</code> покрыт интеграционными тестами, включая конфликт <code>409 Conflict</code> по сценарию Optimistic Locking.</li>
+<li>[x] <strong>COMPLETED (UX Wizard):</strong> реализован пошаговый интерфейс Migration Wizard на странице <code>/settings/migration</code> с <code>client-side parsing</code> Excel/CSV и <code>Preview</code> перед импортом.</li>
+<li>[x] <strong>COMPLETED (Templates):</strong> добавлена динамическая генерация <code>XLSX templates</code> на каждом шаге (<code>Finance</code>, <code>HR</code>, <code>Inventory</code>) непосредственно в браузере.</li>
+<li>[x] <strong>COMPLETED (HR Alias):</strong> HR-парсер принимает оба идентификатора <code>finCode</code> и <code>employeeId</code> с маппингом <code>employeeId -&gt; finCode</code>.</li>
+</ul>
+<h3 id="42-2-ledger-finance-core"><a class="toclink" href="#42-2-ledger-finance-core">4.2. Модуль 2: Ledger &amp; Finance Core</a></h3>
+<ul>
+<li>План счетов; при создании организации — <strong>копирование из глобальных шаблонов в БД</strong> в локальные <code>Account</code> (см. <strong>§5.1</strong>): приоритетный источник — <strong><code>TemplateAccount</code></strong> (полный NAS + массив профилей <code>templateGroups</code>); legacy-каталог <strong><code>ChartOfAccountsEntry</code></strong> сохраняется для super-admin и ссылок <code>chartEntryId</code>.</li>
+<li><strong>Онбординг NAS (v2026.04.22+):</strong> параметр <strong><code>coaTemplate</code></strong>: <strong><code>full</code></strong> (профиль <code>COMMERCIAL_FULL</code>, полный коммерческий план) или <strong><code>small</code></strong> (<code>COMMERCIAL_SMALL</code>, упрощённый подмножество). Поле <strong><code>organizations.coaTemplateProfile</code></strong> фиксирует выбранный профиль; в <strong><code>settings.templateGroup</code></strong> дублируется совместимое значение для зарплаты (<code>COMMERCIAL</code> / <code>SMALL_BUSINESS</code>). Устаревший выбор <strong><code>templateGroup</code></strong> в API по-прежнему поддерживается, если <strong><code>coaTemplate</code></strong> не передан. Профиль <strong>GOVERNMENT</strong> остаётся в <code>TemplateGroup</code> / настройках зарплаты.</li>
+<li>Ручные операции (Journal Vouchers); автоматические — от других модулей.</li>
+<li>Валидация баланса, атомарность, закрытие периодов (детали — TZ).</li>
+<li>Главная книга; сводные отчёты — модуль 7.</li>
+</ul>
+<h3 id="43-3-crm-counterparties"><a class="toclink" href="#43-3-crm-counterparties">4.3. Модуль 3: CRM &amp; Counterparties</a></h3>
+<ul>
+<li>Справочник: VÖEN, контакты; тип Клиент / Поставщик; физ / юр лицо; обязательные поля (TZ).</li>
+<li><strong>MDM (глобальный реестр):</strong> единая запись на платформе по VÖEN (<code>GlobalCounterparty.taxId</code>, unique) для устранения дублей и консолидации данных. Локальные контрагенты организаций содержат ссылку <code>Counterparty.globalId</code> и сохраняют только организационно-специфичные поля (договоры/менеджер/заметки и т.п.).</li>
+<li><strong>Lookup при вводе VÖEN:</strong> UI сначала делает поиск в глобальном реестре и автозаполняет наименование/адрес/НДС-статус; при отсутствии записи допускается внешняя проверка (e-taxes) с последующим созданием/обновлением записи в MDM.</li>
+<li>Взаиморасчёты: счета <strong>211</strong>, <strong>531</strong>; баланс контрагента при проводках.</li>
+</ul>
+<h3 id="44-4-sales-invoicing"><a class="toclink" href="#44-4-sales-invoicing">4.4. Модуль 4: Sales &amp; Invoicing</a></h3>
+<ul>
+<li>Каталог товаров и услуг.</li>
+<li>Инвойсы, акты; номера по маске (<code>INV-2026-001</code>); НДС MVP: <strong>0%, 18%, освобождён</strong>; спецрежимы позже.</li>
+<li>Статусы: Draft, Sent, Paid, Overdue, Cancelled; <strong>Paid</strong> → транзакция и проводки (Дт касса/банк — Кт 211).</li>
+<li>PDF: AZ / RU / EN.</li>
+<li><strong>UX (реализация):</strong> создание <strong>инвойсов</strong> и <strong>контрагентов</strong> выполняется через <strong>модальные окна</strong> на страницах списков (<code>/invoices</code>, <code>/counterparties</code>) вместо отдельных страниц создания; legacy-маршруты <code>/invoices/new</code> и <code>/counterparties/new</code> сохраняются только как редиректы.</li>
+</ul>
+<h3 id="441-guest-access"><a class="toclink" href="#441-guest-access">4.4.1. Публичный портал счёта для клиента (Guest Access)</a></h3>
+<p><strong>Цель:</strong> клиент (контрагент) открывает <strong>одну уникальную ссылку</strong> без регистрации в ERP и видит счёт в удобном для мобильного мессенджера виде.</p>
+<table>
+<thead>
+<tr>
+<th>Возможность</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Просмотр</strong></td>
+<td>Номер счёта, срок, суммы, позиции, реквизиты организации (в т.ч. логотип и банковские счета из <code>organization_bank_accounts</code>).</td>
+</tr>
+<tr>
+<td><strong>Статус оплаты</strong></td>
+<td>Явная индикация <strong>Оплачено</strong> / <strong>Ожидает оплаты</strong> (по факту полной выплаты: остаток ≤ 0).</td>
+</tr>
+<tr>
+<td><strong>PDF</strong></td>
+<td>Кнопка <strong>«Скачать PDF»</strong> — файл формируется на лету тем же движком, что и внутренний PDF счёта.</td>
+</tr>
+<tr>
+<td><strong>Ссылка для менеджера</strong></td>
+<td>В карточке счёта (JWT) — действие <strong>«Поделиться ссылкой»</strong>: копирование в буфер URL вида <code>{origin}/portal/invoice/{token}</code> (прод: канонический домен, напр. <code>https://erp.dayday.az/...</code>).</td>
+</tr>
+<tr>
+<td><strong>Локализация</strong></td>
+<td>Язык интерфейса портала: поле <strong><code>portal_locale</code></strong> у контрагента (<code>az</code> / <code>ru</code> / <code>en</code>), иначе — язык браузера (<strong>Accept-Language</strong>).</td>
+</tr>
+<tr>
+<td><strong>Безопасность</strong></td>
+<td>См. <strong>TZ.md §14.0</strong> — неугадываемый токен + rate limit на публичные GET.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="45-5-cash-management-treasury"><a class="toclink" href="#45-5-cash-management-treasury">4.5. Модуль 5: Cash Management (Treasury)</a></h3>
+<ul>
+<li>Банк и касса; мультивалютность (AZN, USD, EUR); курсы и переоценка — <a href="./TZ.md">TZ.md</a>, §6.</li>
+<li>Импорт выписок MVP: <strong>CSV / Excel</strong>; прямые API банков — дорожная карта. Match (Invoicing match) — TZ.</li>
+</ul>
+<p><strong>Подраздел Kassa (наличные, расширение казначейства v8.1+):</strong> полноценный учёт кассы в составе раздела «Банк və Kassa» — <strong>Mədaxil Kassa Orderi (MKO)</strong> и <strong>Məxaric Kassa Orderi (MXO)</strong> по формам АР, <strong>кассовая книга</strong> (журнал ордеров), интеграция с оплатами <strong>Nəqd</strong> из продаж; <strong>подотчётные лица</strong> и <strong>авансовые отчёты</strong> с закрытием задолженности перед кассой (<strong>счёт 244</strong> и прочие корреспонденции по ТЗ). Доступ к расширенным функциям кассы — через модуль <strong>Banking Pro / Kassa</strong> в конструкторе тарифа (см. §7).</p>
+<h4 id="451-cash-management-mko-mxo-v82"><a class="toclink" href="#451-cash-management-mko-mxo-v82">4.5.1. Cash Management — касса (MKO / MXO, v8.2)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Аспект</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Назначение</strong></td>
+<td>Полный цикл учёта <strong>наличных денежных средств</strong> в соответствии с требованиями <strong>МФ АР</strong> (методология и формы первички).</td>
+</tr>
+<tr>
+<td><strong>Документооборот</strong></td>
+<td>Генерация и печать <strong>Mədaxil Kassa Orderi (MKO)</strong> и <strong>Məxaric Kassa Orderi (MXO)</strong>; кассовая книга (журнал ордеров в системе).</td>
+</tr>
+<tr>
+<td><strong>Автоматизация</strong></td>
+<td>Прямая связь с модулями <strong>продаж / закупок</strong>: оплата <strong>наличными (Nəqd)</strong> автоматически создаёт <strong>черновик</strong> соответствующего ордера в кассе (см. <a href="./TZ.md">TZ.md</a> §6.2).</td>
+</tr>
+<tr>
+<td><strong>Авансовые отчёты</strong></td>
+<td>Закрытие задолженности подотчётного лица по счёту <strong>244</strong> на основании предоставленных расходов (чеков).</td>
+</tr>
+<tr>
+<td><strong>Инкассация</strong></td>
+<td>Отдельный тип <strong>MXO</strong> для передачи наличных в банк (корреспонденция с расчётным счётом <strong>221</strong> и т.п. по ТЗ).</td>
+</tr>
+<tr>
+<td><strong>Доступ</strong></td>
+<td>Модуль <strong>Kassa Pro</strong> (<code>kassa_pro</code> в конструкторе) или полный доступ <strong>ENTERPRISE</strong> (напр. TiVi Media).</td>
+</tr>
+</tbody>
+</table>
+<h4 id="452"><a class="toclink" href="#452">4.5.2. Контроль учётных периодов и защита от «заднего числа»</a></h4>
+<p><strong>Финансовая дисциплина:</strong> запрет на <strong>проведение</strong>, <strong>редактирование</strong> и <strong>удаление</strong> финансовых документов кассы (<strong>MKO / MXO</strong> и связанные проводки) в <strong>закрытых</strong> учётных периодах (согласовано с закрытием месяца в модуле отчётности и флагом блокировки проводок).</p>
+<p><strong>Заднее число (backdating):</strong> любая операция, которая приводит к <strong>отрицательному остатку денежных средств</strong> на счёте кассы (<strong>101*</strong>) на <strong>любую</strong> дату в интервале от даты документа до «сегодня», должна <strong>блокироваться</strong> с понятным сообщением пользователю («кассовый разрыв» на конкретную дату). Техническая реализация — валидация в <code>CashOrderService</code> при проведении расходного ордера (см. <a href="./TZ.md">TZ.md</a> §6.0).</p>
+<h3 id="46-6-hr-payroll"><a class="toclink" href="#46-6-hr-payroll">4.6. Модуль 6: HR &amp; Payroll (локализация АР)</a></h3>
+<ul>
+<li>Карточки сотрудников (ФИН, договор).</li>
+<li>Расчёт ЗП по правилам АР: подоходный, DSMF, ITS, безработица; ведомости; авто-проводки (TZ).</li>
+<li><strong>RBAC Hardening (M6):</strong> строгая изоляция кадрового и финансового контуров payroll.</li>
+<li><strong>Payroll money access:</strong> только <code>OWNER</code> / <code>ACCOUNTANT</code> имеют доступ к <code>PayrollRun</code>, налоговым финансовым данным и payout registry (включая Payroll-to-Bank gateway).</li>
+<li><strong>Department scope:</strong> роль <code>DEPARTMENT_HEAD</code> работает с табелем и отсутствиями только по сотрудникам своего <code>departmentId</code> (row-level visibility + approve в границах подразделения).</li>
+</ul>
+<h4 id="461-a"><a class="toclink" href="#461-a">4.6.1. Учёт отсутствий и справочник причин (ТК AР)</a></h4>
+<ul>
+<li><strong>Справочник <code>AbsenceType</code> по организации:</strong> статьи на азербайджанском (<strong>Əmək məzuniyyəti</strong> основной/дополнительный, <strong>Sosial məzuniyyət</strong>, <strong>Ödənişsiz məzuniyyət</strong>, <strong>Təhsil və yaradıcılıq məzuniyyəti</strong>, <strong>Xəstəlik vərəqəsi</strong>); у каждой строки — <strong><code>isPaid</code></strong>, поле <strong><code>formula</code></strong> (привязка к расчёту в Payroll/калькуляторах).</li>
+<li><strong>Запись отсутствия <code>Absence</code>:</strong> период + ссылка на тип; при <strong>ödənişsiz</strong> — лимит календарных дней по справочнику (напр. 30); синхронизация с табелем без начислений для неоплачиваемых типов.</li>
+<li><strong>Формулы:</strong> трудовой/социальный/учебный (оплачиваемый) — средняя за 12 месяцев <strong>÷ 30,4 ×</strong> календарные дни; больничный — первые <strong>14</strong> дней за счёт работодателя по <strong>ставке от стажа</strong> (остальное — фонд, вне суммы ERP); калькуляторы и API — <strong><a href="./TZ.md">TZ.md</a> §7.0</strong>.</li>
+</ul>
+<p><strong>Tax calculator (Azerbaijan, Private Non‑Oil sector) — v16.1</strong></p>
+<ul>
+<li><strong>Input:</strong> monthly <strong>gross</strong> salary (AZN).</li>
+<li><strong>Output:</strong> per-employee breakdown: <strong>income tax</strong>, <strong>DSMF (worker + employer)</strong>, <strong>unemployment (worker + employer)</strong>, <strong>medical insurance İTS (worker + employer)</strong>, and resulting <strong>net</strong>.</li>
+<li><strong>Income tax:</strong> 0% up to 8000 AZN, <strong>14%</strong> on the excess.</li>
+<li><strong>DSMF (social insurance):</strong></li>
+<li><strong>Worker:</strong> <strong>10%</strong> on up to 200 AZN + <strong>10 AZN</strong> on the excess (private non‑oil preferential rule).</li>
+<li><strong>Employer:</strong> configurable per organization (<strong>22% standard</strong> vs <strong>15% preferential</strong>) via <code>Organization.settings</code>.</li>
+<li><strong>Unemployment:</strong> <strong>0.5%</strong> worker + <strong>0.5%</strong> employer.</li>
+<li><strong>Medical insurance (İTS):</strong> progressive scale (see <strong>TZ §7.0</strong> for the current brackets used by the engine).</li>
+<li><strong>Rounding:</strong> every tax line is rounded to <strong>2 decimals</strong> (ROUND_HALF_UP), net is calculated from the rounded tax lines.</li>
+</ul>
+<h3 id="47-7-reporting"><a class="toclink" href="#47-7-reporting">4.7. Модуль 7: Reporting</a></h3>
+<ul>
+<li>Trial Balance (ОСВ), P&amp;L (accrual), Balance Sheet, Cash Flow (cash basis).</li>
+<li>Включён workflow e-Taxes деклараций: генерация файла декларации, подтверждение скачивания бухгалтером и прикрепление официальной квитанции <code>Elektron Bildiriş</code> (Постановление КМ АР №120).</li>
+</ul>
+<h3 id="48-8-compliance-security"><a class="toclink" href="#48-8-compliance-security">4.8. Модуль 8: Неизменяемый аудит (Compliance &amp; Security)</a></h3>
+<ul>
+<li>Система фиксирует состояние объекта <strong>Before</strong> и <strong>After</strong> в формате <strong>JSON</strong> (<code>oldValues</code> / <code>newValues</code>) для мутаций по ключевым сущностям (инвойсы, сотрудники, товары, проводки / транзакции).</li>
+<li>Записи журнала защищены <strong>контрольной суммой (SHA-256)</strong> по каноническому содержимому и секрету среды (<code>AUDIT_HASH_SECRET</code> или <code>JWT_SECRET</code>), чтобы выявлять несанкционированное изменение логов.</li>
+<li><strong>Retention:</strong> записи старше <strong>1 года</strong> переносятся в архивную таблицу (<code>AuditLogArchive</code>) по расписанию (BullMQ).</li>
+<li><strong>PII / секреты в интеграциях (M8):</strong> перед записью в <code>AuditLog</code> и в серверных логах банковских адаптеров сырые JSON-пейлоады проходят <strong>рекурсивное маскирование</strong> по списку чувствительных ключей (<code>password</code>, <code>token</code>, <code>iban</code>, <code>fin</code>, <code>balance</code> и т.д.); значения заменяются на <strong><code>***MASKED***</code></strong> (см. <a href="./TZ.md">TZ.md</a> §15.0).</li>
+</ul>
+<h3 id="49-hr-org-structure"><a class="toclink" href="#49-hr-org-structure">4.9. Организационный менеджмент (HR &amp; Org Structure) — целевое развитие</a></h3>
+<p><em>Статус: не входит в Core MVP модуля 6 в текущем виде; фиксируется как продуктовое направление для аналитики и управления.</em></p>
+<p><strong>Цель:</strong> построить иерархическую модель компании для аналитики расходов и управления подчинённостью (в дополнение к кадровым карточкам и расчёту ЗП).</p>
+<p><strong>Организационная структура:</strong> древовидная иерархия подразделений (<strong>департаменты → отделы</strong> и при необходимости более глубокие уровни). У каждого подразделения — <strong>руководитель (Manager)</strong>; связь сотрудников с узлами дерева.</p>
+<p><strong>Штатное расписание (Staffing Table):</strong> реестр должностей внутри подразделений с указанием <strong>количества ставок (vacancies / headcount)</strong> и <strong>вилки окладов</strong> (min–max или коридор по должности).</p>
+<p><strong>Связь с финансами:</strong> каждое подразделение выступает как <strong>центр финансовой ответственности (ЦФО)</strong>. Расходы на зарплату и налоги в отчётах <strong>P&amp;L</strong> и <strong>Cash Flow</strong> могут быть <strong>сгруппированы по департаментам</strong> (и при необходимости детализированы по ЦФО).</p>
+<p><strong>Контроль найма:</strong> система <strong>блокирует</strong> создание (или активацию) карточки сотрудника на выбранной должности в подразделении, <strong>если по соответствующей строке штатного расписания не осталось свободных ставок</strong> (фактическое число занятых позиций ≥ утверждённому лимиту), либо выводит предупреждение — политика продукта (жёсткий стоп / мягкое согласование).</p>
+<h3 id="410-9"><a class="toclink" href="#410-9">4.10. Модуль 9: Складская коррекция и инвентаризация (целевое развитие)</a></h3>
+<p><strong>Инвентаризация:</strong> документ фиксации <strong>фактических остатков</strong> по номенклатуре (количество по складам/партиям — по политике учёта). <strong>Сравнение</strong> с <strong>системными</strong> остатками; вывод <strong>разницы</strong> (излишки / недостачи) для утверждения ответственным лицом.</p>
+<p><strong>Оприходование / списание:</strong> по результатам инвентаризации (или иной складской коррекции) — <strong>автоматическое формирование финансовых проводок</strong> с отнесением на счета <strong>прочих доходов</strong> и <strong>прочих расходов</strong> (и при необходимости на счета ТМЦ / себестоимости) в соответствии с утверждённой методикой отражения отклонений; суммы согласуются с оценкой товара (средняя себестоимость, партионный учёт — по настройкам модуля).</p>
+<h4 id="4100-inventoryadjustment"><a class="toclink" href="#4100-inventoryadjustment">4.10.0. Документы физической инвентаризации (<code>InventoryAdjustment</code>)</a></h4>
+<p>Отдельно от <strong>инвентаризационной описи</strong> (<code>InventoryAudit</code>, снимок всех остатков по складу) поддерживаются <strong>многострочные акты пересчёта</strong> с выбором номенклатуры: сущности <strong><code>InventoryAdjustment</code></strong> и <strong><code>InventoryAdjustmentLine</code></strong> (ожидаемое количество из <code>StockItem</code>, факт из формы, <strong>delta = факт − учёт</strong>). Статусы документа: <strong>DRAFT → POSTED</strong>. Тип документа: <strong>WRITE_OFF</strong> (только недостача), <strong>SURPLUS</strong> (только излишек), <strong>INVENTORY_COUNT</strong> (оба направления в одном документе).</p>
+<p>При <strong>проведении</strong> система в одной БД-транзакции обновляет <strong><code>StockItem</code></strong>, создаёт <strong><code>StockMovement</code></strong> (reason <strong>ADJUSTMENT</strong>, примечание <code>INV_PHYS:{id}</code>) и <strong>одну сводную проводку</strong> по суммарным суммам: недостача — <strong>Дт 731 — Кт 201/204</strong> (счёт запасов по складу); излишек — <strong>Дт 201/204 — Кт 631</strong>. Списание недостачи оценивается по <strong>FIFO</strong> (<code>computeIssueUnitCost</code>); оприходование излишка — по цене из строки документа, если задана, иначе по средней с карточки склада. UI: <strong><code>/inventory/physical</code></strong>. Детали API — <a href="./TZ.md">TZ.md</a> §10.1.1.</p>
+<h4 id="4101-manufacturing"><a class="toclink" href="#4101-manufacturing">4.10.1. Производство (Manufacturing): брак, отходы и побочный продукт</a></h4>
+<p><strong>Учёт потерь:</strong> в спецификациях (<strong>ProductRecipe</strong> / строки рецепта) и в актах <strong>выпуска готовой продукции</strong> поддерживаются:</p>
+<ul>
+<li><strong>Коэффициент технологических потерь</strong> (<code>wasteFactor</code> на строку компонента): увеличивает расход сырья относительно номинала рецепта (<strong>фактический списание = норма × (1 + wasteFactor)</strong>).</li>
+<li><strong>Побочный продукт</strong> (целевое развитие): отдельная позиция номенклатуры / складской приход при частичном возврате материала в брак с отдельным учётом — по дорожной карте после MVP потерь.</li>
+</ul>
+<p>Автоматическое <strong>списание сырья</strong> при выпуске ГП должно учитывать <code>wasteFactor</code>; расхождение «затраченное сырьё − выход ГП» отражается складскими движениями и при необходимости отдельным документом <strong>списание отходов</strong> (см. <a href="./TZ.md">TZ.md</a> §10.2).</p>
+<h3 id="411"><a class="toclink" href="#411">4.11. Взаимозачёт (схлопывание встречных долгов)</a></h3>
+<p>Один контрагент может одновременно фигурировать как <strong>дебитор</strong> и как <strong>кредитор</strong> организации:</p>
+<table>
+<thead>
+<tr>
+<th>Счёт</th>
+<th>Смысл</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>211</strong></td>
+<td>Долг контрагента перед нами (дебиторка; непогашенная выручка по инвойсам).</td>
+</tr>
+<tr>
+<td><strong>531</strong></td>
+<td>Наш долг перед контрагентом (кредиторка поставщику; проводки с привязкой <code>counterpartyId</code> на счёте 531).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Алгоритм:</strong> по выбранному <code>counterpartyId</code> система вычисляет остатки по обеим «сторонам»; <strong>максимальная сумма зачёта</strong> = <strong>min(остаток 211, остаток 531)</strong> в выбранной книге (NAS/IFRS для 531). При подтверждении создаётся одна <strong>транзакция</strong> с проводкой <strong>Дт 531 — Кт 211</strong> на сумму зачёта; сумма дополнительно <strong>распределяется по неоплаченным инвойсам</strong> (строки <code>InvoicePayment</code> на ту же транзакцию, без дублирования проводок), чтобы <strong>дебиторка</strong> и <strong>старение</strong> в отчётах совпадали с ГК.</p>
+<p><strong>Интерфейс:</strong> акт сверки (<code>/reporting/reconciliation</code>) — виджет «Встречные требования» и кнопка формирования взаимозачёта (активна только при <strong>обоих</strong> положительных остатках); карточка инвойса — предложение <strong>«Оплатить зачётом»</strong>, если по контрагенту возможен зачёт и по счёту есть непогашенный остаток.</p>
+<p><strong>Налоговое соответствие (НК АР):</strong> акт взаимозачёта <strong>приравнивается к оплате</strong> для целей учёта расчётов с контрагентом. Если обе стороны сделки — <strong>плательщики НДС</strong> (признак в карточке контрагента / справочнике), система <strong>предлагает</strong> оформить налоговую <strong>e-qaimə</strong> (электронная счёт-фактура) на сумму зачёта или отражает НДС проводками по счетам <strong>241</strong> / <strong>541</strong> в соответствии с методикой (детали — <a href="./TZ.md">TZ.md</a> §10.3).</p>
+<p><em>Детали API (<code>FinanceService</code>, <code>NettingService</code>) и UX — <a href="./TZ.md">TZ.md</a>, §3 (дополнение к модулю 2), §10.3 и §8 (отчёты).</em></p>
+<h3 id="412-erp-2026"><a class="toclink" href="#412-erp-2026">4.12. Реализованные доработки по плану улучшения ERP (синхронизация продукт ↔ код, 2026)</a></h3>
+<p>Ниже зафиксировано <strong>продуктовое</strong> содержание внедрённых изменений (детализация контрактов API, полей DTO и миграций БД должна быть отражена в <strong><a href="./TZ.md">TZ.md</a></strong> — см. примечание в конце §4.12).</p>
+<table>
+<thead>
+<tr>
+<th>Область</th>
+<th>Реализовано в продукте</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Холдинг</strong></td>
+<td>Сущность Holding, связь организаций; API управления; сводные отчёты по холдингу; UI выбора/переключения и отчётность (см. также RBAC).</td>
+</tr>
+<tr>
+<td><strong>Права доступа</strong></td>
+<td>Расширение политик (<code>AccessControlService</code>), флаги доступа в сессии/фронте (в т.ч. проведение вручную, отчёты холдинга).</td>
+</tr>
+<tr>
+<td><strong>Денежные средства</strong></td>
+<td>Дашборд «Денежные средства»; разделение ввода <strong>Касса</strong> vs <strong>Банк</strong> по маршрутам UI.</td>
+</tr>
+<tr>
+<td><strong>Дашборд — кредиторка (виджеты)</strong></td>
+<td>Эндпоинт <strong><code>GET /api/reports/executive-widgets</code></strong> отдаёт отдельно сальдо <strong>531</strong> (кредиторка перед поставщиками) и сальдо <strong>521 + 523</strong> (задолженность по зарплате и налогам у источника / смежные обязательства); на UI — отдельные карточки, без смешения в один показатель «кредиторка».</td>
+</tr>
+<tr>
+<td><strong>План счетов АР</strong></td>
+<td>Справочник счетов в БД, миграция/синхронизация с JSON; строгие кассовые <strong>101*</strong> / <strong>102*</strong>; формы — выбор из справочника.</td>
+</tr>
+<tr>
+<td><strong>Касса (MKO/MXO)</strong></td>
+<td>Валидация сумм; автоподстановка кассового счёта по валюте; кнопка <strong>Провести (Təsdiqlə)</strong>; проведение → проводки в ГК; обязательная <strong>статья ДДС</strong> (<code>CashFlowItem</code>, автосид при первом запросе); опционально <strong>физическая касса</strong> (<code>CashDesk</code>); <strong>удержание налога у источника</strong> на расходном ордере <strong>MXO</strong>: сумма нетто + отдельная проводка на <strong>521</strong>.</td>
+</tr>
+<tr>
+<td><strong>Банк</strong></td>
+<td>Ручная операция: <strong>POST banking/manual-entry</strong> + форма на странице банка; строка реестра с происхождением <strong>MANUAL_BANK_ENTRY</strong>; привязка статьи ДДС к строке выписки (поле в модели).</td>
+</tr>
+<tr>
+<td><strong>Казначейство (API)</strong></td>
+<td>Модуль <strong>Treasury</strong>: <code>GET/POST /treasury/cash-flow-items</code>, <code>GET/POST /treasury/cash-desks</code>.</td>
+</tr>
+<tr>
+<td><strong>Склад</strong></td>
+<td>Многострочная закупка (таблица + API); склад по умолчанию в настройках; исправление COGS при нулевой средней себестоимости (fallback на цену строки); <strong>инвентаризационная опись</strong> (API + UI; детализация строк с именами в ответе); документы <strong>оприходование излишков</strong> и <strong>списание</strong> (отдельные эндпоинты и страницы); <strong>физическая инвентаризация / акты корректировки</strong> (<code>InventoryAdjustment</code> + UI <code>/inventory/physical</code>, проводки 731/201 и 201/631, FIFO на списании).</td>
+</tr>
+<tr>
+<td><strong>Основательная инвентаризация</strong></td>
+<td>Переход от <strong>JSON-хранения</strong> строк описи к <strong>реляционной</strong> структуре <strong>1:N</strong> (<code>InventoryAudit</code> → <code>InventoryAuditLine</code>); <strong>черновик</strong> создаёт <strong>снимок системных остатков</strong> по складу (автозаполнение строк), в <strong>DRAFT</strong> разрешено редактирование <code>factQty</code> и <code>costPrice</code>; проведение (<strong>approve</strong>) выполняется <strong>атомарно</strong> в <code>prisma.$transaction</code> с созданием <strong>проводок</strong> (по плану счетов: <strong>201/204 ↔ 611/731</strong>) и <strong>складских движений</strong> (<code>StockMovement</code>, reason=ADJUSTMENT).</td>
+</tr>
+<tr>
+<td><strong>Инвойсы</strong></td>
+<td>Валюта счёта <strong>AZN/USD/EUR</strong>; НДС только <strong>0% / 18%</strong>; режим <strong>цены с НДС / без НДС</strong>; услуги: флаг <strong>isService</strong>, скрытие складских предупреждений, подпись <strong>Məhsul/Xidmət</strong> в PDF. <strong>Clean invoice standard:</strong> при создании инвойса таблица товаров/услуг стартует <strong>пустой</strong> (без автодобавления пустых строк).</td>
+</tr>
+<tr>
+<td><strong>HR</strong></td>
+<td>Отчество, FIN; справочник <strong><code>AbsenceType</code></strong> и связь <strong><code>Absence.absenceTypeId</code></strong> (FK); календарь отсутствий вынесен в отдельный визуальный экран <strong><code>/hr/analytics</code></strong> («Инфографика»), а <strong><code>/payroll</code></strong> сфокусирован на операционном учёте зарплаты (ведомости/листовки, фильтр периода, действия расчёта/проведения); калькуляторы <strong>əmək məzuniyyəti (÷30,4)</strong> и <strong>xəstəlik (14 gün + staj %)</strong> вынесены в модальные окна (единый паттерн <code>FORM_INPUT_CLASS</code> + футер с <strong>Ləğv et</strong>); создание сотрудника/подразделения/штатной единицы переведено в модальные окна; табель и расчёт ведомости с привязкой к табелю используют формулы ТК АР и среднюю по <strong>проведённым <code>payroll_slips</code></strong> за 12 месяцев — <strong><a href="./TZ.md">TZ.md</a> §7.0</strong>.</td>
+</tr>
+<tr>
+<td><strong>Контрагенты</strong></td>
+<td>Типы «Поставщик/Покупатель», «Прочее»; дубли по VÖEN; обязательное имя.</td>
+</tr>
+<tr>
+<td><strong>UX / качество</strong></td>
+<td>Кнопки Сохранить/Назад (контраст, иконки); i18n; централизованные ошибки API + отображение на фронте; «Назад» в модалках без перезагрузки страницы; единый стандарт валюты в таблицах: символ <strong>(₼)</strong> только в заголовках денежных колонок, без повторения в каждой ячейке; налоги в payroll-таблице группируются по блокам <strong>İşçi</strong> vs <strong>İşəgötürən</strong> с лаконичными колонками <strong>DSMF / İTS / İŞS</strong> (без суффиксов); управление страницей компактно: действия слева сверху, фильтры <strong>Ay + Bölmə</strong> справа, выровнены по правому краю таблицы ведомостей.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Примечание для Т/З:</strong> после утверждения PRD необходимо <strong>обновить <a href="./TZ.md">TZ.md</a></strong>: эндпоинты Treasury и banking <code>manual-entry</code>, поля <code>CashOrder</code> (ДДС, касса, удержание), <code>BankStatementLine</code> (ДДС, <code>MANUAL_BANK_ENTRY</code>), сценарии миграции БД для перечислений и колонок, правила валидации инвойсов и пересчёта НДС, сценарии складских документов и инвентаризации — в соответствующих разделах M2, M4, M5, M9.</p>
+<hr>
+<h3 id="413-management-reports-cash-flow-direct-method"><a class="toclink" href="#413-management-reports-cash-flow-direct-method">4.13. Management Reports: Cash Flow (Direct method)</a></h3>
+<p><strong>Goal:</strong> provide a management Cash Flow report for owners/accountants based on actual cash movements (direct method), with drill-down by cash flow items.</p>
+<p><strong>Inputs (filters):</strong></p>
+<ul>
+<li>Period: <code>dateFrom..dateTo</code> (UTC dates, inclusive).</li>
+<li>Source filter: specific <strong>cash desk</strong> (cash orders) and/or specific <strong>bank source</strong> (bank statements).</li>
+</ul>
+<p><strong>Data sources:</strong></p>
+<ul>
+<li><strong>Cash desks:</strong> проведённые кассовые ордера (<strong>KMO</strong> / <strong>KXO</strong>) со обязательной статьёй ДДС (<code>cashFlowItemId</code>).</li>
+<li><strong>Bank:</strong> строки <code>BankStatementLine</code> со статьёй ДДС и <strong><code>origin</code> ∈ {<code>FILE_IMPORT</code>, <code>MANUAL_BANK_ENTRY</code>}</strong> (строки синхронизации вебхуком и т.п. в этот отчёт <strong>не</strong> включаются). Дата попадания в период: <strong><code>valueDate</code></strong>, если задана, иначе <strong>дата выписки</strong> (<code>BankStatement.date</code>).</li>
+</ul>
+<p><strong>Реализация (v25.0):</strong> API <strong><code>GET /api/reports/cash-flow</code></strong> (<code>CashFlowService.getDirectCashFlow</code>), UI <strong><code>/reports/cash-flow</code></strong>.</p>
+<p><strong>Grouping and presentation:</strong></p>
+<ul>
+<li>Group by <strong>CashFlowItem</strong> (code + name).</li>
+<li>Split into <strong>Operating / Investing / Financing</strong> sections (category inferred by item code: <code>CF-INV*</code>, <code>CF-FIN*</code>, otherwise Operating).</li>
+<li>For every line show <strong>Inflow</strong>, <strong>Outflow</strong>, and <strong>Net</strong>; totals per section and grand total for the period.</li>
+</ul>
+<p><strong>Performance and integrity:</strong></p>
+<ul>
+<li>All sums are calculated on the <strong>API</strong> using exact decimal arithmetic.</li>
+<li>Heavy periods may be cached in Redis for short TTL (keyed by organization + params).</li>
+</ul>
+<h2 id="5-v2-scope"><a class="toclink" href="#5-v2-scope">5. Дорожная карта: расширения (v2 — конкурентный scope)</a></h2>
+<p>Цель v2-направлений: автоматизация глубже базового MVP (таблица ниже и связка с §4).</p>
+<h3 id="50-bridge-sprint-security-rbac-hardening"><a class="toclink" href="#50-bridge-sprint-security-rbac-hardening">5.0. Bridge Sprint (Security &amp; RBAC Hardening) — статус выполнения</a></h3>
+<ul>
+<li>[x] <strong>COMPLETED — RBAC Hardening:</strong> ужесточены role-gates для критичных операций (<code>Billing</code>, <code>Inventory approve</code>, финансовые отчёты).</li>
+<li>[x] <strong>COMPLETED — Auditor Guard:</strong> внедрён глобальный guard read-only режима для роли <code>AUDITOR</code> на HTTP-мутации (<code>POST/PATCH/PUT/DELETE</code>).</li>
+<li>[x] <strong>COMPLETED — Billing Security:</strong> <code>Billing</code>-контур закрыт для не-владельцев; доступ к <code>/api/billing/*</code> только для роли <code>OWNER</code> (кроме публичных webhook/landing маршрутов, описанных в ТЗ).</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Блок</th>
+<th>Содержание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A — Взаиморасчёты</strong></td>
+<td><strong>(v2026.04.25)</strong> Payment allocations across multiple invoices; partial payments; tranche allocation engine (FIFO); акты сверки (Mütəqabil yoxlama); <strong>AR Aging</strong> buckets: 0–30, 31–60, 61–90, 90+</td>
+</tr>
+<tr>
+<td><strong>B — Налоги</strong></td>
+<td><strong>(v2026.04.28)</strong> e-Taxes Export v2: <code>TaxDeclarationExport</code> lifecycle (<code>GENERATED -&gt; UPLOADED -&gt; CONFIRMED_BY_TAX</code>), генерация XML/XLSX по данным Ledger (<code>JournalEntry</code>), и workflow квитанций <code>Elektron Bildiriş</code></td>
+</tr>
+<tr>
+<td><strong>C — Multi-GAAP</strong></td>
+<td>IFRS Ledger: параллельная книга, маппинг NAS → IFRS</td>
+</tr>
+<tr>
+<td><strong>D — ОС и ТМЦ</strong></td>
+<td>Амортизация ОС (111/112); партионный учёт FIFO (опционально позже)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="51-v11-v20"><a class="toclink" href="#51-v11-v20">5.1. Системные шаблоны плана счетов и онбординг организации (v1.1 / v2.0)</a></h3>
+<p><strong>Цель релиза:</strong> вынести «эталонный» план счетов и сопутствующие платформенные справочники (в т.ч. маппинг для Multi-GAAP) из цепочки внешних скриптов приложения в <strong>первоклассные сущности БД</strong> без <code>organizationId</code>, с контролируемым жизненным циклом и UI для платформенного администратора.</p>
+<h4 id="511-as-is"><a class="toclink" href="#511-as-is">5.1.1. Проблема (as-is)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Аспект</th>
+<th>Риск / ограничение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Источник правды</strong></td>
+<td>План счетов для новых организаций задаётся кодом/файлами (<code>seed.ts</code>, JSON, одноразовые скрипты), а не версионируемой моделью в БД платформы.</td>
+</tr>
+<tr>
+<td><strong>Операционка</strong></td>
+<td>Изменение стартового набора счетов требует релиза или ручного вмешательства в среду; нет единого аудируемого контура для «что получит следующая регистрация».</td>
+</tr>
+<tr>
+<td><strong>Согласованность</strong></td>
+<td>Логика онбординга размазана между приложением и внешними шагами; сложнее гарантировать атомарность «организация создана ⇔ план счетов полностью развёрнут».</td>
+</tr>
+<tr>
+<td><strong>Multi-GAAP</strong></td>
+<td>Маппинг NAS → IFRS (и аналоги) должен жить рядом с шаблоном счетов как платформенные данные, а не дублироваться в скриптах.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="512-"><a class="toclink" href="#512-">5.1.2. Архитектурное решение: системные таблицы-шаблоны</a></h4>
+<ul>
+<li><strong>План счетов NAS (глобальный эталон):</strong> таблица <strong><code>TemplateAccount</code></strong> — один код на платформу, поля <strong><code>name_az</code> / <code>name_ru</code> / <code>name_en</code></strong>, <code>accountType</code>, <code>parentCode</code>, <code>cashProfile</code>, <strong><code>templateGroups: CoaTemplateProfile[]</code></strong> (счёт может входить и в полный, и в упрощённый профиль). Наполнение: <strong><code>upsertGlobalNasTemplateAccounts</code></strong> / скрипт <strong><code>seed-nas-accounts.ts</code></strong> из канона (<code>loadChartJson</code> / <code>getNasCommercialFullAccounts</code>). Копирование в организацию: <strong><code>provisionNasAccountsForOrganization</code></strong> — при <strong>непустом</strong> <code>template_accounts</code> фильтр по профилю (<code>COMMERCIAL_FULL</code> / <code>COMMERCIAL_SMALL</code>); иначе fallback на <strong><code>ChartOfAccountsEntry</code></strong> + <strong><code>syncAzChartForOrganization</code></strong>.</li>
+<li><strong>Legacy-каталог <code>ChartOfAccountsEntry</code>:</strong> по-прежнему используется super-admin UI, привязка <strong><code>Account.chartEntryId</code></strong>, кассовый справочник, если <code>template_accounts</code> ещё не заполнены.</li>
+<li><strong>Шаблонизация (профили онбординга):</strong> enum <strong><code>CoaTemplateProfile</code></strong>: <strong><code>COMMERCIAL_FULL</code></strong>, <strong><code>COMMERCIAL_SMALL</code></strong>. Параллельно <strong><code>templateGroup</code></strong> (<code>COMMERCIAL</code> / <code>SMALL_BUSINESS</code> / <code>GOVERNMENT</code>) остаётся для строк каталога super-admin и payroll-совместимости.</li>
+<li><strong>Расширение плана:</strong> <strong><code>GET /api/accounts/templates</code></strong> — глобальные счета NAS, которых ещё нет у организации; <strong><code>POST /api/accounts/import-from-template</code></strong> — ручной импорт по <code>templateAccountId</code> (с автодоводом родителей). UI: <strong><code>/settings/chart</code></strong>.</li>
+<li><strong>Multi-GAAP:</strong> платформенный маппинг NAS ↔ IFRS — таблица <strong><code>TemplateIFRSMapping</code></strong> (как и ранее); мутации шаблонов IFRS — по политике <strong><code>SUPER_ADMIN</code></strong> (см. скрипты/админ-контуры в ТЗ).</li>
+<li>Записи шаблонных справочников <strong>без</strong> <code>organizationId</code> описывают <strong>продукт по умолчанию</strong>, а не данные клиента.</li>
+<li><strong>RBAC:</strong> создание/изменение строк <strong><code>ChartOfAccountsEntry</code></strong> через API <strong><code>/api/admin/chart-template</code></strong> — только <strong><code>SUPER_ADMIN</code></strong> (<code>/super-admin</code>). Обычные роли организации к каталогу не допускаются. Онбординг читает каталог серверной логикой в транзакции создания организации.</li>
+<li><strong>Инвариант:</strong> каталог отделён от операционных <code>Account</code> (у счёта организации есть <code>organizationId</code>); смешение на уровне строк запрещено конвенцией.</li>
+</ul>
+<h4 id="513-organization-onboarding"><a class="toclink" href="#513-organization-onboarding">5.1.3. Изменение бизнес-логики: онбординг организации (Organization Onboarding)</a></h4>
+<ul>
+<li>При <strong>создании</strong> сущности <strong><code>Organization</code></strong> (регистрация новой компании на платформе) система <strong>не опирается</strong> на внешние по отношению к транзакции БД скрипты и не выполняет отдельный «пост-хук» приложения как единственный источник плана счетов.</li>
+<li>В <strong>одной атомарной транзакции</strong> с фиксацией организации и членства владельца выполняется <strong>детерминированное копирование</strong> эталона в тенантное пространство на уровне <strong>Prisma <code>$transaction</code> + SQL</strong> (или эквивалент: пакетные <code>INSERT … SELECT</code> с подстановкой нового <code>organizationId</code>, сохранением иерархии <code>parentId</code> и ссылок для маппингов).</li>
+<li>Выбор профиля (<strong><code>coaTemplate</code></strong> = <code>full</code> | <code>small</code>, либо устаревший <strong><code>templateGroup</code></strong>) и копирование NAS в организацию выполняются <strong>атомарно в той же транзакции</strong>, что создание <strong><code>Organization</code></strong>; недопустимы состояния «организация без стартового плана».</li>
+<li>Онбординг <strong>фильтрует</strong> глобальный список по <strong><code>CoaTemplateProfile</code></strong> (или по <code>templateGroup</code> в legacy-режиме), чтобы в организацию попали только счета выбранного профиля.</li>
+<li><strong>Реализация:</strong> <strong><code>OrganizationsService.provisionChartOfAccountsFromTemplate(tx, organizationId, profile)</code></strong> вызывает <strong><code>provisionNasAccountsForOrganization</code></strong> и <strong><code>bootstrapMultiGaapForNewOrganization</code></strong> внутри той же <code>prisma.$transaction</code>, что регистрация / <strong><code>POST /api/auth/organizations</code></strong> / <strong><code>POST /api/organizations</code></strong>.</li>
+<li>Поведение должно быть <strong>идемпотентно-ориентированным</strong> в смысле целостности: при откате транзакции организация не остаётся «без счетов»; при успехе набор счетов (и связанных сущностей по скоупу фичи) соответствует актуальному шаблону на момент регистрации.</li>
+<li>Детали соответствия полей (коды, типы, порядок сортировки, признаки активности) и политика <strong>версионирования</strong> шаблона (если вводится) фиксируются в <a href="./TZ.md">TZ.md</a> при проектировании миграции.</li>
+</ul>
+<h4 id="514"><a class="toclink" href="#514">5.1.4. Миграция и обратная совместимость</a></h4>
+<table>
+<thead>
+<tr>
+<th>Этап</th>
+<th>Действие</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Первичное наполнение платформы</strong></td>
+<td>Однократно (или при пустых шаблонных таблицах) данные эталона загружаются в <code>Template*</code> из канонического источника (например экспорт текущего JSON / миграция данных из существующего <code>seed</code>).</td>
+</tr>
+<tr>
+<td><strong><code>seed.ts</code> (локальная разработка)</strong></td>
+<td>Сохраняется как <strong>удобный механизм поднятия dev-среды</strong>: минимально необходимые системные пользователи, роли, конфиг; <strong>первичное заполнение</strong> <code>Template*</code> при чистой БД; не является обязательным путём онбординга <strong>production</strong>-организаций после внедрения §5.1.</td>
+</tr>
+<tr>
+<td><strong>Production</strong></td>
+<td>Новые организации получают NAS через <strong><code>TemplateAccount</code></strong> (при непустой таблице) с фильтром по профилю; иначе — копирование из <strong><code>ChartOfAccountsEntry</code></strong> / JSON-bootstrap (§5.1.3).</td>
+</tr>
+<tr>
+<td><strong>Уже существующие организации</strong></td>
+<td>Обратная совместимость: существующие <code>Account</code> не перезаписываются автоматически массовой миграцией, если не объявлен отдельный проект синхронизации; изменения шаблона влияют на <strong>новые</strong> регистрации, если явно не задокументирована политика «догоняющих» миграций для старых тенантов.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="515-ui"><a class="toclink" href="#515-ui">5.1.5. Требования к UI: панель платформенного администратора</a></h4>
+<ul>
+<li>В рамках защищённого контура <strong><code>/super-admin</code></strong> добавлен раздел управления <strong>глобальным каталогом NAS</strong> (<strong><code>ChartOfAccountsEntry</code></strong>, UI «План NAS (шаблон)») и (по мере необходимости) <strong><code>TemplateIFRSMapping</code></strong> — не виден обычному тенанту.</li>
+<li>Функции MVP раздела: просмотр дерева/списка шаблонных счетов, создание, редактирование, деактивация (по политике продукта — жёсткое удаление vs soft-delete), валидация уникальности кодов в рамках шаблона.</li>
+<li>Любое сохранение в этом разделе доступно <strong>только</strong> при <strong><code>SUPER_ADMIN</code></strong>; действия логируются в <strong>глобальном аудите</strong> платформы (см. §4.8 / §7.6).</li>
+<li>Изменения в шаблоне <strong>применяются к будущим</strong> регистрациям организаций с момента сохранения; явное предупреждение в UI, что уже созданные организации не меняются автоматически (если не реализован отдельный сценарий раскатки).</li>
+</ul>
+<h4 id="516-acceptance-criteria"><a class="toclink" href="#516-acceptance-criteria">5.1.6. Критерии приёмки (acceptance criteria)</a></h4>
+<ol>
+<li><strong>Модель данных:</strong> нетенантный эталон NAS — <strong><code>TemplateAccount</code></strong> (+ legacy <strong><code>ChartOfAccountsEntry</code></strong>); при необходимости <strong><code>TemplateIFRSMapping</code></strong>; операционные счета — <strong><code>Account</code></strong> с <code>organizationId</code>.</li>
+<li><strong>Безопасность:</strong> <code>GET/POST /api/admin/chart-template</code> и UI super-admin отклоняют запросы без <strong><code>SUPER_ADMIN</code></strong> (403).</li>
+<li><strong>Онбординг:</strong> создание организации в одной транзакции с <strong><code>provisionChartOfAccountsFromTemplate</code></strong>; при непустом <strong><code>template_accounts</code></strong> источник — <strong><code>TemplateAccount</code></strong>, иначе — <strong><code>ChartOfAccountsEntry</code></strong> / <strong><code>syncAzChartForOrganization</code></strong>.</li>
+<li><strong>Согласованность:</strong> откат транзакции при ошибке копирования; нет «пустой» организации без стартового плана в рамках фичи.</li>
+<li><strong>Миграция / dev:</strong> первичное наполнение каталога из JSON при пустой БД; <code>seed.ts</code> для dev сохраняется.</li>
+<li><strong>UI Super-Admin:</strong> редактирование каталога NAS в <code>/super-admin</code>; новые регистрации получают актуальный каталог без релиза кода.</li>
+</ol>
+<h3 id="5d-fixed-assets-v2"><a class="toclink" href="#5d-fixed-assets-v2">5.D. Fixed Assets v2: реестр ОС и амортизация</a></h3>
+<ul>
+<li><strong>Реестр ОС:</strong> сущность <code>FixedAsset</code> с полями <code>organizationId</code>, <code>name</code>, <code>inventoryNumber</code>, <code>purchaseDate</code>, <code>purchasePrice</code>, <code>salvageValue</code>, <code>usefulLifeMonths</code>, <code>depreciationMethod=STRAIGHT_LINE</code>, <code>status=ACTIVE|DISPOSED</code>.</li>
+<li><strong>Линейный движок амортизации:</strong> месячная сумма = <code>(purchasePrice - salvageValue) / usefulLifeMonths</code>; начисление только по активным объектам.</li>
+<li><strong>Автопроводка:</strong> при запуске расчёта за месяц создаётся проводка <strong>Дт 713 — Кт 112</strong> (агрегировано по периоду), плюс строки начисления по объектам.</li>
+<li><strong>Идемпотентность:</strong> повторный запуск за тот же месяц не дублирует начисления (уникальность по <code>fixedAssetId + year + month</code> и проверка существующих начислений).</li>
+<li><strong>UI:</strong> раздел <code>/fixed-assets</code> с реестром, балансовой стоимостью (Book Value), формой добавления ОС и кнопкой запуска месячной амортизации.</li>
+</ul>
+<h3 id="52-v31-roadmap"><a class="toclink" href="#52-v31-roadmap">5.2. v3.1 — масштабируемость и производительность (Roadmap)</a></h3>
+<ul>
+<li>Внедрение горизонтального автоскейлинга воркеров через API DigitalOcean / Kubernetes.</li>
+<li>Оптимизация транзакций Ledger: переход на пакетную запись итогов расчётов (<strong>Batch Insert</strong>).</li>
+<li>Разработка маппера данных <strong>1С → DayDay NAS</strong> для контролируемого Migration Mode.</li>
+<li>[x] <strong>COMPLETED:</strong> интерфейс ввода начальных остатков (<strong>Opening Balances Wizard</strong>) для кассы/банка, склада и HR-задолженности (backend + frontend UX + шаблоны импорта).</li>
+</ul>
+<hr>
+<h2 id="6-v3-azerbaijan-digital-ecosystem"><a class="toclink" href="#6-v3-azerbaijan-digital-ecosystem">6. Дорожная карта: v3 — «Azerbaijan Digital Ecosystem»</a></h2>
+<p>Прямые интеграции с порталами, банками и идентификацией (детали и API — после due diligence). Кратко по эпикам:</p>
+<ul>
+<li><strong>v3.0 (B2G) — Implemented:</strong> полная поддержка бюджетного учёта АР (<strong>NAS-Gov</strong>) и отчётности для госсектора, с сохранением коммерческого контура NAS для B2B.</li>
+<li><strong>v3.0 (B2G) — Implemented:</strong> обязательный выбор <code>templateGroup</code> (Commercial / Government) при регистрации и атомарный онбординг плана счетов по выбранному типу.</li>
+</ul>
+<h3 id="61"><a class="toclink" href="#61">6.1. Государственные сервисы</a></h3>
+<ul>
+<li><strong>VÖEN Lookup:</strong> автозаполнение по 10-значному VÖEN; fallback при недоступности API.</li>
+<li><strong>e-taxes.gov.az:</strong> прямая подача данных (НДС, удержания — в объёме доступного API); журнал отправок и статусов.</li>
+</ul>
+<h3 id="60-external-iban-validation-api"><a class="toclink" href="#60-external-iban-validation-api">6.0. External IBAN Validation API</a></h3>
+<ul>
+<li>[x] <strong>COMPLETED:</strong> внедрена внешняя глубокая проверка реквизитов через <code>iban.com</code> (<code>https://www.iban.com/validation-api</code>) с защитой подпиской.</li>
+<li>[x] <strong>COMPLETED:</strong> успешные проверки кешируются на 24 часа в Redis по ключу <code>(organizationId, iban)</code> для снижения стоимости повторных запросов.</li>
+<li>[x] <strong>COMPLETED:</strong> в UI отображается подтверждение банка с деталями <code>Bank Name</code> и <code>BIC/SWIFT</code> после успешного deep-check.</li>
+</ul>
+<h3 id="62-asan-imza-sima"><a class="toclink" href="#62-asan-imza-sima">6.2. Цифровое доверие (ASAN İmza / SİMA)</a></h3>
+<ul>
+<li>Подписание инвойсов и актов сверки (PDF); аудит: факт подписи и хеш.</li>
+<li>ЭДО: канал в кабинет контрагента или e-mail с пояснением подписи.</li>
+</ul>
+<h3 id="63-direct-banking"><a class="toclink" href="#63-direct-banking">6.3. Direct Banking</a></h3>
+<ul>
+<li>Синхронизация выписок (целевой топ: Pasha Bank, ABB, Kaplan); исходящие платёжные поручения на подпись; жизненный цикл черновика до исполнен/отклонён.</li>
+<li>Foundation: фоновая BullMQ-задача <code>sync-bank-balances</code> для периодического опроса остатков и фиксации служебного события синхронизации в <code>AuditLog</code>.</li>
+<li><strong>Birbank (Kapital Bank): Implemented (Production Ready)</strong> — OAuth2 integration with Redis token caching, account balances (<code>/accounts</code>) and transaction history polling for period statements.</li>
+<li><strong>Pasha Bank: Implemented (Production Ready)</strong> — OAuth2 Client Credentials, Redis token cache, <code>GET /v1/accounts</code> and <code>GET /v1/transactions</code> mapped to the unified banking provider contract.</li>
+<li><strong>ABB: Implemented (Production Ready)</strong> — ABB Business API v1.6 auth + balance/statement integration and XML salary payment compatibility layer for HR payroll flow.</li>
+<li><strong>Ecosystem Sprint:</strong> завершён; интеграционный контур Banking Gateway + VÖEN lookup + Birbank Direct доведён до production-ready состояния.</li>
+<li><strong>Go-Live Hardening (v2026.04.14): Implemented</strong> — Integration Reliability layer применяет Circuit Breaker (<code>3x 5xx</code> -&gt; open <code>5 min</code>), Idempotency Keys для <code>Manual Sync</code> и <code>Payment Drafts</code>, Exponential Backoff retry-policy, а также Owner-only dashboard <code>/admin/integrations/health</code> для мониторинга Last Sync / Latency / Status / cache hit-rate.</li>
+<li>[x] <strong>COMPLETED (v2026.04.15): Payroll E2E Gateway</strong> — Payroll-to-Bank Gateway: multi-account selector, ABB XML direct integration, universal export for non-ABB banks, and template-based payroll tax logic.</li>
+<li>[x] <strong>COMPLETED (v2026.04.16): SaaS Priority 0 Hardening</strong> — secure payroll export storage with TTL links, consolidated tax engine by template profile, and absence overlap conflict payload with tests.</li>
+<li>[x] <strong>COMPLETED (v2026.04.17): SaaS Hardening v1 / Batch 1</strong> — RBAC policy enforcement for critical mutations, ledger Period Lock (<code>lockedPeriodUntil</code>, HTTP <code>423 Locked</code>) and atomic rollback tests for double-entry posting.</li>
+<li>[x] <strong>COMPLETED (v2026.04.18): SaaS Hardening v1 / Batch 2</strong> — RBAC auto-scanner for mutation endpoints, Public Invoice rate-limiting + strong token validation, and CRM degraded mode with VÖEN fallback + audit event.</li>
+<li>[x] <strong>COMPLETED (v2026.04.20): SaaS Hardening v1 / Batch 3</strong> — reporting draft leakage prevention (posted-only), strict negative inventory guard with FIFO/COGS regression coverage, and multi-currency VAT rounding handling to FX accounts.</li>
+<li>[x] <strong>COMPLETED (v2026.04.21): Multi-GAAP Foundation</strong> — parallel NAS/IFRS ledgers, automated IFRS mapping rules for mirror entries, ledger-aware reporting filters, and IFRS mapping management UI.</li>
+<li>[x] <strong>COMPLETED (v2026.04.22): NAS Chart of Accounts</strong> — i18n (AZ/RU/EN); global <strong><code>TemplateAccount</code></strong> + <strong><code>templateGroups</code></strong> (Commercial Full / Small); onboarding <strong><code>coaTemplate</code></strong> (<code>full</code>/<code>small</code>) and <strong><code>organizations.coaTemplateProfile</code></strong>; legacy <strong><code>ChartOfAccountsEntry</code></strong>; <strong><code>POST /api/organizations</code></strong> alias; <strong><code>GET /api/accounts/templates</code></strong> + <strong><code>POST /api/accounts/import-from-template</code></strong>; UI <strong><code>/settings/chart</code></strong>; API <code>locale</code> / <code>Accept-Language</code> for names.</li>
+<li>[x] <strong>COMPLETED (v2026.04.23): SaaS Hardening v1 (M8) — Audit &amp; Compliance</strong> — рекурсивное маскирование PII и секретов в интеграционных и аудит-пейлоадах (<code>DataMaskingService</code>), единая точка редукции в <code>AuditLog</code>, маскирование фрагментов ответов банковских API в application logs.</li>
+<li>[x] <strong>COMPLETED (v2026.04.24): Finance Core — Reconciliation Act</strong> — акт сверки взаиморасчётов по контрагенту: API <code>/api/reports/reconciliation/:id</code>, журнальные строки, PDF/XLSX и вкладка в карточке контрагента.</li>
+</ul>
+<h3 id="64"><a class="toclink" href="#64">6.4. Умный комплаенс</a></h3>
+<ul>
+<li>Валидация 7-значных ФИН; напоминания по налоговому резидентству (флаги, не юридический автовывод).</li>
+</ul>
+<h3 id="65-ga"><a class="toclink" href="#65-ga">6.5. Метрики успеха (ориентиры после GA фич)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Метрика</th>
+<th>Цель</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Время создания контрагента</td>
+<td>~60 с → ~5 с при успешном VÖEN Lookup</td>
+</tr>
+<tr>
+<td>Сходимость банка</td>
+<td>~95% транзакций сматчены автоматически</td>
+</tr>
+<tr>
+<td>ЭЦП</td>
+<td>≥ 50% исходящих документов подписано цифрово</td>
+</tr>
+</tbody>
+</table>
+<h3 id="66-v3"><a class="toclink" href="#66-v3">6.6. Вехи v3 (план)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Веха</th>
+<th>Фокус</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M1</td>
+<td>Инфраструктура шлюзов, банковские песочницы</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>ASAN İmza / SİMA в утверждении документов</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>Direct Banking для топ-3 банков (пилот)</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>Прямая подача в e-taxes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="67-v32-10k-concurrency-b2bb2g"><a class="toclink" href="#67-v32-10k-concurrency-b2bb2g">6.7. Архитектурное расширение v3.2+ (10k+ concurrency, B2B/B2G)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Модуль</th>
+<th>Продуктовый scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>M1 — B2G &amp; Tax API</strong></td>
+<td>Синхронизация входящих e-qaimə в черновики поступлений Ledger; подпись документов через ASAN İmza / SİMA; авто-проверка VÖEN и ƏDV-статуса.</td>
+</tr>
+<tr>
+<td><strong>M2 — Inventory &amp; B2G Limits</strong></td>
+<td>Коммерческий сценарий reorder points + FIFO; для GOVERNMENT — жёсткая проверка бюджетных лимитов по статье до создания закупки.</td>
+</tr>
+<tr>
+<td><strong>M3 — Production &amp; Costing</strong></td>
+<td>Многоуровневые BOM, возвратные отходы и целевое списание; фоновый расчёт фактической себестоимости при закрытии месяца.</td>
+</tr>
+<tr>
+<td><strong>M4 — Retail &amp; POS</strong></td>
+<td>РМК (кассир), смешанные оплаты, онлайн-ККМ; для B2G-платежей — зачисление на спецсчета NAS-Gov с авто-актом.</td>
+</tr>
+<tr>
+<td><strong>M5 — Advanced HRMS</strong></td>
+<td>Расширенное кадровое делопроизводство, интеграции e-sosial, расчёт стажа/отпусков/льгот, тарифные сетки бюджетников.</td>
+</tr>
+<tr>
+<td><strong>M6 — Budgeting &amp; Treasury</strong></td>
+<td>E-Smeta, платёжный календарь, bank-client; в GOVERNMENT смета является жёстким gateway для расходов M2/M5.</td>
+</tr>
+<tr>
+<td><strong>M7 — WMS Light</strong></td>
+<td>Адресное хранение (склад → зона → ячейка), put-away/picking, зональные инвентаризации без остановки склада.</td>
+</tr>
+<tr>
+<td><strong>M8 — Executive Dashboard</strong></td>
+<td>Near real-time KPI (прибыль, дебиторка, бюджет, кассовые разрывы) с drill-down до проводки в Ledger.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Архитектурные инварианты v3.2+:</strong></p>
+<ul>
+<li>Все тяжёлые вычисления выполняются в Async-First режиме (см. §10.3), API отвечает мгновенно с job/progress контрактом.</li>
+<li>Ledger остаётся неизменяемым источником финансовой истины (double-entry, ACID), включая B2G-ограничения.</li>
+<li>Серверный контур проектируется stateless; тяжёлые задачи выносятся в очереди с идемпотентностью на уровне бизнес-ключей.</li>
+</ul>
+<p><strong>Риски:</strong> изменение внешних API; ЭДО в кабинет контрагента зависит от сторонних каналов; KPI достижимы после стабилизации интеграций.</p>
+<hr>
+<h2 id="7-v4-commercial-saas-monetization"><a class="toclink" href="#7-v4-commercial-saas-monetization">7. Дорожная карта: v4 — Commercial SaaS &amp; Monetization</a></h2>
+<p>Завершение коммерческой модели поверх ядра и (при наличии) интеграций v3 (подразделы ниже).</p>
+<h3 id="71-v81-v88-hybrid-lego-v100"><a class="toclink" href="#71-v81-v88-hybrid-lego-v100">7.1. Модель подписки: Конструктор тарифов (v8.1, расширение v8.8) и <strong>Hybrid LEGO (v10.0)</strong></a></h3>
+<p><strong>Отказ от жёстких тиров как основной сюжет:</strong> маркетинговые «три коробки» (Starter / Business / Enterprise) не задают продукт; источник правды по ценам — <strong>конструктор</strong> в БД (см. v8.8). Поле <strong>tier</strong> в <code>OrganizationSubscription</code> сохраняется для демо, миграций и аналитики; <strong>ENTERPRISE</strong> по-прежнему означает <strong>полный доступ ко всем модулям</strong> без перечисления slug.</p>
+<p><strong>Сводка v10.0 (согласована с §7.12):</strong> тарификация <strong>по каждой организации (VÖEN)</strong> — база + модули-надстройки + платные квоты; <strong>единый месячный счёт платформы</strong> на владельца по всем его организациям — см. §7.12.4. Имена и цены модулей ниже — <strong>ориентир для каталога <code>PricingModules</code></strong>, не константы в коде.</p>
+<table>
+<thead>
+<tr>
+<th>Слой</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Foundation (база платформы)</strong></td>
+<td>Ежемесячная <strong>базовая цена за активную организацию</strong> (ориентир <strong>29 AZN/мес.</strong>) — доступ к <strong>базовому учёту</strong> (Ledger, CRM, дашборд) и <strong>1 пользователь</strong> (сид) в рамках этой организации; задаётся в Super-Admin (<code>SystemConfig</code>, ключ <code>billing.foundation_monthly_azn</code>). Дополнительные пользователи — через <strong>квоты</strong> (§7.12.3).</td>
+</tr>
+<tr>
+<td><strong>Module Marketplace (LEGO)</strong></td>
+<td>Модули включаются <strong>по организации</strong> независимо; цена в месяц — в <strong><code>PricingModules</code></strong>. Ориентир цен (AZN/мес., v10.0): <strong>Kassa Pro 15</strong>, <strong>Banking Pro 19</strong>, <strong>Warehouse 25</strong>, <strong>Manufacturing 39</strong>, <strong>HR 19</strong>, <strong>IFRS 29</strong> (ключи slug — как в каталоге, например <code>kassa_pro</code>, <code>banking_pro</code>, …).</td>
+</tr>
+<tr>
+<td><strong>Quota Management</strong></td>
+<td>Расширение лимитов (сотрудники, объём документов/инвойсов) — <strong>цена за единицу надбавки</strong>: например стоимость <strong>за блок из 10 дополнительных сотрудников</strong> и за <strong>пакет документов</strong>; значения в <code>SystemConfig</code> (<code>billing.quota_unit_pricing_v1</code>) и в подписке клиента (<code>customConfig.quotas</code>).</td>
+</tr>
+<tr>
+<td><strong>Пакеты (bundles)</strong></td>
+<td>Именованные наборы модулей с <strong>скидкой пакета</strong> (%) — таблица <strong><code>PricingBundles</code></strong>, настройка в Super-Admin (<strong>Paket yaradıcısı</strong>); для клиента показывается <strong>предпросмотр</strong> месячной и годовой суммы.</td>
+</tr>
+<tr>
+<td><strong>Период оплаты</strong></td>
+<td>При оплате <strong>за год</strong> — <strong>автоматическая скидка</strong> (по умолчанию <strong>20%</strong>) к итогу; процент хранится в <code>SystemConfig</code> (<code>billing.yearly_discount_percent</code>).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Формула итога (биллинг):</strong> <code>Total = BasePrice + Σ(выбранные модули) + (доп. квоты × цена единицы)</code>; затем применяется <strong>скидка пакета</strong> (если выбран bundle), затем при годовом периоде — <strong>годовая скидка</strong>. Детали схемы — <a href="./TZ.md">TZ.md</a> §14.</p>
+<p><strong>Ориентир устаревших пакетов (маркетинг / миграция):</strong> Starter / Business / Enterprise остаются <strong>legacy-пресетами</strong> в <code>SystemConfig</code> (<code>billing.price.*</code>) для совместимости; новые продажи ориентируются на конструктор и каталог <code>PricingModules</code>.</p>
+<h3 id="72"><a class="toclink" href="#72">7.2. Продуктовые механизмы</a></h3>
+<ul>
+<li><strong>Feature gating:</strong> блокировка UI и API при неоплаченном модуле; 403 + код причины на API.</li>
+<li><strong>Subscription management:</strong> текущий план, дата окончания, модули и квоты по организации — только для роли <strong>Owner</strong> (§7.12.1); привязка карты и просмотр истории платформенных платежей — также только <strong>Owner</strong>.</li>
+<li><strong>Quota enforcement:</strong> блокировка создания записей при исчерпании лимита (политика: жёсткий стоп vs предупреждение).</li>
+<li><strong>Billing MVP:</strong> платёжный шлюз (ориентиры: Pasha Bank, E-Pul); <strong>единый месячный счёт</strong> на владельца по портфелю org; идемпотентность webhooks; аудит смены плана.</li>
+</ul>
+<h3 id="73-prd-v41"><a class="toclink" href="#73-prd-v41">7.3. Демо-режим (PRD v4.1)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Аспект</th>
+<th>Поведение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Активация</td>
+<td>При регистрации организации — <code>OrganizationSubscription</code> с <code>isTrial: true</code>, тариф <strong>BUSINESS</strong></td>
+</tr>
+<tr>
+<td>Срок</td>
+<td><code>expiresAt</code> = сейчас + <strong>14 календарных дней</strong> (таймзона: зафиксировать: UTC или локаль организации)</td>
+</tr>
+<tr>
+<td>Уведомление</td>
+<td>На дашборде <strong>на все дни</strong> активного демо (пока не истёк срок) — плашка (AZ/RU) с переходом к оплате</td>
+</tr>
+<tr>
+<td>После демо</td>
+<td>Данные <strong>не удаляются</strong>; режим <strong>READ_ONLY</strong> до оплаты</td>
+</tr>
+</tbody>
+</table>
+<h3 id="731"><a class="toclink" href="#731">7.3.1. Главная страница (дашборд организации)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Элемент</th>
+<th>Поведение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Подзаголовок</strong></td>
+<td>Техно-стек на главной <strong>не показывается</strong> (фокус на продукте).</td>
+</tr>
+<tr>
+<td><strong>Шапка</strong></td>
+<td>Рядом с названием компании: <strong>тариф</strong>, <strong>квоты</strong> (инвойсы за месяц, сотрудники), ссылка на подписку.</td>
+</tr>
+<tr>
+<td><strong>Курсы ЦБА</strong></td>
+<td>Блок курсов валют к AZN.</td>
+</tr>
+<tr>
+<td><strong>Закрытие месяца</strong></td>
+<td>Блок <strong>только если</strong> есть <strong>незакрытый прошедший</strong> календарный UTC-месяц (самый ранний из «долга» по <code>settings.reporting.closedPeriods</code>); размещается <strong>над</strong> блоком курсов. Отдельная страница под закрытие <strong>не обязательна</strong>.</td>
+</tr>
+<tr>
+<td><strong>Краткие отчёты</strong></td>
+<td>Упрощённые <strong>P&amp;L</strong> (чистая прибыль за текущий UTC-месяц), <strong>баланс</strong> (сумма активов и сумма обязательств+капитала по типам счетов на дату), <strong>ДДС (упрощ.)</strong> — нетто по счетам 101+221 за текущий месяц; полные отчёты — в модуле Reporting.</td>
+</tr>
+<tr>
+<td><strong>Прочее</strong></td>
+<td>KPI (касса/банк, обязательства, расходы 721), топ дебиторов/кредиторов, график выручки, топ товаров; ссылка на полные отчёты.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Holding extension (v2026.04.11):</strong> <code>/holding/[id]/dashboard</code> — consolidated widget <strong>Cash &amp; Bank across Holding</strong> (pie by organization + total in base currency), <strong>Tax Risk Monitor</strong> (<code>isRiskyTaxpayer</code>), and manual <strong>"Синхронизировать банки"</strong> trigger (BullMQ <code>sync-bank-balances</code>).</p>
+<h3 id="74-v4"><a class="toclink" href="#74-v4">7.4. Критерии успеха v4</a></h3>
+<ul>
+<li>Нельзя обойти gating отключённого модуля через API.</li>
+<li>Превышение лимита → предсказуемая блокировка или upsell без потери данных.</li>
+<li>Владелец видит подписку и может продлить без поддержки (MVP).</li>
+<li>End-to-end тестовый платёж на staging.</li>
+<li>Демо: 14 дней Business, плашка на дашборде на все дни trial, затем READ_ONLY.</li>
+</ul>
+<h3 id="75-v4"><a class="toclink" href="#75-v4">7.5. Вне объёма v4</a></h3>
+<ul>
+<li>Микро-ценообразование без пакетов; мультивалютный биллинг вне AZ; маркетплейс интеграций.</li>
+</ul>
+<h3 id="76-super-admin-back-office"><a class="toclink" href="#76-super-admin-back-office">7.6. Платформа: Super-Admin Back-office</a></h3>
+<p><strong>Цель:</strong> централизованное управление всей платформой, пользователями и глобальными настройками системы.</p>
+<table>
+<thead>
+<tr>
+<th>Направление</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Управление организациями</strong></td>
+<td>Просмотр всех зарегистрированных компаний, статуса подписки и лимитов.</td>
+</tr>
+<tr>
+<td><strong>Управление тарифами и ценами</strong></td>
+<td><strong>Прайс-лист v8.8:</strong> базовая цена Foundation, каталог модулей (<code>PricingModules</code>), цены квот и годовая скидка; <strong>Paket yaradıcısı</strong> — пакеты со скидкой и предпросмотром для клиента (см. §7.1). Legacy-цены тиров — в <code>SystemConfig</code>.</td>
+</tr>
+<tr>
+<td><strong>Управление локализацией (i18n)</strong></td>
+<td>Интерфейс для правки текстовых строк (AZ / RU / EN) с приоритетом значений из БД над статическими ресурсами фронта.</td>
+</tr>
+<tr>
+<td><strong>Глобальный аудит</strong></td>
+<td>Доступ ко всем логам всех организаций для расследования критических инцидентов.</td>
+</tr>
+<tr>
+<td><strong>Системный мониторинг</strong></td>
+<td>Статус очередей BullMQ (фоновые задачи), состояние Redis и почтового сервера (по мере внедрения).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>UI:</strong> защищённый маршрут <code>/super-admin</code> (только пользователи с флагом супер-админа).</p>
+<h3 id="77-v56-data-safety"><a class="toclink" href="#77-v56-data-safety">7.7. Платформа (v5.6): гарантированная изоляция тенантов (Data Safety)</a></h3>
+<p><strong>Цель:</strong> исключить утечки данных между тенантами на уровне доступа к БД (Strict Multi-tenancy).</p>
+<table>
+<thead>
+<tr>
+<th>Принцип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ORM-уровень</strong></td>
+<td>Использование механизмов Prisma (<code>$extends</code> / Client Extension) для принудительной фильтрации по <code>organizationId</code> на операциях чтения/изменения/удаления по моделям с мультитенантностью.</td>
+</tr>
+<tr>
+<td><strong>Контекст запроса</strong></td>
+<td>Идентификатор организации берётся из текущего JWT / AsyncLocalStorage; для супер-админских маршрутов платформы — явное отключение фильтра только там, где это задокументировано.</td>
+</tr>
+<tr>
+<td><strong>Фоновые задачи</strong></td>
+<td>Воркеры BullMQ выполняют запросы в том же изоляционном контексте (передача <code>organizationId</code> в job payload).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="78-v57-ux-data-integrity"><a class="toclink" href="#78-v57-ux-data-integrity">7.8. Платформа (v5.7): консистентность данных и UX (Data Integrity)</a></h3>
+<p><strong>Цель:</strong> исключить частично применённые бизнес-операции, затрагивающие учёт и склад.</p>
+<table>
+<thead>
+<tr>
+<th>Принцип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>«Всё или ничё»</strong></td>
+<td>Любая операция, порождающая финансовый след (проводки NAS/IFRS, движения ТМЦ, статусы документов с проводками), выполняется в <strong>одной</strong> атомарной транзакции БД (<code>prisma.$transaction</code>), включая связанные обновления сущностей.</td>
+</tr>
+<tr>
+<td><strong>Согласованность</strong></td>
+<td>Если проводка или движение не созданы — изменения доменных данных в рамках этой операции не фиксируются (откат транзакции).</td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td>Глобальный <code>ValidationPipe</code> с <strong>whitelist</strong> и <strong><code>forbidNonWhitelisted: true</code></strong> снимает неизвестные поля DTO; входные DTO типизированы декораторами <code>class-validator</code> (согласовано с §7.9 и <a href="./TZ.md">TZ.md</a> §2 / §17).</td>
+</tr>
+<tr>
+<td><strong>UX</strong></td>
+<td>Пустые таблицы — единый <strong>Empty State</strong>; ошибки мутаций — toast; кнопки «Сохранить» / «Провести» — disabled + индикатор загрузки.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="79-v58-advanced-rbac"><a class="toclink" href="#79-v58-advanced-rbac">7.9. Платформа (v5.8): матрица полномочий (Advanced RBAC)</a></h3>
+<p><strong>Цель:</strong> каждая бизнес-мутация (создание, изменение, удаление) проходит через фильтр политик доступа, разграничивающий права базовых и специализированных ролей организации и платформы.</p>
+<table>
+<thead>
+<tr>
+<th>Принцип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Политики</strong></td>
+<td>Для финансовых документов действуют явные правила: например, роль <strong>User</strong> не изменяет инвойсы в статусе <strong>PAID</strong> и не создаёт ручные проводки в журнале, доступные бухгалтеру и выше.</td>
+</tr>
+<tr>
+<td><strong>Слой API</strong></td>
+<td>Проверки ролей в сервисах и/или guards на контроллерах; критичные маршруты — только <strong>OWNER</strong>, <strong>ADMIN</strong>, <strong>ACCOUNTANT</strong> где требуется.</td>
+</tr>
+<tr>
+<td><strong>Согласованность с ТЗ</strong></td>
+<td>Детали — <strong>Strict Validation</strong> (<code>forbidNonWhitelisted</code>) и <strong>Policy Guard</strong> в <a href="./TZ.md">TZ.md</a> (§2 и §17).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Целевая матрица ролей (sync с TZ §2):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Роль</th>
+<th>Граница полномочий</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OWNER</strong></td>
+<td>Полный доступ внутри организации, управление подпиской/billing, критические административные действия.</td>
+</tr>
+<tr>
+<td><strong>ADMIN</strong></td>
+<td>Операционное администрирование организации, пользователи/настройки, без platform-level прав.</td>
+</tr>
+<tr>
+<td><strong>ACCOUNTANT</strong></td>
+<td>Финансовые операции и проведение (Post/Approve), Ledger, ключевые отчёты.</td>
+</tr>
+<tr>
+<td><strong>USER</strong></td>
+<td>Ограниченный контур (в т.ч. собственные документы), без критичных финансовых мутаций.</td>
+</tr>
+<tr>
+<td><strong>PROCUREMENT</strong></td>
+<td>Закупочные документы, складские операции, черновики оплат; <strong>без</strong> прав проведения в Ledger.</td>
+</tr>
+<tr>
+<td><strong>AUDITOR</strong></td>
+<td>Глобальный read-only по организации (Ledger, Payroll, AuditLog, отчёты), без мутаций.</td>
+</tr>
+<tr>
+<td><strong>WAREHOUSE_KEEPER</strong></td>
+<td>Только складской контур (Inventory/Manufacturing), без доступа к бухгалтерским проводкам и payroll.</td>
+</tr>
+<tr>
+<td><strong>HR_OFFICER</strong></td>
+<td>Кадры и табель, без доступа к Ledger и финансовым проводкам.</td>
+</tr>
+<tr>
+<td><strong>HR_MANAGER</strong></td>
+<td>Расширенный кадровый контур (сотрудники/отсутствия/табель) без доступа к денежным данным payroll, налоговым ставкам и реестрам выплат.</td>
+</tr>
+<tr>
+<td><strong>DEPARTMENT_HEAD</strong></td>
+<td>Руководитель подразделения: видимость и approve табеля/отсутствий только по сотрудникам своего департамента (row-level scope).</td>
+</tr>
+<tr>
+<td><strong>SUPER_ADMIN</strong> (platform)</td>
+<td>Платформенный контур (например, <code>chart-template</code>, тарифные и системные настройки), не равен роли организации и не заменяет <code>OWNER</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Ключевое разграничение:</strong></p>
+<ul>
+<li><code>PROCUREMENT</code> готовит первичку и черновики оплат, но не выполняет <code>Post/Approve</code>.</li>
+<li><code>ACCOUNTANT</code> (и выше по политике endpoint) сохраняет исключительное право финального проведения.</li>
+<li>Payroll financial isolation: только <code>OWNER</code> и <code>ACCOUNTANT</code> работают с <code>PayrollRun</code>, payroll-tax финансовыми данными и выплатными реестрами; <code>HR_MANAGER</code> и <code>DEPARTMENT_HEAD</code> получают <code>403</code> на денежные endpoints.</li>
+</ul>
+<h3 id="710-v59-final-consistency-rc1"><a class="toclink" href="#710-v59-final-consistency-rc1">7.10. Процессная инвентаризация (v5.9 — Final Consistency / RC1)</a></h3>
+<p><strong>Цель:</strong> перейти от разовых ручных корректировок к документу <strong>«Инвентаризационная опись»</strong> с фиксацией излишков и недостач и проведением в один шаг.</p>
+<table>
+<thead>
+<tr>
+<th>Принцип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Сущность</strong></td>
+<td><strong>InventoryAudit (1 склад)</strong> + строки <strong>InventoryAuditLine (N)</strong>: <code>systemQty</code>, <code>factQty</code>, <code>costPrice</code>. Черновик формирует <strong>снимок системных остатков</strong> по выбранному складу; далее фиксируется факт и оценка расхождений.</td>
+</tr>
+<tr>
+<td><strong>Проведение</strong></td>
+<td>При <strong>APPROVED</strong> выполняется атомарное проведение в <strong>одной</strong> <code>prisma.$transaction</code>: создаются <strong>проводки</strong> по отклонениям (излишек: <strong>Дт 201/204 — Кт 611</strong>, недостача: <strong>Дт 731 — Кт 201/204</strong>) и <strong>движения склада</strong> (<code>StockMovement</code>, reason=ADJUSTMENT), после чего статус описи меняется на APPROVED (см. также TZ §10.1).</td>
+</tr>
+<tr>
+<td><strong>Доступ</strong></td>
+<td>Ручные проводки и проведение описи — по политикам RBAC (не ниже бухгалтера там, где задано в API).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="711-v60"><a class="toclink" href="#711-v60">7.11. Платформа (v6.0): усиление атомарности (неделимый блок БД)</a></h3>
+<p><strong>Цель:</strong> любой документ, порождающий связанные финансовые и складские эффекты (в частности <strong>Инвойс</strong>, <strong>Инвентаризационная опись</strong>, <strong>Зарплата</strong>), обязан завершать <strong>все</strong> связанные операции (проводки, движения ТМЦ, смена статусов с проводками) внутри <strong>одного</strong> неделимого блока транзакции БД (<code>prisma.$transaction</code> или эквивалент), без частичной фиксации при ошибке на любом шаге.</p>
+<h3 id="712-billing-subscription-v100-hybrid-lego"><a class="toclink" href="#712-billing-subscription-v100-hybrid-lego">7.12. Billing &amp; Subscription (v10.0) — владение, Hybrid LEGO, квоты, счета платформы</a></h3>
+<p>Дополнение к §7.1–7.2: <strong>коммерческий контур</strong> привязывается к <strong>владельцу организации</strong> и к <strong>каждой организации (VÖEN)</strong> как отдельному юниту оплаты. Детали схемы БД и API — <a href="./TZ.md">TZ.md</a> §14.8.</p>
+<h4 id="7121-ownership-access"><a class="toclink" href="#7121-ownership-access">7.12.1. Иерархия владения (Ownership &amp; Access)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Понятие</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Account (User)</strong></td>
+<td>Единая точка входа: один пользователь может состоять в <strong>нескольких</strong> организациях и <strong>владеть</strong> несколькими (как <code>ownerId</code> / роль <strong>OWNER</strong>).</td>
+</tr>
+<tr>
+<td><strong>Owner</strong></td>
+<td>Эксклюзивный статус в рамках организации: <strong>только</strong> пользователь с ролью <strong>OWNER</strong> управляет подпиской и коммерческими настройками по этой организации, видит <strong>историю платежей</strong> платформы по своему портфелю, может <strong>привязать платёжное средство (карту)</strong>. Роли <strong>Admin</strong>, <strong>Accountant</strong>, <strong>User</strong> к разделу <strong>Billing</strong> не допускаются (ни просмотр, ни мутации).</td>
+</tr>
+<tr>
+<td><strong>Organization.ownerId</strong></td>
+<td>FK на пользователя — владелец для <strong>выставления счетов платформы</strong> и <strong>Transfer</strong>; при создании организации <code>ownerId</code> = создатель; смена — только <strong>Change Owner</strong>.</td>
+</tr>
+<tr>
+<td><strong>Transfer of Ownership</strong></td>
+<td>Передача прав другому пользователю <strong>внутри системы</strong>: текущий и новый владелец подтверждают (<strong>double opt-in</strong>). В одной БД-транзакции обновляется <code>organizations.ownerId</code> и роли membership (например, прежний владелец → <code>ADMIN</code>, новый → <code>OWNER</code>).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Сводный биллинг:</strong> пользователь, который является <strong>OWNER</strong> (и обычно <code>ownerId</code>) по одной или нескольким организациям, получает <strong>один</strong> агрегированный счёт платформы в месяц (§7.12.4).</p>
+<h4 id="7122-hybrid-lego"><a class="toclink" href="#7122-hybrid-lego">7.12.2. Юнит тарификации — Hybrid LEGO (по организации)</a></h4>
+<ul>
+<li><strong>1 биллинг-юнит = 1 организация (1 VÖEN).</strong> Фиксированных «коробочных» планов нет: набор модулей и квот задаётся <strong>независимо для каждой</strong> организации.</li>
+<li><strong>Формула месячной оценки по организации (вход в <code>EstimatedNextPayment</code> и строки счёта):</strong></li>
+</ul>
+<p><div class="math-display">\[\text{Monthly}_\text{org} = \text{BasePrice} + \sum(\text{ActiveModule}_i) + \sum(\text{OverlimitQuota}_k)\]</div></p>
+<ul>
+<li><strong>BasePrice</strong> — за организацию (ориентир <strong>29 AZN/мес.</strong>; факт — <code>SystemConfig</code> / <code>basePriceSnapshot</code>); включает <strong>базовый учёт</strong> и <strong>1 пользователя</strong> в рамках этой организации (§7.1).</li>
+<li><strong>Active modules</strong> — сумма цен включённых модулей из каталога; ориентиры цен — §7.1 (таблица Module Marketplace).</li>
+<li><strong>Overlimit quotas</strong> — доплата за превышение включённых лимитов (§7.12.3).</li>
+</ul>
+<p>Каталог <strong><code>PricingModules</code></strong> — источник правды по ценам модулей; <strong><code>basePriceSnapshot</code></strong> на организации фиксирует базу на дату.</p>
+<h4 id="7123-scaling"><a class="toclink" href="#7123-scaling">7.12.3. Квоты (Scaling) — платные пакеты расширения</a></h4>
+<p>База Foundation даёт <strong>одного пользователя</strong> на организацию; остальное — <strong>масштабирование</strong> через платные пакеты (лимиты и цены — в <code>SystemConfig</code>, ключ <code>billing.quota_unit_pricing_v1</code>, и в <code>customConfig.quotas</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Ось</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Пользователи / сотрудники</strong></td>
+<td>Дополнительные места (например блоки по <strong>10</strong> человек за <strong>15 AZN</strong> — ориентир) сверх включённого в базу <strong>1</strong> сида.</td>
+</tr>
+<tr>
+<td><strong>Диск</strong></td>
+<td>Ориентир: <strong>1 GB</strong> в базе; сверх — пакеты (например <strong>5 AZN / 5 GB</strong>).</td>
+</tr>
+<tr>
+<td><strong>Инвойсы продаж (<code>maxInvoicesPerMonth</code>)</strong></td>
+<td>Ориентир базы <strong>100/мес.</strong>; сверх — пакеты (например <strong>500</strong> шт., цена из конфига).</td>
+</tr>
+</tbody>
+</table>
+<p>Превышение не должно приводить к «тихому» списанию: блок / upsell / явное согласие на докупку (§7.2).</p>
+<h4 id="71231-gating-ux"><a class="toclink" href="#71231-gating-ux">7.12.3.1. Gating UX при достижении квот</a></h4>
+<p><strong>Поведение интерфейса:</strong> при достижении лимита (<strong>пользователи / сотрудники</strong>, <strong>объём склада</strong>, <strong>инвойсы за месяц</strong> и др. квоты из §7.12.3) приложение <strong>не должно «падать»</strong> с необработанной ошибкой.</p>
+<table>
+<thead>
+<tr>
+<th>Правило</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Создание</strong></td>
+<td>Кнопки и формы <strong>создания</strong> новых записей, которые увеличивают потребление квоты, <strong>блокируются</strong> или показывают <strong>модальное окно</strong> с предложением <strong>апгрейда тарифа</strong> / докупки пакета.</td>
+</tr>
+<tr>
+<td><strong>Чтение</strong></td>
+<td>Просмотр (<strong>Read-only</strong>) данных, отчёты и навигация по уже созданным объектам <strong>сохраняются</strong> (кроме режима READ_ONLY по подписке — §7.3).</td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td>Мутации, нарушающие квоту, возвращают <strong>HTTP 402 Payment Required</strong> с машиночитаемым кодом (см. <a href="./TZ.md">TZ.md</a> §14.8.7); фронтенд перехватывает ответ и показывает <strong>UpgradePlanModal</strong> (или эквивалент).</td>
+</tr>
+</tbody>
+</table>
+<h4 id="7124-sales-invoice"><a class="toclink" href="#7124-sales-invoice">7.12.4. Платежи и счета платформы (не путать с Sales Invoice)</a></h4>
+<p><strong>Счёт платформы</strong> — документ к <strong>владельцу</strong> за подписку DayDay ERP. В коде и БД — отдельные сущности (<strong><code>billing_invoices</code> / <code>BillingInvoice</code></strong>), не таблица <strong><code>invoices</code></strong> (продажи).</p>
+<table>
+<thead>
+<tr>
+<th>Правило</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Единый месячный инвойс</strong></td>
+<td><strong>Owner</strong> получает <strong>один</strong> счёт платформы за <strong>месячный</strong> период, <strong>суммирующий</strong> все начисления по <strong>всем</strong> организациям, где он владелец (<code>ownerUserId</code> = этот пользователь). Внутри счёта — строки по каждой организации (VÖEN) и типу начисления (база, модуль, квота).</td>
+</tr>
+<tr>
+<td><strong>Billing History</strong></td>
+<td>Раздел UI: <strong>детализированная таблица</strong> транзакций/счетов платформы (дата, период, сумма, статус); для каждого счёта — <strong>скачивание PDF</strong> (<code>pdfLink</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>Обязательные атрибуты счёта:</p>
+<table>
+<thead>
+<tr>
+<th>Атрибут</th>
+<th>Смысл</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Привязка к владельцу</td>
+<td><code>ownerUserId</code> — плательщик</td>
+</tr>
+<tr>
+<td>Период</td>
+<td><code>periodStart</code>, <code>periodEnd</code> (месячный цикл)</td>
+</tr>
+<tr>
+<td>Статус</td>
+<td>черновик / выставлен / оплачен / просрочен</td>
+</tr>
+<tr>
+<td>PDF</td>
+<td><code>pdfLink</code> на сгенерированный счёт</td>
+</tr>
+<tr>
+<td>Строки</td>
+<td>разбивка по организациям: <code>organizationId</code>, описание, <code>amount</code></td>
+</tr>
+</tbody>
+</table>
+<p>Детализация полей и API — <strong>TZ §14.8</strong>.</p>
+<h4 id="7125-pro-rata"><a class="toclink" href="#7125-pro-rata">7.12.5. Платёжный цикл и pro-rata</a></h4>
+<ul>
+<li><strong>Списание / выставление счёта:</strong> раз в месяц (<strong>Monthly Billing Cycle</strong>), календарь и таймзона — зафиксировать (UTC или Asia/Baku).</li>
+<li><strong>Pro-rata:</strong> при <strong>включении модуля</strong> в середине расчётного периода — доля к оплате пропорционально <strong>оставшимся дням</strong> периода (округление — правило бизнеса: до копеек AZN).</li>
+<li><strong>Upgrade STARTER → ENTERPRISE (pro-rata):</strong> доплата за апгрейд в текущем периоде рассчитывается как<br>
+  <div class="math-display">\[(\text{Price}_{ENTERPRISE} - \text{Price}_{STARTER}) \times \frac{\text{daysRemaining}}{\text{daysInPeriod}}\]</div><br>
+  с округлением до 2 знаков AZN.</li>
+<li><strong>UX-превью апгрейда:</strong> перед оплатой UI отображает расчёт по <code>upgrade-preview</code> (<code>amountToPay</code>, <code>daysRemaining</code>, <code>currentTier</code>) в модалке апгрейда.</li>
+<li>При <strong>отключении</strong> модуля: либо до конца оплаченного периода доступ сохраняется, либо pro-rata-кредит — политика продукта (зафиксировать в ТЗ при реализации).</li>
+</ul>
+<hr>
+<h2 id="8"><a class="toclink" href="#8">8. Рамки и правила актуализации документа</a></h2>
+<ul>
+<li><strong>Назначение PRD:</strong> фиксирует продуктовые решения, границы и целевые сценарии, но не заменяет технические контракты из <code>TZ.md</code>.</li>
+<li><strong>Правило синхронизации:</strong> если меняется продуктовая логика (модуль, роль, onboarding, billing, B2G-flow), обновление PRD и TZ выполняется в одном цикле.</li>
+<li><strong>Единая точка версии:</strong> с базовой ревизии <code>2026.04.0</code> PRD и TZ ведутся синхронно по схеме <code>YYYY.MM.patch</code> (одинаковый <code>YYYY.MM</code>, отдельный <code>patch</code> для каждого зафиксированного пакета правок).</li>
+<li><strong>Архив старых треков:</strong> исторические коды релизов (<code>v2</code>, <code>v3</code>, <code>v5.8</code>, <code>v14.3</code>, <code>v25.1</code> и т.д.) считаются бизнес-контекстом, а не номером версии документа.</li>
+</ul>
+<hr>
+<h2 id="9"><a class="toclink" href="#9">9. Сущности базы данных (сводно)</a></h2>
+<table>
+<thead>
+<tr>
+<th>Сущность</th>
+<th>Ключевые поля</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Organization</strong></td>
+<td><code>id</code>, <code>name</code>, <code>taxId</code> (VÖEN), <code>currency</code>, <code>settings</code>, <strong><code>coaTemplateProfile</code></strong> (<code>COMMERCIAL_FULL</code> / <code>COMMERCIAL_SMALL</code>), <strong><code>ownerId</code></strong> (FK на пользователя — владелец для биллинга), <strong><code>basePriceSnapshot</code></strong>, <strong><code>status</code></strong> (жизненный цикл: Active / Trial / Suspended — см. §7.12), подписка через <code>OrganizationSubscription</code></td>
+</tr>
+<tr>
+<td><strong>OrgModule</strong> (целевая нормализация)</td>
+<td><code>(organizationId, moduleKey)</code>, <code>priceSnapshot</code>, <code>activatedAt</code> — включённые модули по организации (см. §7.12, TZ §14.8); параллельно может жить <code>OrganizationSubscription.customConfig</code> до миграции</td>
+</tr>
+<tr>
+<td><strong>BillingInvoice</strong> (платформа)</td>
+<td>Счёт к владельцу за подписку: <code>ownerUserId</code>, <code>totalAmount</code>, <code>status</code>, <code>periodStart</code> / <code>periodEnd</code>, <code>pdfLink</code>; строки — <strong><code>BillingInvoiceItem</code></strong> (<code>organizationId</code>, описание, сумма). Не смешивать с <strong>Sales Invoice</strong></td>
+</tr>
+<tr>
+<td><strong>User</strong></td>
+<td><code>id</code>, <code>email</code>, <code>passwordHash</code>; роль и тенант — через <strong>OrganizationMembership</strong>; опционально <code>isSuperAdmin</code> (платформа)</td>
+</tr>
+<tr>
+<td><strong>Account</strong></td>
+<td><code>id</code>, <code>code</code>, <strong><code>name_az</code> / <code>name_ru</code> / <code>name_en</code></strong>, <code>type</code>, <code>parentId</code>, <code>organizationId</code>, опционально <strong><code>templateAccountId</code></strong>, <strong><code>chartEntryId</code></strong></td>
+</tr>
+<tr>
+<td><strong><code>TemplateAccount</code></strong> (глобальный NAS, §5.1)</td>
+<td><code>code</code> (unique), трёхъязычные имена, <code>accountType</code>, <code>parentCode</code>, <strong><code>templateGroups[]</code></strong>, <code>cashProfile</code>; без <code>organizationId</code></td>
+</tr>
+<tr>
+<td><strong><code>ChartOfAccountsEntry</code></strong> (legacy каталог NAS) и <strong><code>TemplateIFRSMapping</code></strong></td>
+<td>Платформенные эталоны <strong>без</strong> <code>organizationId</code>; super-admin <strong><code>/api/admin/chart-template</code></strong>; онбординг использует эту таблицу, если <strong><code>template_accounts</code> пуста</strong></td>
+</tr>
+<tr>
+<td><strong>Transaction</strong></td>
+<td><code>id</code>, <code>date</code>, <code>reference</code>, <code>description</code>, <code>organizationId</code></td>
+</tr>
+<tr>
+<td><strong>JournalEntry</strong></td>
+<td><code>id</code>, <code>transactionId</code>, <code>accountId</code>, <code>debit</code>, <code>credit</code>, <code>organizationId</code></td>
+</tr>
+<tr>
+<td><strong>Counterparty</strong></td>
+<td><code>id</code>, <code>name</code>, <code>taxId</code>, <code>type</code>, <code>organizationId</code></td>
+</tr>
+<tr>
+<td><strong>Invoice</strong></td>
+<td><code>id</code>, <code>number</code>, <code>customerId</code>, <code>amount</code>, <code>status</code>, <code>organizationId</code></td>
+</tr>
+<tr>
+<td><strong>InventoryAudit (v5.9)</strong></td>
+<td><code>id</code>, <code>organizationId</code>, <code>date</code>, <code>status</code>, <code>items</code> (JSON — строки инвентаризации)</td>
+</tr>
+<tr>
+<td><strong>Подписка (v4)</strong></td>
+<td>Модель уровня <code>OrganizationSubscription</code>: план, <code>isTrial</code>, <code>expiresAt</code>, статус, периоды оплаты — детализация в ТЗ/миграциях</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="10"><a class="toclink" href="#10">10. Нефункциональные требования</a></h2>
+<h3 id="100-owner"><a class="toclink" href="#100-owner">10.0. Журнал безопасности (роль OWNER)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Требование</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Доступ</strong></td>
+<td>Просмотр полного журнала аудита организации и детальных снимков изменений — <strong>только роль OWNER</strong> (отдельно от журнала «Аудит» для Admin/Owner в настройках, если политика продукта различает уровни).</td>
+</tr>
+<tr>
+<td><strong>Данные</strong></td>
+<td>Записи из <code>AuditLog</code>: кто (<code>userId</code> + ФИО), тип объекта, идентификатор, действие (CREATE/UPDATE/DELETE по маппингу HTTP-метода), время, при необходимости сравнение <strong>oldValues / newValues</strong>.</td>
+</tr>
+<tr>
+<td><strong>Фильтры</strong></td>
+<td>По пользователю, типу сущности, диапазону дат; постраничная навигация.</td>
+</tr>
+<tr>
+<td><strong>Прозрачность</strong></td>
+<td>На карточках ключевых объектов (например счёт-фактура, сотрудник) — вкладка <strong>«История изменений»</strong> с логами <strong>только по данному <code>entityId</code></strong>.</td>
+</tr>
+<tr>
+<td><strong>Производительность</strong></td>
+<td>Запись аудита не должна блокировать ответ API дольше основной бизнес-операции: допускается асинхронная запись после успешной мутации (см. TZ §9).</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Атрибут</th>
+<th>Требование</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Надёжность</strong></td>
+<td>ACID для финансовых операций</td>
+</tr>
+<tr>
+<td><strong>Аудит</strong></td>
+<td><code>AuditLog</code> с <code>oldValues</code>/<code>newValues</code>, хеш SHA-256, IP/UA; архив &gt;1 года; «только сторно» для проводок — позже</td>
+</tr>
+<tr>
+<td><strong>Производительность</strong></td>
+<td>Пагинация, индексы по <code>organizationId</code> + <code>createdAt</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td>OpenAPI (Swagger)</td>
+</tr>
+<tr>
+<td><strong>Контейнеризация</strong></td>
+<td>Docker Compose (dev/prod MVP)</td>
+</tr>
+<tr>
+<td><strong>HTTPS терминация (production)</strong></td>
+<td>Reverse proxy перед <code>web</code> обязателен; рекомендуемый baseline — <strong>Caddy</strong> (<code>your-domain.tld</code> -&gt; <code>127.0.0.1:3000</code>), Nginx допустим как альтернатива</td>
+</tr>
+<tr>
+<td><strong>Очереди</strong></td>
+<td>BullMQ для фоновых задач</td>
+</tr>
+<tr>
+<td><strong>Файлы</strong></td>
+<td>Абстракция <code>STORAGE_SERVICE</code>; <strong>production:</strong> S3-compatible по умолчанию (<code>STORAGE_DRIVER=s3</code>); локально допускается <code>local</code> (см. §11.0)</td>
+</tr>
+<tr>
+<td><strong>Почта</strong></td>
+<td>Nodemailer SMTP — инвойсы, восстановление пароля</td>
+</tr>
+<tr>
+<td><strong>Интеграции (v3+)</strong></td>
+<td>TLS 1.2+ к госорганам; секреты не в коде; логи подписей</td>
+</tr>
+<tr>
+<td><strong>Биллинг (v4)</strong></td>
+<td>Секреты шлюза в vault/env; идемпотентность webhooks</td>
+</tr>
+</tbody>
+</table>
+<h3 id="101-ux-ui-standards-v89"><a class="toclink" href="#101-ux-ui-standards-v89">10.1. UX / UI Standards (v8.9)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Правило</th>
+<th>Требование</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Контраст</strong></td>
+<td>Все интерактивные элементы (кнопки, ссылки) должны иметь <strong>чёткий контраст</strong> с фоном <strong>#EBEDF0</strong>. Запрещено использовать бледные серые для <strong>основных</strong> действий; первичные кнопки — <strong>#2980B9</strong>, заголовки страниц — <strong>#34495E</strong> (см. <a href="./DESIGN.md">DESIGN.md</a>).</td>
+</tr>
+<tr>
+<td><strong>Иконография</strong></td>
+<td>Каждому пункту бокового меню <strong>строго назначена иконка</strong> (Lucide); отсутствие иконки — нарушение стандарта.</td>
+</tr>
+<tr>
+<td><strong>Границы</strong></td>
+<td>Карточки и панели — обводка <strong>#D5DADF</strong> (<code>border-muted</code>), не «растворяющиеся» светло-серые рамки без контраста.</td>
+</tr>
+<tr>
+<td><strong>Empty State</strong></td>
+<td>Пустые списки — единый компонент с <strong>иконкой</strong>, заголовком и пояснением по центру.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="103"><a class="toclink" href="#103">10.3. Масштабируемость и нагрузки</a></h3>
+<ul>
+<li><strong>Цель:</strong> поддержка до <strong>10,000 одновременно активных пользователей</strong> без нарушения инвариантов учёта (double-entry), tenant isolation и B2G/B2B профилей.</li>
+<li><strong>Async-First стандарт:</strong> любая операция, требующая более <strong>500 мс CPU времени</strong> (Payroll, Mass Invoice Generation, COGS recalculation и аналогичные), должна выполняться асинхронно через очередь задач.</li>
+<li><strong>UX-поведение:</strong> при запуске тяжёлой задачи пользователь получает мгновенный ответ (job id + статус запуска), а прогресс отображается через <strong>WebSocket</strong> или <strong>Polling</strong>; HTTP-запрос не должен удерживаться до завершения расчёта.</li>
+</ul>
+<hr>
+<h2 id="11-core-mvp"><a class="toclink" href="#11-core-mvp">11. Критерии приёмки Core MVP</a></h2>
+<h3 id="110-v190-v250"><a class="toclink" href="#110-v190-v250">11.0. Профиль организации, объектное хранилище и метод оценки запасов (v19.0 / v25.0)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Тема</th>
+<th>Требование</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Объектное хранилище (обязательно для приёмки прод-сборки)</strong></td>
+<td>Логотипы организаций, PDF счетов и прочие вложения сохраняются через <strong><code>STORAGE_SERVICE</code></strong> с <strong><code>STORAGE_DRIVER=s3</code></strong> и настроенными переменными <strong><code>S3_*</code></strong> (bucket, region, credentials, при необходимости <code>S3_PUBLIC_BASE_URL</code>). Локальная разработка может использовать <strong><code>STORAGE_DRIVER=local</code></strong> и <code>STORAGE_LOCAL_ROOT</code> без облака.</td>
+</tr>
+<tr>
+<td><strong>Профиль</strong></td>
+<td>В карточке организации доступны: <strong>юридический адрес</strong>, <strong>телефон</strong>, <strong>ФИО/наименование руководителя</strong> (текст для печати), <strong>логотип</strong> (файл → URL в объектном хранилище), <strong>VÖEN</strong> и наименование (как сейчас).</td>
+</tr>
+<tr>
+<td><strong>Банковские реквизиты</strong></td>
+<td>Поддерживается <strong>неограниченное количество</strong> банковских счетов организации (multicurrency): банк, номер счёта, валюта (AZN / USD / EUR), IBAN, SWIFT. Для IBAN используется валидация формата <strong>AZ..</strong> и контрольная проверка на уровне правил интеграции.</td>
+</tr>
+<tr>
+<td><strong>Оценка запасов</strong></td>
+<td>Параметр организации <strong><code>valuationMethod</code></strong>: <strong>AVCO</strong> (средневзвешенная по <code>stock_items.average_cost</code>, текущее поведение) или <strong>FIFO</strong> (себестоимость списания по «очереди» приходов из <code>stock_movements</code> типа IN). Выбор влияет на COGS при отгрузке (инвойс), списаниях/перемещениях и выпуске ГП (компоненты).</td>
+</tr>
+<tr>
+<td><strong>Глобальный справочник</strong></td>
+<td>По VÖEN ведётся строка в <strong><code>global_company_directory</code></strong>; при сохранении организации или контрагента данные <strong>асинхронно</strong> обновляются для Smart-fill.</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>Пользователь может создать организацию.</li>
+<li>Пользователь может создать два счёта (например, «Касса» и «Доход»).</li>
+<li>При создании оплаченного инвойса создаётся транзакция: <strong>Дебет (Касса) = Кредит (Доход)</strong>.</li>
+<li>Отчёт Trial Balance показывает корректные остатки по счетам.</li>
+</ol>
+<hr>
+<h2 id="12"><a class="toclink" href="#12">12. Зафиксированные решения (скоуп, тенанты, валюты, периоды, локаль)</a></h2>
+<table>
+<thead>
+<tr>
+<th>Тема</th>
+<th>Решение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Тенант</strong></td>
+<td>1 tenant = 1 юрлицо (VÖEN). Несколько компаний у пользователя = несколько организаций.</td>
+</tr>
+<tr>
+<td><strong>Курсы валют</strong></td>
+<td>Источник: XML/API ЦБА (cbar.az); обновление ежедневно в 00:01; переоценка валютных счетов — регламент в конце месяца.</td>
+</tr>
+<tr>
+<td><strong>Закрытие периода</strong></td>
+<td>Только <strong>Owner</strong> или <strong>Admin</strong>.</td>
+</tr>
+<tr>
+<td><strong>Архивация (Soft Delete)</strong></td>
+<td><strong>Полное удаление (Hard Delete)</strong> организаций, контрагентов и <strong>транзакций/проводок</strong>, по которым есть связанные движения (склад, оплаты, аудит), <strong>запрещено</strong>. Вместо этого — <strong>архивация</strong>: флаги <code>isDeleted</code> / <code>deletedAt</code> и скрытие из списков по умолчанию (см. <a href="./TZ.md">TZ.md</a> §16).</td>
+</tr>
+<tr>
+<td><strong>Интеграции MVP</strong></td>
+<td>Импорт CSV/Excel; API банков — после sandbox/доступов.</td>
+</tr>
+<tr>
+<td><strong>UI и i18n</strong></td>
+<td>Язык по умолчанию <strong>RU</strong>; архитектура <strong>i18next</strong>, готовность к <strong>AZ</strong>.</td>
+</tr>
+<tr>
+<td><strong>Время и форматы</strong></td>
+<td>В БД — <strong>UTC</strong>; отображение — локаль Азербайджана, суммы в <strong>AZN</strong>.</td>
+</tr>
+<tr>
+<td><strong>Локальная инфра (Windows)</strong></td>
+<td>Данные контейнеров, файлы, npm-кэш, temp — <strong>D:</strong> (<code>D:\DockerData\dayday_erp</code>); образы Docker — хранилище на D в Docker Desktop.</td>
+</tr>
+<tr>
+<td><strong>Тип организации / templateGroup</strong></td>
+<td><code>organizationType</code> и соответствующий <code>templateGroup</code> фиксируются при создании организации; после появления первой проводки в Ledger смена типа запрещена для сохранения целостности и исторической сопоставимости отчётов.</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="13-prd"><a class="toclink" href="#13-prd">13. История версий документа PRD</a></h2>
+<table>
+<thead>
+<tr>
+<th>Версия документа</th>
+<th>Статус</th>
+<th>Что зафиксировано</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>2026.04.0 (Baseline)</strong></td>
+<td>Старт синхронного ведения</td>
+<td>Консолидированы исторические изменения предыдущих циклов (релизные треки <code>v2+</code>, B2G, billing, масштабирование, v3.2+) в единую структуру PRD.</td>
+</tr>
+<tr>
+<td><strong>2026.04.1</strong></td>
+<td>Архив</td>
+<td>Нормализована нумерация разделов (в т.ч. <code>4.4.1</code> для Guest Access), добавлен §8 с регламентом актуализации, история переведена в документный changelog.</td>
+</tr>
+<tr>
+<td><strong>2026.04.2</strong></td>
+<td>Архив</td>
+<td><strong>RBAC Hardening:</strong> внедрена строгая изоляция ролей, owner-only контур Billing и глобальный <code>AuditorMutationGuard</code>; синхронизированы статусы Bridge Sprint в документации.</td>
+</tr>
+<tr>
+<td><strong>2026.04.3</strong></td>
+<td>Архив</td>
+<td>Выполнен consistency pass терминологии RBAC в ТЗ (капс ролей, <code>Post/Approve</code>) и стартована детальная проработка <code>Opening Balances Wizard</code> (рамка v1 в PRD/TZ).</td>
+</tr>
+<tr>
+<td><strong>2026.04.4</strong></td>
+<td>Архив</td>
+<td>Migration Wizard (Priority #1): HR-схема физически обновлена в БД (<code>hireDate</code>, <code>initialVacationDays</code>, <code>avgMonthlySalaryLastYear</code>), финансовый API opening-balances прошёл интеграционное и HTTP e2e тестирование; добавлен inventory opening endpoint с проводками <code>Дт 201/204 — Кт 000</code>.</td>
+</tr>
+<tr>
+<td><strong>2026.04.5</strong></td>
+<td>Архив</td>
+<td>Завершение Backend API для Migration Wizard (Finance, HR, Inventory) + Optimistic Locking; зафиксирован ранний <code>validateBalance()</code> до DB writes и интеграционное покрытие inventory с <code>409 Conflict</code>.</td>
+</tr>
+<tr>
+<td><strong>2026.04.6</strong></td>
+<td>Архив</td>
+<td>Migration Wizard UX: добавлены динамические шаблоны (XLSX), подсказки формата и поддержка алиасов в HR-парсере.</td>
+</tr>
+<tr>
+<td><strong>2026.04.7</strong></td>
+<td>Архив</td>
+<td>Ecosystem Integration: Banking Gateway, Pro-rata Upgrade logic, VÖEN auto-lookup.</td>
+</tr>
+<tr>
+<td><strong>2026.04.8</strong></td>
+<td>Архив</td>
+<td>Billing Upgrade Preview, FIN validator, Background Bank Sync foundation.</td>
+</tr>
+<tr>
+<td><strong>2026.04.9</strong></td>
+<td>Архив</td>
+<td>Birbank Direct Integration, OAuth2 Caching, FIN Validation, Pro-rata Upgrade UI.</td>
+</tr>
+<tr>
+<td><strong>2026.04.10</strong></td>
+<td>Архив</td>
+<td>Birbank Corporate API v1 mapping refinement, detailed bank sync audit payload, Ecosystem Sprint completion.</td>
+</tr>
+<tr>
+<td><strong>2026.04.11</strong></td>
+<td>Архив</td>
+<td>Holding Dashboard: consolidated balances, tax risk monitor, and manual bank sync trigger.</td>
+</tr>
+<tr>
+<td><strong>2026.04.12</strong></td>
+<td>Архив</td>
+<td>Full Banking API Integration: Birbank, Pasha, ABB implemented. Global Banking Gateway finalized.</td>
+</tr>
+<tr>
+<td><strong>2026.04.13</strong></td>
+<td>Архив</td>
+<td>Full Integration Suite Completed: 3 Banks + External IBAN Validation. System is Production Ready for Azerbaijan Market.</td>
+</tr>
+<tr>
+<td><strong>2026.04.14</strong></td>
+<td>Архив</td>
+<td>Go-Live Hardening: Circuit Breaker, Idempotency, and Integration Health Dashboard.</td>
+</tr>
+<tr>
+<td><strong>2026.04.15</strong></td>
+<td>Архив</td>
+<td>Payroll-to-Bank Gateway: Multi-account selector, ABB XML direct integration, Universal Export for other banks, and Template-based Tax Logic.</td>
+</tr>
+<tr>
+<td><strong>2026.04.16</strong></td>
+<td>Архив</td>
+<td>SaaS Go-Live Hardening Priority 0: Secure Storage for Payroll, Tax Engine consolidation, Absence guard payload &amp; tests.</td>
+</tr>
+<tr>
+<td><strong>2026.04.17</strong></td>
+<td>Архив</td>
+<td>SaaS Hardening v1 (Batch 1): RBAC policy enforcement, Ledger Period Lock, and atomic transaction tests.</td>
+</tr>
+<tr>
+<td><strong>2026.04.18</strong></td>
+<td>Архив</td>
+<td>SaaS Hardening v1 (Batch 2): RBAC auto-scanner, Public Invoice rate-limiting, and CRM fallback modes.</td>
+</tr>
+<tr>
+<td><strong>2026.04.20</strong></td>
+<td>Архив</td>
+<td>SaaS Hardening v1 (Batch 3): Reporting draft leakage prevention, Inventory COGS/FIFO strict calculations, and VAT rounding math.</td>
+</tr>
+<tr>
+<td><strong>2026.04.21</strong></td>
+<td>Архив</td>
+<td>Multi-GAAP Foundation: parallel NAS/IFRS ledgers, automated IFRS mapping, ledger-aware reporting, IFRS mapping UI.</td>
+</tr>
+<tr>
+<td><strong>2026.04.22</strong></td>
+<td>Архив</td>
+<td>NAS Chart of Accounts: i18n, Commercial/Small template profiles (<code>TemplateAccount</code>, <code>coaTemplate</code>), manual account import (<code>/settings/chart</code>).</td>
+</tr>
+<tr>
+<td><strong>2026.04.23</strong></td>
+<td>Архив</td>
+<td>SaaS Hardening v1 (M8): Integration raw payload masking and PII protection.</td>
+</tr>
+<tr>
+<td><strong>2026.04.24</strong></td>
+<td>Архив</td>
+<td>Finance Core Enhancement: Reconciliation Act generation and Counterparty ledger export.</td>
+</tr>
+<tr>
+<td><strong>2026.04.25</strong></td>
+<td>Архив</td>
+<td><strong>Inventory Core:</strong> Physical count adjustments, write-offs, and surplus financial postings — модели <code>InventoryAdjustment</code> / <code>InventoryAdjustmentLine</code>, API <code>physical-adjustments</code>, проведение с FIFO на недостаче и сводной проводкой (731/201, 201/631), UI <code>/inventory/physical</code>.</td>
+</tr>
+<tr>
+<td><strong>2026.04.26</strong></td>
+<td>Архив</td>
+<td><strong>HR/Payroll RBAC Hardening:</strong> Strict separation of HR duties, payroll financial isolation, and department-level timesheet visibility.</td>
+</tr>
+<tr>
+<td><strong>2026.04.27</strong></td>
+<td>Архив</td>
+<td><strong>Advanced AR/AP v2:</strong> Partial payments, tranche allocation engine, and Aging report.</td>
+</tr>
+<tr>
+<td><strong>2026.04.28</strong></td>
+<td>Текущая</td>
+<td><strong>e-Taxes Export v2:</strong> Tax declaration generation, Elektron Bildiriş receipt attachment, and compliance status workflow.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="131"><a class="toclink" href="#131">13.1. Принцип ведения истории (дальше)</a></h3>
+<ul>
+<li>Изменения в PRD и TZ фиксируются одним и тем же маркером периода: <code>YYYY.MM</code>.</li>
+<li>Любой новый пакет правок повышает <code>patch</code> (например: <code>2026.04.2</code>), одновременно в PRD и TZ.</li>
+<li>В графе «Что зафиксировано» описывается только изменение документа; продуктовые release-коды (например, <code>v3.2+</code>) указываются как контекст внутри описания.</li>
+</ul>
+<p><strong>PRD.md</strong> — единая точка правды по продукту; при изменениях править этот файл.</p>
+<hr>
+<p><em>Конец документа.</em></p>
+</main>
+</body>
+</html>

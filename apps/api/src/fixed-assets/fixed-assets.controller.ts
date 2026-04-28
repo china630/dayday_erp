@@ -15,6 +15,7 @@ import {
 } from "@nestjs/swagger";
 import { OrganizationId } from "../common/org-id.decorator";
 import { CreateFixedAssetDto } from "./dto/create-fixed-asset.dto";
+import { RunMonthlyDepreciationDto } from "./dto/run-monthly-depreciation.dto";
 import { UpdateFixedAssetDto } from "./dto/update-fixed-asset.dto";
 import { FixedAssetsService } from "./fixed-assets.service";
 import { RequiresModule } from "../subscription/requires-module.decorator";
@@ -64,5 +65,20 @@ export class FixedAssetsController {
   @ApiOperation({ summary: "Удалить ОС" })
   remove(@OrganizationId() organizationId: string, @Param("id") id: string) {
     return this.assets.remove(organizationId, id);
+  }
+
+  @Post("depreciation/run")
+  @ApiOperation({
+    summary:
+      "Запустить амортизацию за месяц (линейный метод; проводка Дт 713 — Кт 112; идемпотентно)",
+  })
+  runMonthlyDepreciation(
+    @OrganizationId() organizationId: string,
+    @Body() dto: RunMonthlyDepreciationDto,
+  ) {
+    return this.assets.runMonthlyDepreciation(organizationId, {
+      year: dto.year,
+      month: dto.month,
+    });
   }
 }

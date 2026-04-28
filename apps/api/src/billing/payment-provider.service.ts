@@ -5,8 +5,10 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  BillingStatus,
   PaymentOrderStatus,
   Prisma,
+  SubscriptionInvoiceStatus,
   SubscriptionTier,
 } from "@dayday/database";
 import { AuditService } from "../audit/audit.service";
@@ -47,11 +49,16 @@ export class PaymentProviderService {
     dto: CheckoutDto,
   ): Promise<{ orderId: string; paymentUrl: string; providerMode: string }> {
     const months = dto.months ?? 1;
-
-    const amountAzn =
-      dto.tier != null
-        ? await this.systemConfig.getBillingPriceAzn(dto.tier as SubscriptionTier)
-        : dto.amountAzn;
+    let amountAzn = dto.amountAzn;
+    if (dto.tier != null) {
+      const newTier = dto.tier as SubscriptionTier;
+      if (months === 1 && newTier === SubscriptionTier.ENTERPRISE) {
+        const pr = await this.billing.calculateUpgradePrice(organizationId, newTier);
+        amountAzn = pr.currentTier === SubscriptionTier.STARTER ? pr.amountAzn : await this.systemConfig.getBillingPriceAzn(newTier);
+      } else {
+        amountAzn = await this.systemConfig.getBillingPriceAzn(newTier);
+      }
+    }
 
     const webApp = this.config
       .get<string>("WEB_APP_PUBLIC_URL", "http://localhost:3000")
@@ -186,6 +193,24 @@ export class PaymentProviderService {
   }
 
   async handleWebhook(dto: PaymentWebhookDto): Promise<{ ok: boolean }> {
+    if (dto.subscriptionInvoiceId) {
+      if (
+        !this.pasha.verifyWebhookSignature(
+          dto.subscriptionInvoiceId,
+          dto.status,
+          dto.signature,
+        )
+      ) {
+        throw new UnauthorizedException("Invalid webhook signature");
+      }
+      if (dto.status === "failed") return { ok: true };
+      await this.finalizePaidSubscriptionInvoice(dto.subscriptionInvoiceId);
+      return { ok: true };
+    }
+
+    if (!dto.orderId) {
+      throw new BadRequestException("Missing orderId or subscriptionInvoiceId");
+    }
     if (
       !this.pasha.verifyWebhookSignature(
         dto.orderId,
@@ -216,6 +241,43 @@ export class PaymentProviderService {
 
     await this.finalizePaidOrder(dto.orderId);
     return { ok: true };
+  }
+
+  private async finalizePaidSubscriptionInvoice(
+    subscriptionInvoiceId: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.subscriptionInvoice.findUnique({
+        where: { id: subscriptionInvoiceId },
+        include: {
+          items: {
+            select: {
+              organizationId: true,
+            },
+          },
+        },
+      });
+      if (!invoice) {
+        throw new BadRequestException("Subscription invoice not found");
+      }
+
+      if (invoice.status !== SubscriptionInvoiceStatus.PAID) {
+        await tx.subscriptionInvoice.update({
+          where: { id: subscriptionInvoiceId },
+          data: { status: SubscriptionInvoiceStatus.PAID },
+        });
+      }
+
+      const orgIds = Array.from(
+        new Set(invoice.items.map((it) => it.organizationId).filter(Boolean)),
+      );
+      for (const orgId of orgIds) {
+        await tx.organization.update({
+          where: { id: orgId },
+          data: { billingStatus: BillingStatus.ACTIVE },
+        });
+      }
+    });
   }
 
   /**

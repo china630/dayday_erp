@@ -6,13 +6,17 @@ import { AuditArchiveQueueService } from "./audit-archive.queue";
 import { AuditArchiveWorker } from "./audit-archive.worker";
 import { AuditController } from "./audit.controller";
 import { AuditMutationInterceptor } from "./audit-mutation.interceptor";
+import { DataMaskingService } from "../privacy/data-masking.service";
 import { AuditService } from "./audit.service";
+import { AuditChainCronService } from "./audit-chain-cron.service";
 
 @Module({
   imports: [PrismaModule, ConfigModule],
   controllers: [AuditController],
   providers: [
+    DataMaskingService,
     AuditService,
+    AuditChainCronService,
     AuditArchiveQueueService,
     AuditArchiveWorker,
     {
@@ -20,6 +24,6 @@ import { AuditService } from "./audit.service";
       useClass: AuditMutationInterceptor,
     },
   ],
-  exports: [AuditService],
+  exports: [AuditService, DataMaskingService],
 })
 export class AuditModule {}

@@ -1,156 +1,181 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DayDay ERP — deploy.ru (Static HTML)</title>
-    <style>
-      :root {
-        --bg: #0b1220;
-        --card: #111a2b;
-        --text: #e6edf7;
-        --muted: #9fb0cc;
-        --border: #22324d;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-      }
-      .wrap {
-        max-width: 1080px;
-        margin: 24px auto;
-        padding: 0 16px 40px;
-      }
-      .card {
-        border: 1px solid var(--border);
-        background: var(--card);
-        border-radius: 12px;
-        padding: 20px;
-      }
-      .note { margin: 0 0 14px; color: var(--muted); }
-      h1, h2, h3 { line-height: 1.25; margin: 20px 0 10px; }
-      h1 { font-size: 30px; margin-top: 0; }
-      h2 { font-size: 23px; border-top: 1px solid var(--border); padding-top: 16px; }
-      h3 { font-size: 18px; color: var(--muted); }
-      p, li { line-height: 1.6; }
-      ul, ol { margin: 8px 0 14px 22px; }
-      code { color: #d7e9ff; }
-      pre {
-        margin: 10px 0 16px;
-        padding: 14px;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        background: #09101c;
-        overflow: auto;
-      }
-      hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="card">
-        <p class="note">Полностью статическая HTML-версия без JavaScript и внешних загрузок.</p>
-
-        <h1>DayDay ERP — развёртывание в production (Ubuntu 24.04 + Docker Compose)</h1>
-        <p>Цель: поднять стек из <code>docker-compose.prod.yml</code>:</p>
-        <ul>
-          <li>Postgres (<code>db</code>)</li>
-          <li>Redis (<code>redis</code>)</li>
-          <li>NestJS API (<code>api</code>)</li>
-          <li>Next.js Web (<code>web</code>)</li>
-        </ul>
-        <p>Документ обновлён под:</p>
-        <ul>
-          <li><strong>Node.js 22</strong> (образы <code>apps/api/Dockerfile</code>, <code>apps/web/Dockerfile</code>)</li>
-          <li><strong>Prisma ORM 7</strong> + <strong><code>prisma.config.ts</code></strong> + <strong>driver adapter</strong> (<code>@prisma/adapter-pg</code>)</li>
-          <li>Требование <strong>HTTPS</strong> для production web-origin (см. <code>TZ.md</code> §1)</li>
-        </ul>
-
-        <hr />
-        <h2>0. Быстрый чек-лист перед стартом</h2>
-        <ul>
-          <li>Есть домен и будет настроен HTTPS (Caddy/nginx/Traefik) → трафик на <code>web:3000</code>.</li>
-          <li>В корне репозитория будет <code>.env</code> (шаблон: <code>env.production.example</code>).</li>
-          <li>Вы понимаете, что <code>NEXT_PUBLIC_*</code> переменные вшиваются в клиентский бандл на этапе build.</li>
-          <li>На сервере открыт только нужный внешний порт (обычно 80/443); Postgres/Redis наружу не публикуем.</li>
-        </ul>
-
-        <hr />
-        <h2>1. SSH</h2>
-        <pre><code>ssh deploy@YOUR_SERVER_IP</code></pre>
-
-        <hr />
-        <h2>2. Docker (Ubuntu 24.04)</h2>
-        <pre><code>sudo apt-get update
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>deploy.ru</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; padding: 0 1rem; color: #222; }
+    .toc { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; background: #fafafa; }
+    .toc h2 { margin: 0 0 .5rem 0; font-size: 1.1rem; }
+    .toc ul { margin: 0; padding-left: 1.25rem; }
+    .toc li { margin: .25rem 0; }
+    .toc ul { list-style: none; counter-reset: item; }
+    .toc li { display: block; }
+    .toc li::before {
+      content: counters(item, ".") ". ";
+      counter-increment: item;
+      color: #666;
+      margin-right: .2rem;
+    }
+    .toc a { text-decoration: none; color: #0b57d0; }
+    .toc a:hover { text-decoration: underline; }
+    code { background: #f0f0f0; padding: .1rem .3rem; border-radius: 4px; }
+    pre { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; overflow: auto; }
+    pre code { display: block; background: transparent; padding: 0; }
+    blockquote { border-left: 4px solid #ddd; margin: 1rem 0; padding: .25rem 1rem; color: #555; }
+    hr { border: none; border-top: 1px solid #e5e5e5; margin: 1.5rem 0; }
+    img { max-width: 100%; height: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: .5rem .65rem; vertical-align: top; }
+    thead th { background: #f5f5f5; }
+    ul, ol { padding-left: 1.5rem; }
+    h1, h2 { scroll-margin-top: 1rem; }
+    .headerlink { margin-left: .35rem; font-size: .85em; color: #999; text-decoration: none; }
+  </style>
+</head>
+<body>
+<nav class="toc">
+<h2>Содержание</h2>
+<ul>
+<li><a href="#dayday-erp-production-ubuntu-2404-docker-compose">DayDay ERP — развёртывание в production (Ubuntu 24.04 + Docker Compose)</a><ul>
+<li><a href="#0-">0. Быстрый чек-лист перед стартом</a></li>
+<li><a href="#1-ssh">1. SSH</a></li>
+<li><a href="#2-docker-ubuntu-2404">2. Docker (Ubuntu 24.04)</a></li>
+<li><a href="#3-git">3. Git</a></li>
+<li><a href="#4">4. Клонирование репозитория</a></li>
+<li><a href="#5-production-env">5. Production .env (корень репозитория)</a></li>
+<li><a href="#6">6. Первый запуск стека</a></li>
+<li><a href="#7-prisma-7">7. Prisma 7: миграции и первичная инициализация</a></li>
+<li><a href="#8-https-production">8. HTTPS (обязательно для production)</a></li>
+<li><a href="#9">9. Проверки после деплоя</a></li>
+<li><a href="#10">10. Типовые проблемы</a></li>
+<li><a href="#11-runbook">11. Runbook: «снести дроплет и поднять заново» (без данных)</a></li>
+</ul>
+</li>
+</ul>
+</nav>
+<main>
+<h1 id="dayday-erp-production-ubuntu-2404-docker-compose"><a class="toclink" href="#dayday-erp-production-ubuntu-2404-docker-compose">DayDay ERP — развёртывание в production (Ubuntu 24.04 + Docker Compose)</a></h1>
+<p>Цель: поднять стек из <code>docker-compose.prod.yml</code>:<br>
+- Postgres (<code>db</code>)<br>
+- Redis (<code>redis</code>)<br>
+- NestJS API (<code>api</code>)<br>
+- Next.js Web (<code>web</code>)</p>
+<p>Документ обновлён под:<br>
+- <strong>Node.js 22</strong> (образы <code>apps/api/Dockerfile</code>, <code>apps/web/Dockerfile</code>)<br>
+- <strong>Prisma ORM 7</strong> + <strong><code>prisma.config.ts</code></strong> + <strong>driver adapter</strong> (<code>@prisma/adapter-pg</code>)<br>
+- Требование <strong>HTTPS</strong> для production web-origin (см. <code>TZ.md</code> §1)</p>
+<hr>
+<h2 id="0-"><a class="toclink" href="#0-">0. Быстрый чек-лист перед стартом</a></h2>
+<ul>
+<li>Есть домен и будет настроен HTTPS (Caddy/nginx/Traefik) → трафик на <code>web:3000</code>.</li>
+<li>В корне репозитория будет <code>.env</code> (шаблон: <code>env.production.example</code>).</li>
+<li>Вы понимаете, что <code>NEXT_PUBLIC_*</code> переменные <strong>вшиваются в клиентский бандл на этапе build</strong>.</li>
+<li>На сервере открыт только нужный внешний порт (обычно 80/443); Postgres/Redis наружу не публикуем.</li>
+</ul>
+<hr>
+<h2 id="1-ssh"><a class="toclink" href="#1-ssh">1. SSH</a></h2>
+<pre><code class="language-bash">ssh deploy@YOUR_SERVER_IP
+</code></pre>
+<hr>
+<h2 id="2-docker-ubuntu-2404"><a class="toclink" href="#2-docker-ubuntu-2404">2. Docker (Ubuntu 24.04)</a></h2>
+<pre><code class="language-bash">sudo apt-get update
 sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"${VERSION_CODENAME:-noble}\") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+echo &quot;deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo \&quot;${VERSION_CODENAME:-noble}\&quot;) stable&quot; | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$USER"</code></pre>
-        <p>Перезайди в SSH или выполни <code>newgrp docker</code>, затем:</p>
-        <pre><code>docker version
-docker compose version</code></pre>
-
-        <hr />
-        <h2>3. Git</h2>
-        <pre><code>sudo apt-get install -y git</code></pre>
-
-        <hr />
-        <h2>4. Клонирование репозитория</h2>
-        <pre><code>sudo mkdir -p /opt/dayday_erp
-sudo chown "$USER":"$USER" /opt/dayday_erp
+sudo usermod -aG docker &quot;$USER&quot;
+</code></pre>
+<p>Перезайди в SSH или выполни <code>newgrp docker</code>, затем:</p>
+<pre><code class="language-bash">docker version
+docker compose version
+</code></pre>
+<hr>
+<h2 id="3-git"><a class="toclink" href="#3-git">3. Git</a></h2>
+<pre><code class="language-bash">sudo apt-get install -y git
+</code></pre>
+<hr>
+<h2 id="4"><a class="toclink" href="#4">4. Клонирование репозитория</a></h2>
+<pre><code class="language-bash">sudo mkdir -p /opt/dayday_erp
+sudo chown &quot;$USER&quot;:&quot;$USER&quot; /opt/dayday_erp
 cd /opt/dayday_erp
-git clone YOUR_GIT_URL .</code></pre>
-
-        <hr />
-        <h2>5. Production <code>.env</code> (корень репозитория)</h2>
-        <pre><code>cp env.production.example .env
-nano .env</code></pre>
-        <h3>Минимально обязательные переменные</h3>
-        <ul>
-          <li><strong>Postgres</strong>: <code>POSTGRES_PASSWORD</code>; опционально <code>POSTGRES_USER</code>, <code>POSTGRES_DB</code>.</li>
-          <li><strong>API</strong>: <code>REDIS_URL=redis://redis:6379</code>, <code>JWT_SECRET</code>, <code>JWT_REFRESH_SECRET</code>, <code>AUDIT_HASH_SECRET</code>, <code>CORS_ORIGINS</code>.</li>
-          <li><strong>Web</strong>: <code>NEXT_PUBLIC_API_URL=http://api:4000</code>.</li>
-        </ul>
-        <h3>Часто нужные опции</h3>
-        <ul>
-          <li><strong>Storage</strong>: <code>STORAGE_DRIVER=s3</code> + <code>S3_*</code>, либо <code>STORAGE_DRIVER=local</code> + <code>STORAGE_LOCAL_ROOT</code>.</li>
-          <li><strong>SMTP</strong>: <code>SMTP_HOST</code> + <code>SMTP_*</code>.</li>
-          <li><strong>Sentry</strong>: <code>SENTRY_DSN_API</code>, <code>NEXT_PUBLIC_SENTRY_DSN</code> и токены для sourcemaps.</li>
-        </ul>
-        <p><strong>Важно:</strong> <code>NEXT_PUBLIC_*</code> попадают в bundle во время <code>docker build</code>; при изменении пересобирайте web-образ.</p>
-
-        <hr />
-        <h2>6. Первый запуск стека</h2>
-        <p>Из корня (где лежит <code>docker-compose.prod.yml</code>):</p>
-        <pre><code>docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml ps</code></pre>
-        <p>Логи:</p>
-        <pre><code>docker compose -f docker-compose.prod.yml logs -f api web</code></pre>
-
-        <hr />
-        <h2>7. Prisma 7: миграции и первичная инициализация</h2>
-        <p>Prisma настроена через <code>packages/database/prisma.config.ts</code>. В production используем только <code>prisma migrate deploy</code>.</p>
-        <h3>7.0. Maintenance mode перед миграциями (рекомендуется)</h3>
-        <p>Перед <code>db:migrate:deploy</code> включайте maintenance mode.</p>
-        <p>Вариант A (рекомендуется при Caddy): включить в <code>.env</code> <code>MAINTENANCE_MODE=1</code> и выполнить <code>docker compose -f docker-compose.prod.yml up -d web</code>. Для выключения убрать/обнулить переменную и снова <code>up -d web</code>.</p>
-        <p>Вариант B (Nginx boundary):</p>
-        <ul>
-          <li><code>docs/maintenance.html</code> — страница обслуживания (AZ/RU)</li>
-          <li><code>docs/nginx-maintenance.conf</code> — сниппет Nginx (503 при наличии <code>/var/www/html/maintenance.enable</code>)</li>
-        </ul>
-        <pre><code># 1) разово: положить maintenance.html и подключить nginx-сниппет
+git clone YOUR_GIT_URL .
+</code></pre>
+<hr>
+<h2 id="5-production-env"><a class="toclink" href="#5-production-env">5. Production <code>.env</code> (корень репозитория)</a></h2>
+<pre><code class="language-bash">cp env.production.example .env
+nano .env
+</code></pre>
+<h3 id="_1"><a class="toclink" href="#_1">Минимально обязательные переменные</a></h3>
+<ul>
+<li><strong>Postgres</strong>:</li>
+<li><code>POSTGRES_PASSWORD</code> (обязательна)</li>
+<li>опционально <code>POSTGRES_USER</code>, <code>POSTGRES_DB</code></li>
+<li><strong>API</strong>:</li>
+<li><code>REDIS_URL=redis://redis:6379</code></li>
+<li><code>JWT_SECRET</code>, <code>JWT_REFRESH_SECRET</code></li>
+<li><code>AUDIT_HASH_SECRET</code> (рекомендуется)</li>
+<li><code>CORS_ORIGINS=https://your-domain.tld</code> (можно несколько через запятую)</li>
+<li><strong>Web</strong>:</li>
+<li><code>NEXT_PUBLIC_API_URL=http://api:4000</code> (для сборки/SSR внутри сети Compose)</li>
+</ul>
+<h3 id="_2"><a class="toclink" href="#_2">Часто нужные опции (рекомендуется настроить до публичного запуска)</a></h3>
+<ul>
+<li><strong>Storage (логотипы, PDF)</strong>:</li>
+<li>production: <code>STORAGE_DRIVER=s3</code> + <code>S3_*</code></li>
+<li>альтернативно: <code>STORAGE_DRIVER=local</code> + <code>STORAGE_LOCAL_ROOT</code></li>
+<li><strong>SMTP</strong>:</li>
+<li><code>SMTP_HOST</code> + <code>SMTP_*</code> — без этого письма не отправляются</li>
+<li><strong>Sentry</strong>:</li>
+<li>API: <code>SENTRY_DSN_API</code></li>
+<li>Web client: <code>NEXT_PUBLIC_SENTRY_DSN</code></li>
+<li>sourcemaps upload для web build: <code>SENTRY_UPLOAD_SOURCEMAPS=1</code> + <code>SENTRY_AUTH_TOKEN</code> + <code>SENTRY_ORG</code> + <code>SENTRY_PROJECT_WEB</code></li>
+</ul>
+<h3 id="next_public_"><a class="toclink" href="#next_public_">Важно про <code>NEXT_PUBLIC_*</code></a></h3>
+<p><code>NEXT_PUBLIC_*</code> попадают в Next.js bundle <strong>во время</strong> <code>docker build</code> (см. <code>apps/web/Dockerfile</code>). Если меняете эти значения — нужно <strong>пересобрать образ web</strong>.</p>
+<hr>
+<h2 id="6"><a class="toclink" href="#6">6. Первый запуск стека</a></h2>
+<p>Из корня (где лежит <code>docker-compose.prod.yml</code>):</p>
+<pre><code class="language-bash">docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml ps
+</code></pre>
+<p>Логи:</p>
+<pre><code class="language-bash">docker compose -f docker-compose.prod.yml logs -f api web
+</code></pre>
+<hr>
+<h2 id="7-prisma-7"><a class="toclink" href="#7-prisma-7">7. Prisma 7: миграции и первичная инициализация</a></h2>
+<p>В этом репозитории Prisma настроена через <code>packages/database/prisma.config.ts</code>.<br>
+В production миграции применяем <strong>только</strong> командой <code>prisma migrate deploy</code> (никаких <code>migrate dev</code>).</p>
+<h3 id="70-maintenance-mode"><a class="toclink" href="#70-maintenance-mode">7.0. Maintenance mode перед миграциями (рекомендуется)</a></h3>
+<p>Перед <code>db:migrate:deploy</code> включайте maintenance mode, чтобы пользователи не работали в момент изменения схемы.</p>
+<h4 id="a-env"><a class="toclink" href="#a-env">Вариант A — одна настройка в <code>.env</code> (проще всего при типовом деплое)</a></h4>
+<p>В корневом <code>.env</code> задайте для сервиса <code>web</code>:</p>
+<pre><code class="language-bash">MAINTENANCE_MODE=1
+</code></pre>
+<p>Поддерживаемые значения: <code>1</code>, <code>true</code>, <code>yes</code>, <code>on</code> (без учёта регистра). Выключение: удалите переменную, <code>0</code> или <code>false</code>.</p>
+<p>Пересборка образа <code>web</code> <strong>не нужна</strong>; Compose уже пробрасывает переменную в контейнер. Нужен <strong>перезапуск</strong> процесса Next:</p>
+<pre><code class="language-bash">docker compose -f docker-compose.prod.yml up -d web
+</code></pre>
+<p>Дальше миграции и инициализация (как в §7.1–7.2), затем снимите <code>MAINTENANCE_MODE</code> и снова <code>up -d web</code>.</p>
+<p><strong>Ограничение:</strong> ответ 503 отдаёт только контейнер <strong>Next (<code>web</code>)</strong>. Запросы, которые не проходят через него (например, отдельно опубликованный порт API на хосте), этой настройкой не отключаются. В таких схемах используйте вариант B.</p>
+<h4 id="b-nginx-reverse-proxy"><a class="toclink" href="#b-nginx-reverse-proxy">Вариант B — Nginx (или другой reverse proxy) перед приложением</a></h4>
+<p>503 на границе HTTPS, до Node/Docker — надёжнее при нестандартной публикации портов.</p>
+<ul>
+<li><code>docs/maintenance.html</code> — страница обслуживания (AZ/RU); для варианта A дублируется в коде (<code>apps/web/lib/maintenance-page-html.ts</code>, держите визуально в согласовании при правках).</li>
+<li><code>docs/nginx-maintenance.conf</code> — сниппет: 503, если существует файл-флаг <code>/var/www/html/maintenance.enable</code>.</li>
+</ul>
+<p>Пример последовательности на сервере:</p>
+<pre><code class="language-bash"># 1) разово: положить maintenance.html и подключить nginx-сниппет
 sudo cp /opt/dayday_erp/docs/maintenance.html /var/www/html/maintenance.html
 # include /opt/dayday_erp/docs/nginx-maintenance.conf; внутри server { ... }
 
 # 2) включить maintenance
 sudo touch /var/www/html/maintenance.enable
-sudo nginx -t && sudo systemctl reload nginx
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx
 
 # 3) миграции/инициализация
 docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
@@ -158,80 +183,85 @@ docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
 
 # 4) выключить maintenance
 sudo rm -f /var/www/html/maintenance.enable
-sudo nginx -t && sudo systemctl reload nginx</code></pre>
-        <h3>7.1. Миграции (обязательно)</h3>
-        <pre><code>docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy</code></pre>
-        <h3>7.2. Идемпотентная “доводка” платформенных данных</h3>
-        <pre><code>docker compose -f docker-compose.prod.yml exec api npm run db:prod-init</code></pre>
-        <p><code>db:prod-init</code> должен быть идемпотентным; это не reset.</p>
-
-        <hr />
-        <h2>8. HTTPS (обязательно для production)</h2>
-        <p>Production web-origin должен быть HTTPS.</p>
-        <h3>8.1. Рекомендуемый путь: Caddy (быстрее всего)</h3>
-        <pre><code>sudo apt-get update
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx
+</code></pre>
+<h3 id="71"><a class="toclink" href="#71">7.1. Миграции (обязательно)</a></h3>
+<pre><code class="language-bash">docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+</code></pre>
+<p><code>DATABASE_URL</code> и остальные переменные из <code>.env</code> на хосте попадают в контейнер через <code>env_file</code> в <code>docker-compose.prod.yml</code>; отдельный <code>dotenv-cli</code> в образе для этих команд не требуется.</p>
+<h3 id="72"><a class="toclink" href="#72">7.2. Идемпотентная “доводка” платформенных данных (рекомендуется)</a></h3>
+<pre><code class="language-bash">docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
+</code></pre>
+<p>Примечание: <code>db:prod-init</code> должен быть идемпотентным; это не “reset”.</p>
+<hr>
+<h2 id="8-https-production"><a class="toclink" href="#8-https-production">8. HTTPS (обязательно для production)</a></h2>
+<p>Production web-origin должен быть <strong>HTTPS</strong>.</p>
+<h3 id="81-caddy"><a class="toclink" href="#81-caddy">8.1. Рекомендуемый путь: Caddy (быстрее всего)</a></h3>
+<pre><code class="language-bash">sudo apt-get update
 sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt-get update
-sudo apt-get install -y caddy</code></pre>
-        <p>Создайте <code>/etc/caddy/Caddyfile</code>:</p>
-        <pre><code>your-domain.tld {
+sudo apt-get install -y caddy
+</code></pre>
+<p>Создайте <code>/etc/caddy/Caddyfile</code>:</p>
+<pre><code class="language-caddy">your-domain.tld {
   reverse_proxy 127.0.0.1:3000
-}</code></pre>
-        <pre><code>sudo caddy validate --config /etc/caddy/Caddyfile
+}
+</code></pre>
+<p>Применение:</p>
+<pre><code class="language-bash">sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
-sudo systemctl status caddy --no-pager</code></pre>
-        <p>Caddy автоматически выпустит/обновит сертификат Let's Encrypt.</p>
-        <h3>8.2. Альтернатива: Nginx</h3>
-        <p><code>https://your-domain.tld</code> → <code>http://127.0.0.1:3000</code> (контейнер <code>web</code>).</p>
-        <p>API можно не публиковать отдельно: браузер ходит через тот же origin <code>/api/*</code>.</p>
-
-        <hr />
-        <h2>9. Проверки после деплоя</h2>
-        <ul>
-          <li><code>GET /api/health</code> через публичный web-origin</li>
-          <li>Логин/регистрация в UI</li>
-          <li>Нет ошибок <code>Failed to fetch</code> / <code>Unexpected end of JSON input</code></li>
-        </ul>
-
-        <hr />
-        <h2>10. Типовые проблемы</h2>
-        <ul>
-          <li><code>npm install</code> / <code>prisma generate</code> падает из-за <code>DATABASE_URL</code>: проверьте <code>.env</code> в корне и переменные БД.</li>
-          <li>Windows локально: ENOTEMPTY/EPERM в <code>.next</code>: остановить dev, сделать clean, повторить build.</li>
-        </ul>
-
-        <hr />
-        <h2>11. Runbook: «снести дроплет и поднять заново» (без данных)</h2>
-        <p>Сценарий подходит, если в production нет бизнес-данных и можно пересоздать сервер.</p>
-        <h3>11.1. На новой машине (Ubuntu 24.04)</h3>
-        <ol>
-          <li>Установи Docker и Git (разделы 2–3).</li>
-          <li>Клонируй репозиторий в <code>/opt/dayday_erp</code>.</li>
-          <li>Подготовь <code>.env</code>:</li>
-        </ol>
-        <pre><code>cd /opt/dayday_erp
+sudo systemctl status caddy --no-pager
+</code></pre>
+<p>Caddy автоматически выпустит/обновит Let's Encrypt сертификат.</p>
+<h3 id="82-nginx"><a class="toclink" href="#82-nginx">8.2. Альтернатива: Nginx</a></h3>
+<p>Остаётся валидным: <code>https://your-domain.tld</code> → <code>http://127.0.0.1:3000</code> (контейнер <code>web</code>).</p>
+<p>API можно не публиковать отдельно: браузер ходит через тот же origin <code>/api/*</code> (Next rewrites).</p>
+<hr>
+<h2 id="9"><a class="toclink" href="#9">9. Проверки после деплоя</a></h2>
+<ul>
+<li><code>GET /api/health</code> через публичный web-origin (например <code>https://your-domain.tld/api/health</code>)</li>
+<li>Логин/регистрация в UI</li>
+<li>Проверка, что переводы подгружаются (нет ошибок <code>Failed to fetch</code>/<code>Unexpected end of JSON input</code>)</li>
+</ul>
+<hr>
+<h2 id="10"><a class="toclink" href="#10">10. Типовые проблемы</a></h2>
+<ul>
+<li><strong><code>npm install</code> / <code>prisma generate</code> падает из-за <code>DATABASE_URL</code></strong>: убедитесь, что <code>.env</code> в корне и <code>DATABASE_URL</code>/<code>POSTGRES_*</code> заданы корректно (в compose <code>DATABASE_URL</code> для <code>api</code> собирается автоматически).</li>
+<li><strong>Windows локально: ENOTEMPTY/EPERM в <code>.next</code></strong>: остановить <code>next dev</code>, запустить <code>npm run clean -w @dayday/web</code>, повторить build; добавить исключение антивируса для <code>apps/web/.next</code>.</li>
+</ul>
+<hr>
+<h2 id="11-runbook"><a class="toclink" href="#11-runbook">11. Runbook: «снести дроплет и поднять заново» (без данных)</a></h2>
+<p>Сценарий подходит, если в production нет бизнес-данных и можно безболезненно пересоздать сервер.</p>
+<h3 id="111-ubuntu-2404"><a class="toclink" href="#111-ubuntu-2404">11.1. На новой машине (Ubuntu 24.04)</a></h3>
+<p>1) Установи Docker и Git (см. разделы 2–3).<br>
+2) Клонируй репозиторий в <code>/opt/dayday_erp</code>.<br>
+3) Подготовь <code>.env</code>:</p>
+<pre><code class="language-bash">cd /opt/dayday_erp
 cp env.production.example .env
-nano .env</code></pre>
-        <p>Минимум: <code>POSTGRES_PASSWORD</code>, <code>REDIS_URL</code>, <code>JWT_SECRET</code>, <code>JWT_REFRESH_SECRET</code>, <code>CORS_ORIGINS</code>, <code>NEXT_PUBLIC_API_URL</code>.</p>
-        <h3>11.2. Поднять стек + миграции</h3>
-        <pre><code>cd /opt/dayday_erp
+nano .env
+</code></pre>
+<p>Минимум: <code>POSTGRES_PASSWORD</code>, <code>REDIS_URL</code>, <code>JWT_SECRET</code>, <code>JWT_REFRESH_SECRET</code>, <code>CORS_ORIGINS</code>, <code>NEXT_PUBLIC_API_URL</code>.</p>
+<h3 id="112"><a class="toclink" href="#112">11.2. Поднять стек + миграции</a></h3>
+<pre><code class="language-bash">cd /opt/dayday_erp
 docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
-docker compose -f docker-compose.prod.yml exec api npm run db:prod-init</code></pre>
-        <h3>11.3. Проверки</h3>
-        <ul>
-          <li>Web открывается по HTTPS.</li>
-          <li><code>GET https://your-domain.tld/api/health</code> отдаёт 200.</li>
-          <li>Логин/регистрация работают.</li>
-        </ul>
-        <h3>11.4. Если нужно повторить «с нуля»</h3>
-        <pre><code>cd /opt/dayday_erp
-docker compose -f docker-compose.prod.yml down -v</code></pre>
-        <p>Затем снова выполнить шаги из 11.2.</p>
-      </div>
-    </div>
-  </body>
-</html>
 
+docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
+</code></pre>
+<h3 id="113"><a class="toclink" href="#113">11.3. Проверки</a></h3>
+<ul>
+<li>Web открывается по HTTPS.</li>
+<li><code>GET https://your-domain.tld/api/health</code> отдаёт 200.</li>
+<li>Логин/регистрация работают.</li>
+</ul>
+<h3 id="114"><a class="toclink" href="#114">11.4. Если нужно повторить «с нуля»</a></h3>
+<p>Остановить и удалить контейнеры и данные:</p>
+<pre><code class="language-bash">cd /opt/dayday_erp
+docker compose -f docker-compose.prod.yml down -v
+</code></pre>
+<p>Затем снова выполнить шаги из 11.2.</p>
+</main>
+</body>
+</html>

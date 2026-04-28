@@ -9,6 +9,8 @@ import { InvoiceStatus, Prisma, type UserRole } from "@dayday/database";
 import { assertUserMayMutateInvoiceInPaidStatus } from "../auth/policies/invoice-finance.policy";
 import { AccountingService } from "../accounting/accounting.service";
 import {
+  FX_GAIN_ACCOUNT_CODE,
+  FX_LOSS_ACCOUNT_CODE,
   RECEIVABLE_ACCOUNT_CODE,
   REVENUE_ACCOUNT_CODE,
 } from "../ledger.constants";
@@ -19,6 +21,7 @@ import {
   type StorageService,
 } from "../storage/storage.interface";
 import { CreateInvoiceDto } from "./dto/create-invoice.dto";
+import { AllocatePaymentDto } from "./dto/allocate-payment.dto";
 import { InvoicePdfQueueService } from "./invoice-pdf.queue";
 import {
   buildInvoicePdfModelByInvoiceIdPublic,
@@ -33,10 +36,9 @@ import { CashOrderService } from "../kassa/cash-order.service";
 
 type Decimal = Prisma.Decimal;
 const Decimal = Prisma.Decimal;
-
-function d(v: Prisma.Decimal | null | undefined): Prisma.Decimal {
-  return v ?? new Prisma.Decimal(0);
-}
+const PUBLIC_INVOICE_TOKEN_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[A-Za-z0-9_-]{32,128}$/i;
+const MULTI_CURRENCY_ROUNDING_TOLERANCE = new Decimal("0.01");
 
 @Injectable()
 export class InvoicesService {
@@ -57,17 +59,13 @@ export class InvoicesService {
       orderBy: { createdAt: "desc" },
       include: {
         counterparty: { select: { id: true, name: true, taxId: true } },
-        payments: { select: { amount: true } },
         _count: { select: { items: true } },
       },
     });
     return rows.map((inv) => {
-      const paidTotal = inv.payments.reduce(
-        (s, p) => s.add(p.amount),
-        new Decimal(0),
-      );
+      const paidTotal = inv.paidAmount ?? new Decimal(0);
       const remaining = inv.totalAmount.sub(paidTotal);
-      const { payments, ...rest } = inv;
+      const { ...rest } = inv;
       return {
         ...rest,
         paidTotal: paidTotal.toFixed(4),
@@ -91,10 +89,7 @@ export class InvoicesService {
       orderBy: { createdAt: "desc" },
       take: 20,
     });
-    const paidTotal = inv.payments.reduce(
-      (s, p) => s.add(p.amount),
-      new Decimal(0),
-    );
+    const paidTotal = inv.paidAmount ?? new Decimal(0);
     const remaining = inv.totalAmount.sub(paidTotal);
     return {
       ...inv,
@@ -208,7 +203,6 @@ export class InvoicesService {
       const existing = await tx.invoice.findFirst({
         where: { id, organizationId },
         include: {
-          payments: true,
           counterparty: { select: { taxId: true } },
         },
       });
@@ -223,7 +217,7 @@ export class InvoicesService {
         );
       }
 
-      const paidSum0 = this.sumPayments(existing.payments);
+      const paidSum0 = existing.paidAmount ?? new Decimal(0);
       if (status === InvoiceStatus.SENT && paidSum0.gt(0)) {
         throw new BadRequestException(
           "Инвойс уже имеет оплаты — используйте частичную оплату или доведите до PAID",
@@ -256,10 +250,9 @@ export class InvoicesService {
           await this.postRevenueRecognition(tx, organizationId, existing);
           recognizedAt = recognizedAt ?? new Date();
         }
-        const remaining = await this.remainingForInvoice(
-          tx,
-          existing.id,
+        const remaining = this.remainingForInvoice(
           existing.totalAmount,
+          existing.paidAmount ?? new Decimal(0),
         );
         if (remaining.gt(0)) {
           await this.applyPaymentInTransaction(
@@ -281,9 +274,9 @@ export class InvoicesService {
         }
         const refreshed = await tx.invoice.findFirstOrThrow({
           where: { id: existing.id },
-          include: { payments: true },
+          select: { totalAmount: true, paidAmount: true, status: true },
         });
-        const paidSum = this.sumPayments(refreshed.payments);
+        const paidSum = refreshed.paidAmount ?? new Decimal(0);
         const { nextStatus, paymentReceived } = this.derivePaymentState(
           refreshed.totalAmount,
           paidSum,
@@ -347,7 +340,6 @@ export class InvoicesService {
       const existing = await tx.invoice.findFirst({
         where: { id: invoiceId, organizationId },
         include: {
-          payments: true,
           counterparty: { select: { taxId: true } },
         },
       });
@@ -366,12 +358,27 @@ export class InvoicesService {
         );
       }
 
-      const remaining = await this.remainingForInvoice(
-        tx,
-        existing.id,
+      const remaining = this.remainingForInvoice(
         existing.totalAmount,
+        existing.paidAmount ?? new Decimal(0),
       );
+      let payableAmount = amount;
+      let roundingDifference = new Decimal(0);
       if (amount.gt(remaining)) {
+        const over = amount.sub(remaining);
+        const canRound =
+          existing.currency !== "AZN" &&
+          over.lte(MULTI_CURRENCY_ROUNDING_TOLERANCE);
+        if (canRound) {
+          payableAmount = remaining;
+          roundingDifference = over;
+        } else {
+          throw new BadRequestException(
+            `Сумма превышает остаток ${remaining.toFixed(4)}`,
+          );
+        }
+      }
+      if (payableAmount.lte(0)) {
         throw new BadRequestException(
           `Сумма превышает остаток ${remaining.toFixed(4)}`,
         );
@@ -392,16 +399,17 @@ export class InvoicesService {
           currency: existing.currency,
           counterpartyTaxId: existing.counterparty?.taxId ?? null,
         },
-        amount,
+        payableAmount,
         payDate,
         debitCode,
+        { roundingDifference },
       );
 
       const refreshed = await tx.invoice.findFirstOrThrow({
         where: { id: existing.id },
-        include: { payments: true },
+        select: { totalAmount: true, paidAmount: true, status: true },
       });
-      const paidSum = this.sumPayments(refreshed.payments);
+      const paidSum = refreshed.paidAmount ?? new Decimal(0);
       const { nextStatus, paymentReceived } = this.derivePaymentState(
         refreshed.totalAmount,
         paidSum,
@@ -421,6 +429,166 @@ export class InvoicesService {
   }
 
   /**
+   * Один платёж -> несколько инвойсов контрагента (FIFO по dueDate/recognizedAt/createdAt).
+   */
+  async allocatePaymentAcrossInvoices(
+    organizationId: string,
+    dto: AllocatePaymentDto,
+    role: UserRole,
+  ) {
+    const amount = new Decimal(dto.amount);
+    if (amount.lte(0)) {
+      throw new BadRequestException("amount must be positive");
+    }
+
+    let payDate: Date;
+    try {
+      payDate = dto.paymentDate?.trim()
+        ? parseIsoDateOnly(dto.paymentDate)
+        : new Date();
+    } catch {
+      throw new BadRequestException("Invalid paymentDate (expected YYYY-MM-DD)");
+    }
+    const debitCode = dto.debitAccountCode?.trim() || "221";
+
+    return this.prisma.$transaction(async (tx) => {
+      const candidateInvoices = await tx.invoice.findMany({
+        where: {
+          organizationId,
+          counterpartyId: dto.counterpartyId,
+          revenueRecognized: true,
+          status: {
+            in: [
+              InvoiceStatus.SENT,
+              InvoiceStatus.PARTIALLY_PAID,
+              InvoiceStatus.PAID,
+            ],
+          },
+        },
+        orderBy: [
+          { dueDate: "asc" },
+          { recognizedAt: "asc" },
+          { createdAt: "asc" },
+        ],
+        include: { counterparty: { select: { taxId: true } } },
+      });
+      if (candidateInvoices.length === 0) {
+        throw new BadRequestException(
+          "No receivable invoices found for allocation",
+        );
+      }
+
+      const buckets: Array<{
+        invoiceId: string;
+        invoiceNumber: string;
+        allocatedAmount: Decimal;
+      }> = [];
+      let remainingPayment = amount;
+
+      for (const inv of candidateInvoices) {
+        if (remainingPayment.lte(0)) break;
+        const paidAmount = inv.paidAmount ?? new Decimal(0);
+        const openAmount = inv.totalAmount.sub(paidAmount);
+        if (openAmount.lte(0)) continue;
+        const alloc = openAmount.lt(remainingPayment) ? openAmount : remainingPayment;
+        if (alloc.lte(0)) continue;
+        buckets.push({
+          invoiceId: inv.id,
+          invoiceNumber: inv.number,
+          allocatedAmount: alloc,
+        });
+        remainingPayment = remainingPayment.sub(alloc);
+      }
+      if (buckets.length === 0) {
+        throw new BadRequestException("All candidate invoices are already fully paid");
+      }
+      const appliedAmount = buckets.reduce(
+        (s, x) => s.add(x.allocatedAmount),
+        new Decimal(0),
+      );
+
+      const reference = `ALLOC-${new Date().getTime()}`;
+      const { transactionId } = await this.accounting.postJournalInTransaction(tx, {
+        organizationId,
+        date: payDate,
+        reference,
+        description: `Транш оплаты контрагента (${dto.counterpartyId})`,
+        lines: [
+          { accountCode: debitCode, debit: appliedAmount.toString(), credit: 0 },
+          { accountCode: RECEIVABLE_ACCOUNT_CODE, debit: 0, credit: appliedAmount.toString() },
+        ],
+      });
+
+      const resultAllocations: Array<{
+        invoiceId: string;
+        invoiceNumber: string;
+        allocatedAmount: string;
+        statusAfter: InvoiceStatus;
+      }> = [];
+
+      for (const b of buckets) {
+        const invoice = await tx.invoice.findFirstOrThrow({
+          where: { id: b.invoiceId, organizationId },
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            totalAmount: true,
+            paidAmount: true,
+          },
+        });
+        await tx.paymentAllocation.create({
+          data: {
+            organizationId,
+            transactionId,
+            invoiceId: invoice.id,
+            allocatedAmount: b.allocatedAmount,
+            date: payDate,
+          },
+        });
+        await tx.invoicePayment.create({
+          data: {
+            organizationId,
+            invoiceId: invoice.id,
+            amount: b.allocatedAmount,
+            date: payDate,
+            transactionId,
+          },
+        });
+        const afterPaid = (invoice.paidAmount ?? new Decimal(0)).add(
+          b.allocatedAmount,
+        );
+        const { nextStatus, paymentReceived } = this.derivePaymentState(
+          invoice.totalAmount,
+          afterPaid,
+          invoice.status,
+        );
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            paidAmount: afterPaid,
+            status: nextStatus,
+            paymentReceived,
+          },
+        });
+        resultAllocations.push({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          allocatedAmount: b.allocatedAmount.toFixed(4),
+          statusAfter: nextStatus,
+        });
+      }
+
+      return {
+        transactionId,
+        paymentAmount: amount.toFixed(4),
+        unappliedAmount: remainingPayment.toFixed(4),
+        allocations: resultAllocations,
+      };
+    });
+  }
+
+  /**
    * Для банковского match: начисление (если нужно) + оплата на сумму строки выписки.
    */
   async applyBankPaymentInTransaction(
@@ -437,7 +605,6 @@ export class InvoicesService {
     const existing = await tx.invoice.findFirst({
       where: { id: invoiceId, organizationId },
       include: {
-        payments: true,
         counterparty: { select: { taxId: true } },
       },
     });
@@ -464,17 +631,30 @@ export class InvoicesService {
     const inv = await tx.invoice.findFirstOrThrow({
       where: { id: invoiceId },
       include: {
-        payments: true,
         counterparty: { select: { taxId: true } },
       },
     });
 
-    const remaining = await this.remainingForInvoice(
-      tx,
-      inv.id,
+    const remaining = this.remainingForInvoice(
       inv.totalAmount,
+      inv.paidAmount ?? new Decimal(0),
     );
+    let payableAmount = lineAmount;
+    let roundingDifference = new Decimal(0);
     if (lineAmount.gt(remaining)) {
+      const over = lineAmount.sub(remaining);
+      const canRound =
+        inv.currency !== "AZN" && over.lte(MULTI_CURRENCY_ROUNDING_TOLERANCE);
+      if (canRound) {
+        payableAmount = remaining;
+        roundingDifference = over;
+      } else {
+        throw new BadRequestException(
+          `Сумма выписки больше остатка по счёту (${remaining.toFixed(4)})`,
+        );
+      }
+    }
+    if (payableAmount.lte(0)) {
       throw new BadRequestException(
         `Сумма выписки больше остатка по счёту (${remaining.toFixed(4)})`,
       );
@@ -492,17 +672,17 @@ export class InvoicesService {
         currency: inv.currency,
         counterpartyTaxId: inv.counterparty?.taxId ?? null,
       },
-      lineAmount,
+      payableAmount,
       valueDate,
       inv.debitAccountCode,
-      { skipRegistryMirror: true },
+      { skipRegistryMirror: true, roundingDifference },
     );
 
     const refreshed = await tx.invoice.findFirstOrThrow({
       where: { id: invoiceId },
-      include: { payments: true },
+      select: { totalAmount: true, paidAmount: true, status: true },
     });
-    const paidSum = this.sumPayments(refreshed.payments);
+    const paidSum = refreshed.paidAmount ?? new Decimal(0);
     const { nextStatus, paymentReceived } = this.derivePaymentState(
       refreshed.totalAmount,
       paidSum,
@@ -521,23 +701,8 @@ export class InvoicesService {
     };
   }
 
-  private sumPayments(
-    payments: Array<{ amount: Decimal }>,
-  ): Decimal {
-    return payments.reduce((s, p) => s.add(p.amount), new Decimal(0));
-  }
-
-  private async remainingForInvoice(
-    tx: Prisma.TransactionClient,
-    invoiceId: string,
-    totalAmount: Decimal,
-  ): Promise<Decimal> {
-    const agg = await tx.invoicePayment.aggregate({
-      where: { invoiceId },
-      _sum: { amount: true },
-    });
-    const paid = d(agg._sum.amount);
-    return totalAmount.sub(paid);
+  private remainingForInvoice(totalAmount: Decimal, paidAmount: Decimal): Decimal {
+    return totalAmount.sub(paidAmount);
   }
 
   private derivePaymentState(
@@ -581,7 +746,7 @@ export class InvoicesService {
     amount: Decimal,
     paymentDate: Date,
     debitAccountCode: string,
-    options?: { skipRegistryMirror?: boolean },
+    options?: { skipRegistryMirror?: boolean; roundingDifference?: Decimal },
   ): Promise<{ transactionId: string }> {
     const { transactionId } = await this.accounting.postJournalInTransaction(tx, {
       organizationId,
@@ -611,6 +776,24 @@ export class InvoicesService {
         transactionId,
       },
     });
+    const txAny = tx as any;
+    if (txAny.paymentAllocation?.create) {
+      await txAny.paymentAllocation.create({
+        data: {
+          organizationId,
+          transactionId,
+          invoiceId: inv.id,
+          allocatedAmount: amount,
+          date: paymentDate,
+        },
+      });
+    }
+    if (txAny.invoice?.update) {
+      await txAny.invoice.update({
+        where: { id: inv.id },
+        data: { paidAmount: { increment: amount } },
+      });
+    }
 
     if (!options?.skipRegistryMirror) {
       await createInvoicePaymentMirrorLine(tx, organizationId, {
@@ -635,6 +818,49 @@ export class InvoicesService {
       paymentId: payment.id,
       transactionId,
     });
+
+    const rounding = options?.roundingDifference ?? new Decimal(0);
+    if (rounding.gt(0)) {
+      const fxAccount = FX_GAIN_ACCOUNT_CODE;
+      await this.accounting.postJournalInTransaction(tx, {
+        organizationId,
+        date: paymentDate,
+        reference: inv.number,
+        description: `Округление мультивалютной оплаты ${inv.number}`,
+        lines: [
+          {
+            accountCode: debitAccountCode,
+            debit: rounding.toString(),
+            credit: 0,
+          },
+          {
+            accountCode: fxAccount,
+            debit: 0,
+            credit: rounding.toString(),
+          },
+        ],
+      });
+    } else if (rounding.lt(0)) {
+      const fxLoss = rounding.abs();
+      await this.accounting.postJournalInTransaction(tx, {
+        organizationId,
+        date: paymentDate,
+        reference: inv.number,
+        description: `Округление мультивалютной оплаты ${inv.number}`,
+        lines: [
+          {
+            accountCode: FX_LOSS_ACCOUNT_CODE,
+            debit: fxLoss.toString(),
+            credit: 0,
+          },
+          {
+            accountCode: debitAccountCode,
+            debit: 0,
+            credit: fxLoss.toString(),
+          },
+        ],
+      });
+    }
 
     return { transactionId };
   }
@@ -869,7 +1095,7 @@ export class InvoicesService {
   /** Guest: JSON для портала (без JWT). */
   async getPublicInvoiceByToken(publicToken: string) {
     const raw = publicToken?.trim();
-    if (!raw || raw.length > 400) {
+    if (!raw || raw.length > 400 || !PUBLIC_INVOICE_TOKEN_RE.test(raw)) {
       throw new NotFoundException();
     }
     const inv = await this.prisma.invoice.findFirst({
@@ -885,7 +1111,7 @@ export class InvoicesService {
     });
     if (!inv) throw new NotFoundException();
 
-    const paidTotal = this.sumPayments(inv.payments);
+    const paidTotal = inv.paidAmount ?? new Decimal(0);
     const remaining = inv.totalAmount.sub(paidTotal);
     const paid = remaining.lte(0);
     let localeHint: "az" | "ru" | "en" | null = null;
@@ -937,7 +1163,7 @@ export class InvoicesService {
 
   async getPublicInvoicePdfBuffer(publicToken: string): Promise<Buffer> {
     const raw = publicToken?.trim();
-    if (!raw || raw.length > 400) {
+    if (!raw || raw.length > 400 || !PUBLIC_INVOICE_TOKEN_RE.test(raw)) {
       throw new NotFoundException();
     }
     const inv = await this.prisma.invoice.findFirst({

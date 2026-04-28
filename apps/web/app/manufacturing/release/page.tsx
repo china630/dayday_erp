@@ -11,6 +11,11 @@ import { SubscriptionPaywall } from "../../../components/subscription-paywall";
 
 type Product = { id: string; name: string; sku: string };
 type Warehouse = { id: string; name: string };
+type Recipe = {
+  id: string;
+  finishedProductId: string;
+  finishedProduct?: { id: string; name: string };
+};
 
 const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
 
@@ -18,10 +23,11 @@ function ManufacturingReleaseContent() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [relWh, setRelWh] = useState("");
-  const [relFin, setRelFin] = useState("");
+  const [recipeId, setRecipeId] = useState("");
   const [relQty, setRelQty] = useState("1");
 
   const load = useCallback(async () => {
@@ -31,15 +37,18 @@ function ManufacturingReleaseContent() {
       apiFetch("/api/products"),
       apiFetch("/api/inventory/warehouses"),
     ]);
-    if (!pr.ok || !wh.ok) {
+    const rr = await apiFetch("/api/manufacturing/recipes");
+    if (!pr.ok || !wh.ok || !rr.ok) {
       setErr(t("manufacturing.loadErr"));
       return;
     }
     const plist = (await pr.json()) as Product[];
     const wlist = (await wh.json()) as Warehouse[];
+    const rlist = (await rr.json()) as Recipe[];
     setProducts(plist);
     setWarehouses(wlist);
-    setRelFin((prev) => prev || plist[0]?.id || "");
+    setRecipes(rlist);
+    setRecipeId((prev) => prev || rlist[0]?.id || "");
     setRelWh((prev) => prev || wlist[0]?.id || "");
   }, [token, t]);
 
@@ -56,7 +65,7 @@ function ManufacturingReleaseContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         warehouseId: relWh,
-        finishedProductId: relFin,
+        recipeId,
         quantity: Number(relQty),
       }),
     });
@@ -129,10 +138,16 @@ function ManufacturingReleaseContent() {
           </label>
           <label className="block sm:col-span-2">
             <span className={lbl}>{t("manufacturing.finished")}</span>
-            <select value={relFin} onChange={(e) => setRelFin(e.target.value)} className={inputFieldClass}>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+            <select
+              value={recipeId}
+              onChange={(e) => setRecipeId(e.target.value)}
+              className={inputFieldClass}
+            >
+              {recipes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.finishedProduct?.name ??
+                    products.find((p) => p.id === r.finishedProductId)?.name ??
+                    r.finishedProductId}
                 </option>
               ))}
             </select>

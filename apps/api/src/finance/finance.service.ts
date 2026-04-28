@@ -26,6 +26,7 @@ export class FinanceService {
     amount: number,
     ledgerType: LedgerType = LedgerType.NAS,
     actingUserRole?: UserRole,
+    audit?: { userId?: string; previewSuggestedAmount?: number },
   ) {
     return this.netting.createNetting(
       organizationId,
@@ -33,6 +34,7 @@ export class FinanceService {
       amount,
       ledgerType,
       actingUserRole,
+      audit,
     );
   }
 }

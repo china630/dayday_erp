@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -29,6 +30,8 @@ function d(v: Prisma.Decimal | null | undefined): Prisma.Decimal {
 
 @Injectable()
 export class NettingService {
+  private readonly logger = new Logger(NettingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly accounting: AccountingService,
@@ -226,6 +229,7 @@ export class NettingService {
     amountRaw: number,
     ledgerType: LedgerType = LedgerType.NAS,
     actingUserRole?: UserRole,
+    audit?: { userId?: string; previewSuggestedAmount?: number },
   ) {
     if (actingUserRole !== undefined) {
       assertMayPostManualJournal(actingUserRole);
@@ -233,6 +237,18 @@ export class NettingService {
     const amount = new Decimal(amountRaw);
     if (amount.lte(0)) {
       throw new BadRequestException("Сумма взаимозачёта должна быть больше 0");
+    }
+
+    if (
+      audit?.previewSuggestedAmount != null &&
+      Number.isFinite(audit.previewSuggestedAmount)
+    ) {
+      const suggested = new Decimal(audit.previewSuggestedAmount);
+      if (!amount.eq(suggested)) {
+        this.logger.log(
+          `Netting amount manually adjusted: org=${organizationId} counterpartyId=${counterpartyId} userId=${audit.userId ?? "unknown"} suggested=${suggested.toFixed(4)} posted=${amount.toFixed(4)}`,
+        );
+      }
     }
 
     const cp = await this.prisma.counterparty.findFirst({

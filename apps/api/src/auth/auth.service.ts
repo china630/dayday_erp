@@ -13,8 +13,11 @@ import {
   AccessRequestStatus,
   HoldingAccessRole,
   InviteStatus,
+  Prisma,
   SubscriptionTier,
   UserRole,
+  coaProfileToSettingsTemplateGroup,
+  resolveCoaTemplateProfileFromDto,
 } from "@dayday/database";
 import * as bcrypt from "bcrypt";
 import type { Response } from "express";
@@ -23,6 +26,7 @@ import { OrganizationsService } from "../organizations/organizations.service";
 import { QuotaService } from "../quota/quota.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES } from "../subscription/subscription.constants";
+import { MailService } from "../mail/mail.service";
 import type { AuthUser } from "./types/auth-user";
 import type { CreateOrgDto } from "./dto/create-org.dto";
 import type { LoginDto } from "./dto/login.dto";
@@ -62,7 +66,15 @@ export class AuthService {
     private readonly organizations: OrganizationsService,
     private readonly orgStructure: OrgStructureService,
     private readonly quota: QuotaService,
+    private readonly mail: MailService,
   ) {}
+
+  private inviteTokenSecret(): string {
+    return (
+      this.config.get<string>("INVITE_TOKEN_SECRET") ??
+      this.config.getOrThrow<string>("JWT_SECRET")
+    );
+  }
 
   private get refreshSecret(): string {
     return (
@@ -144,6 +156,11 @@ export class AuthService {
     const ln = dto.adminLastName.trim();
     const fullName = [fn, ln].filter(Boolean).join(" ") || null;
 
+    const coaProfile = resolveCoaTemplateProfileFromDto({
+      coaTemplate: dto.coaTemplate,
+      templateGroup: dto.templateGroup,
+    });
+
     const { org, userId } = await this.prisma.$transaction(async (tx) => {
       const o = await tx.organization.create({
         data: {
@@ -152,6 +169,10 @@ export class AuthService {
           currency: (dto.currency ?? "AZN").toUpperCase(),
           subscriptionPlan: "mvp",
           activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
+          coaTemplateProfile: coaProfile,
+          settings: {
+            templateGroup: coaProfileToSettingsTemplateGroup(coaProfile),
+          },
         },
       });
       const demoExpiresAt = new Date();
@@ -182,7 +203,7 @@ export class AuthService {
           role: UserRole.OWNER,
         },
       });
-      await this.organizations.provisionChartOfAccountsFromTemplate(tx, o.id);
+      await this.organizations.provisionChartOfAccountsFromTemplate(tx, o.id, coaProfile);
       return { org: o, userId: u.id };
     });
 
@@ -226,6 +247,11 @@ export class AuthService {
       }
     }
 
+    const coaProfile = resolveCoaTemplateProfileFromDto({
+      coaTemplate: dto.coaTemplate,
+      templateGroup: dto.templateGroup,
+    });
+
     const { org } = await this.prisma.$transaction(async (tx) => {
       const o = await tx.organization.create({
         data: {
@@ -234,6 +260,10 @@ export class AuthService {
           currency: (dto.currency ?? "AZN").toUpperCase(),
           subscriptionPlan: "mvp",
           activeModules: [...DEFAULT_NEW_ORGANIZATION_ACTIVE_MODULES],
+          coaTemplateProfile: coaProfile,
+          settings: {
+            templateGroup: coaProfileToSettingsTemplateGroup(coaProfile),
+          },
           ...(dto.holdingId && { holdingId: dto.holdingId }),
         },
       });
@@ -256,7 +286,7 @@ export class AuthService {
           role: UserRole.OWNER,
         },
       });
-      await this.organizations.provisionChartOfAccountsFromTemplate(tx, o.id);
+      await this.organizations.provisionChartOfAccountsFromTemplate(tx, o.id, coaProfile);
       return { org: o };
     });
 
@@ -819,14 +849,37 @@ export class AuthService {
     if (dup) {
       throw new ConflictException("Invite already pending");
     }
-    return this.prisma.organizationInvite.create({
+    const created = await this.prisma.organizationInvite.create({
       data: {
         organizationId,
         email: norm,
         role,
         invitedByUserId,
       },
+      include: { organization: { select: { name: true } } },
     });
+
+    const token = await this.jwt.signAsync(
+      { typ: "org-invite", inviteId: created.id, email: norm },
+      {
+        secret: this.inviteTokenSecret(),
+        expiresIn: "7d",
+      },
+    );
+    const webUrl = (this.config.get<string>("WEB_URL") ?? "http://localhost:3000").replace(/\/$/, "");
+    const acceptUrl = `${webUrl}/settings/team?invite=${encodeURIComponent(token)}`;
+    try {
+      await this.mail.sendMail({
+        to: norm,
+        subject: `DayDay ERP invite: ${created.organization.name}`,
+        text: `You were invited to ${created.organization.name}. Open this link to accept: ${acceptUrl}`,
+      });
+    } catch (e) {
+      this.logger.warn(
+        `Invite email send failed (${norm}): ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    return { ...created, inviteToken: token, acceptUrl };
   }
 
   async listInvitesForUser(userEmail: string) {
@@ -842,28 +895,101 @@ export class AuthService {
 
   async acceptInvite(userId: string, userEmail: string, inviteId: string) {
     const norm = userEmail.toLowerCase();
-    const inv = await this.prisma.organizationInvite.findFirst({
-      where: {
-        id: inviteId,
-        email: norm,
-        status: InviteStatus.PENDING,
-      },
-    });
-    if (!inv) {
-      throw new NotFoundException("Invite not found");
-    }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.organizationMembership.create({
-        data: {
-          userId,
-          organizationId: inv.organizationId,
-          role: inv.role,
-        },
+    return this.prisma.$transaction(async (tx) => {
+      const inv = await tx.organizationInvite.findFirst({
+        where: { id: inviteId, email: norm },
       });
-      await tx.organizationInvite.update({
-        where: { id: inv.id },
+      if (!inv) {
+        throw new NotFoundException("Invite not found");
+      }
+      const reserved = await tx.organizationInvite.updateMany({
+        where: { id: inv.id, status: InviteStatus.PENDING },
         data: { status: InviteStatus.ACCEPTED, decidedAt: new Date() },
       });
+      if (reserved.count === 0) {
+        const row = await tx.organizationInvite.findUnique({
+          where: { id: inviteId },
+        });
+        if (row?.status === InviteStatus.ACCEPTED) {
+          throw new ConflictException("Invite already accepted");
+        }
+        throw new ConflictException("Invite is no longer valid");
+      }
+      try {
+        await tx.organizationMembership.create({
+          data: {
+            userId,
+            organizationId: inv.organizationId,
+            role: inv.role,
+          },
+        });
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002"
+        ) {
+          throw new ConflictException("Already a member of this organization");
+        }
+        throw e;
+      }
+      return { ok: true };
+    });
+  }
+
+  async acceptInviteByToken(userId: string, userEmail: string, token: string) {
+    let payload: { typ?: string; inviteId?: string; email?: string };
+    try {
+      payload = await this.jwt.verifyAsync(token, {
+        secret: this.inviteTokenSecret(),
+      });
+    } catch (e: unknown) {
+      const name =
+        e && typeof e === "object" && "name" in e
+          ? String((e as { name: unknown }).name)
+          : "";
+      if (name === "TokenExpiredError") {
+        throw new UnauthorizedException("Invite token expired");
+      }
+      throw new UnauthorizedException("Invalid invite token");
+    }
+    if (payload.typ !== "org-invite" || !payload.inviteId) {
+      throw new UnauthorizedException("Invalid invite token");
+    }
+    const email = userEmail.toLowerCase().trim();
+    if (payload.email && payload.email.toLowerCase().trim() !== email) {
+      throw new ForbiddenException("Invite token email mismatch");
+    }
+    return this.acceptInvite(userId, email, payload.inviteId);
+  }
+
+  async listOrganizationInvites(organizationId: string) {
+    return this.prisma.organizationInvite.findMany({
+      where: { organizationId, status: InviteStatus.PENDING },
+      orderBy: { createdAt: "desc" },
+      include: {
+        invitedBy: { select: { id: true, email: true, fullName: true } },
+      },
+    });
+  }
+
+  async revokeInvite(
+    organizationId: string,
+    inviteId: string,
+    actorRole: UserRole,
+  ) {
+    if (actorRole !== UserRole.OWNER && actorRole !== UserRole.ADMIN) {
+      throw new ForbiddenException();
+    }
+    const inv = await this.prisma.organizationInvite.findFirst({
+      where: { id: inviteId, organizationId },
+    });
+    if (!inv) throw new NotFoundException("Invite not found");
+    if (inv.status !== InviteStatus.PENDING) {
+      throw new BadRequestException("Invite is already decided");
+    }
+    await this.prisma.organizationInvite.update({
+      where: { id: inviteId },
+      data: { status: InviteStatus.DECLINED, decidedAt: new Date() },
     });
     return { ok: true };
   }

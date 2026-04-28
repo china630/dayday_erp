@@ -1,0 +1,2354 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TZ</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; padding: 0 1rem; color: #222; }
+    .toc { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; background: #fafafa; }
+    .toc h2 { margin: 0 0 .5rem 0; font-size: 1.1rem; }
+    .toc ul { margin: 0; padding-left: 1.25rem; }
+    .toc li { margin: .25rem 0; }
+    .toc a { text-decoration: none; color: #0b57d0; }
+    .toc a:hover { text-decoration: underline; }
+    code { background: #f0f0f0; padding: .1rem .3rem; border-radius: 4px; }
+    pre { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; overflow: auto; }
+    pre code { display: block; background: transparent; padding: 0; }
+    blockquote { border-left: 4px solid #ddd; margin: 1rem 0; padding: .25rem 1rem; color: #555; }
+    hr { border: none; border-top: 1px solid #e5e5e5; margin: 1.5rem 0; }
+    img { max-width: 100%; height: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: .5rem .65rem; vertical-align: top; }
+    thead th { background: #f5f5f5; }
+    ul, ol { padding-left: 1.5rem; }
+    h1, h2 { scroll-margin-top: 1rem; }
+    .headerlink { margin-left: .35rem; font-size: .85em; color: #999; text-decoration: none; }
+  </style>
+</head>
+<body>
+<nav class="toc">
+<h2>Содержание</h2>
+<ul>
+<li><a href="#dayday-erp">Техническое задание (Т/З): DayDay ERP</a><ul>
+<li><a href="#00">0.0. Реестр ключевых эндпоинтов (выжимка)</a></li>
+<li><a href="#0-prd">0. Синхронизация с PRD</a></li>
+<li><a href="#1-mvp">1. Инфраструктура и стек (MVP)</a><ul>
+<li><a href="#11-reporting-aggregator">1.1. Архитектура холдинга: консолидация валют (Reporting Aggregator)</a></li>
+<li><a href="#14-background-jobs">1.4. Очереди и Background Jobs</a></li>
+<li><a href="#15-digitalocean-vpc">1.5. Сетевой регламент (DigitalOcean VPC)</a></li>
+<li><a href="#16-thundering-herd">1.6. Режим «Thundering Herd»</a></li>
+</ul>
+</li>
+<li><a href="#2-1-identity-access-management-iam-multi-tenancy">2. Модуль 1: Identity &amp; Access Management (IAM) &amp; Multi-tenancy</a><ul>
+<li><a href="#_1">Цель</a></li>
+<li><a href="#_2">Модель тенанта</a></li>
+<li><a href="#21-many-to-many-auth">2.1. Рефакторинг на Many-to-Many (схема и auth)</a></li>
+<li><a href="#rbac">Система ролей (RBAC)</a></li>
+<li><a href="#_3">Безопасность</a></li>
+<li><a href="#validation-strict-mode-v58-17">Validation Strict Mode (v5.8) — синхронно с §17</a></li>
+<li><a href="#policy-guard-v58-casl-like">Policy Guard (v5.8, CASL-like)</a></li>
+<li><a href="#sql">Сырой SQL и изоляция тенанта</a></li>
+</ul>
+</li>
+<li><a href="#3-2-ledger-finance-core">3. Модуль 2: Ledger &amp; Finance Core</a><ul>
+<li><a href="#_4">Цель</a></li>
+<li><a href="#chart-of-accounts-accounts">План счетов (Chart of Accounts / Accounts)</a></li>
+<li><a href="#transaction-journal-entry">Транзакции (Transaction) и проводки (Journal Entry)</a></li>
+<li><a href="#31-optimistic-locking">3.1. Optimistic Locking для массовых параллельных расчётов</a></li>
+<li><a href="#32-stateless-workers">3.2. Stateless Workers</a></li>
+<li><a href="#33-netting">3.3. Дополнение: взаимозачёт (Netting)</a></li>
+</ul>
+</li>
+<li><a href="#4-3-crm-counterparties">4. Модуль 3: CRM &amp; Counterparties</a><ul>
+<li><a href="#_6">Цель</a></li>
+<li><a href="#_7">Карточка контрагента</a></li>
+<li><a href="#_8">Взаиморасчёты</a></li>
+</ul>
+</li>
+<li><a href="#5-4-sales-invoicing">5. Модуль 4: Sales &amp; Invoicing</a><ul>
+<li><a href="#_9">Цель</a></li>
+<li><a href="#ui-vxy">UI (реализация vX.Y): создание через модальные окна</a></li>
+<li><a href="#voen-mdm-lookup-uirest">Контрагенты (VÖEN / MDM lookup) — UI/REST</a></li>
+<li><a href="#invoice">Invoice</a></li>
+<li><a href="#ui">НДС и услуги (UI)</a></li>
+<li><a href="#-">Бизнес-логика (триггеры)</a></li>
+<li><a href="#52-e-taxesgovaz">5.2. Экспорт для e-taxes.gov.az</a></li>
+<li><a href="#_10">Печатные формы</a></li>
+</ul>
+</li>
+<li><a href="#6-5-cash-management">6. Модуль 5: Cash Management</a><ul>
+<li><a href="#_11">Цель</a></li>
+<li><a href="#60-treasury-apibankingcash-apibanking-rest-dto">6.0. Treasury, касса (/api/banking/cash), банк (/api/banking) — REST, DTO, проведение, миграция БД</a></li>
+<li><a href="#chart-of-accounts">Банковские и кассовые счета (не путать с Chart of Accounts)</a></li>
+<li><a href="#reconciliation">Reconciliation (сверка)</a></li>
+<li><a href="#kassa-v82">Подраздел Kassa (касса, v8.2)</a></li>
+</ul>
+</li>
+<li><a href="#7-6-hr-payroll">7. Модуль 6: HR &amp; Payroll (кадры и зарплата АР)</a><ul>
+<li><a href="#_12">Цель</a></li>
+<li><a href="#70-absencetype-a-mzuniyyt-novlri">7.0. Справочник AbsenceType и логика отсутствий (ТК AР; məzuniyyət növləri)</a></li>
+<li><a href="#payroll-processor">Payroll Processor</a></li>
+<li><a href="#-_1">Авто-проводки</a></li>
+<li><a href="#701-departmentid-quickexpense">7.0.1. ЦФО (departmentId): быстрый расход (QuickExpense) и зарплата</a></li>
+<li><a href="#_13">Организационная структура и позиции</a></li>
+</ul>
+</li>
+<li><a href="#8-7-reporting">8. Модуль 7: Reporting</a><ul>
+<li><a href="#_14">Цель</a></li>
+</ul>
+</li>
+<li><a href="#9-8-auditmutationinterceptor">9. Модуль 8: Неизменяемый аудит (AuditMutationInterceptor)</a><ul>
+<li><a href="#90-audit_logs-prisma-auditlog">§9.0 Структура таблицы audit_logs (Prisma: AuditLog)</a></li>
+<li><a href="#_15">Поведение</a></li>
+</ul>
+</li>
+<li><a href="#10-9-inventory-service">10. Модуль 9: Inventory Service (склад) — обновление</a><ul>
+<li><a href="#_16">Цель</a></li>
+<li><a href="#adjuststock">Метод adjustStock</a></li>
+<li><a href="#v59">Инвентаризационная опись (v5.9)</a></li>
+<li><a href="#103">10.3. Взаимозачёт и НДС (НК АР)</a></li>
+</ul>
+</li>
+<li><a href="#11">11. Технические инструкции для разработки</a><ul>
+<li><a href="#docker-compose">Docker Compose</a></li>
+<li><a href="#api">API</a></li>
+</ul>
+</li>
+<li><a href="#12-v2">12. Дорожная карта: v2 — расширения</a><ul>
+<li><a href="#121-multi-gaap">12.1. Multi-GAAP (параллельный учёт)</a></li>
+<li><a href="#122">12.2. Дебиторка и акты сверки</a></li>
+<li><a href="#123-hr-payroll">12.3. HR &amp; Payroll — расширение</a></li>
+<li><a href="#124">12.4. Налоговый портал (экспорт)</a></li>
+<li><a href="#125-uxui-phase-2">12.5. UX/UI (Phase 2)</a></li>
+<li><a href="#126-v31">12.6. v3.1 — масштабирование вычислительного контура</a></li>
+</ul>
+</li>
+<li><a href="#13-v3">13. Дорожная карта: v3 — интеграции и эксплуатация</a><ul>
+<li><a href="#131-asan-imza-sima-mobile-id">13.1. ASAN İmza / SİMA (Mobile ID)</a></li>
+<li><a href="#132-e-taxesgovaz-voen">13.2. e-taxes.gov.az и VÖEN</a></li>
+<li><a href="#133-direct-banking-pasha-bank-abb">13.3. Direct Banking (Pasha Bank, ABB и др.)</a></li>
+<li><a href="#134-saas">13.4. Инфраструктура и безопасность (SaaS)</a></li>
+<li><a href="#135-v32-">13.5. v3.2+ — функционально-архитектурное расширение</a></li>
+<li><a href="#v30">Критерии приёмки v3.0 (сводно)</a></li>
+<li><a href="#v3">Зависимости и риски v3</a></li>
+</ul>
+</li>
+<li><a href="#14-v4-gating">14. Дорожная карта: v4 — подписки, gating, квоты, демо</a><ul>
+<li><a href="#140-global-company-registry-v190">§14.0 Global Company Registry (v19.0)</a></li>
+<li><a href="#141-prisma">14.1. Схема Prisma</a></li>
+<li><a href="#142-api-requiresmodule-guard">14.2. API: @RequiresModule и Guard</a></li>
+<li><a href="#143-41">14.3. Демо (релиз продукта 4.1)</a></li>
+<li><a href="#144-feature-gating-ui-nextjs">14.4. Feature gating в UI (Next.js)</a></li>
+<li><a href="#145">14.5. Квоты</a></li>
+<li><a href="#146-billing-engine-v88-dynamic-billing-constructor-v100-hybrid-lego">14.6. Billing Engine (v8.8 — Dynamic Billing Constructor; ориентиры v10.0 Hybrid LEGO)</a></li>
+<li><a href="#147-emergency-access-override-v89">14.7. Emergency Access Override (v8.9)</a></li>
+<li><a href="#148-api-prd-712-billing-v100">14.8. Владелец организации, схема биллинга и API (PRD §7.12, Billing v10.0)</a></li>
+<li><a href="#v40">Критерии приёмки v4.0 (сводно)</a></li>
+<li><a href="#v4">Зависимости и риски v4</a></li>
+</ul>
+</li>
+<li><a href="#15-admin-panel-super-back-office">15. Платформа: Admin Panel (Super-Back-office)</a><ul>
+<li><a href="#151-">15.1. Архитектура Супер-админа</a></li>
+<li><a href="#152-tarif-konstruktoru-v81-ui-v88">15.2. Tarif Konstruktoru (конструктор тарифов, v8.1+; UI v8.8)</a></li>
+</ul>
+</li>
+<li><a href="#16-v56">16. Платформа (v5.6): изоляция тенантов и асинхронность</a><ul>
+<li><a href="#prisma-extension-strict-multi-tenancy">Prisma Extension (Strict Multi-tenancy)</a></li>
+<li><a href="#async-processing-bullmq">Async Processing (BullMQ)</a></li>
+<li><a href="#_17">Квоты и продукт</a></li>
+<li><a href="#161-soft-delete">16.1. Soft Delete (архивация сущностей)</a></li>
+</ul>
+</li>
+<li><a href="#17-v57-ux">17. Платформа (v5.7): консистентность данных и UX</a><ul>
+<li><a href="#validation-layer-strict-sync-2">Validation Layer (Strict Sync с §2)</a></li>
+<li><a href="#transaction-pattern-finance-inventory-hr">Transaction Pattern (Finance / Inventory / HR)</a></li>
+<li><a href="#ui-web">UI (web)</a></li>
+<li><a href="#i18n-ci-v140">i18n CI (v14.0)</a></li>
+</ul>
+</li>
+<li><a href="#18-templategroup">18. Регламент регистрации (templateGroup) и история версий документа ТЗ</a><ul>
+<li><a href="#181-templategroup">18.1. Обязательный выбор templateGroup при регистрации организации</a></li>
+<li><a href="#182">18.2. Ограничение смены типа организации после начала учёта</a></li>
+<li><a href="#183">18.3. История версий документа ТЗ</a></li>
+<li><a href="#_18">Принцип ведения истории (дальше)</a></li>
+<li><a href="#184-frontend">18.4. Интерфейс выбора типа организации (Frontend)</a></li>
+<li><a href="#185-backend">18.5. Атомарность и валидация (Backend)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+<main>
+<h1 id="dayday-erp"><a class="toclink" href="#dayday-erp">Техническое задание (Т/З): DayDay ERP</a></h1>
+<p>Единый документ для разработки: объединяет ядро Core MVP, расширения v2, интеграции v3 и слой монетизации v4. Сводные продуктовые решения — <strong><a href="./PRD.md">PRD.md</a></strong> (§12 и др.). Детализация REST — <strong>§0.0</strong> ниже и Swagger API.</p>
+<p><strong>Оглавление (верхний уровень):</strong> <strong>§0.0</strong> — реестр ключевых REST; §0 — статус синхронизации; §1 — инфраструктура; §2–§10 — модули <strong>1–9</strong>; <strong>§6.0</strong> — Treasury + касса/банк; <strong>§7.0</strong> — HR, табель, payroll, ЦФО; §11 — паттерн разработки; §12–§14 — дорожные карты; §15 — Super-Admin; §16–§17 — hardening.</p>
+<hr>
+<h3 id="00"><a class="toclink" href="#00">0.0. Реестр ключевых эндпоинтов (выжимка)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Путь</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/chart-template</code></td>
+<td>Глобальный каталог NAS (<code>ChartOfAccountsEntry</code>), чтение (super-admin)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/chart-template</code></td>
+<td>Upsert строки каталога NAS (super-admin)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/billing/webhooks/:provider</code></td>
+<td>Webhook платёжного провайдера (<code>mock</code>, <code>pasha</code>, <code>pasha_bank</code>), публичный маршрут</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/reports/cash-flow</code></td>
+<td>ДДС прямой метод (<code>CashFlowService.getDirectCashFlow</code>), query: <code>dateFrom</code>, <code>dateTo</code>, опц. <code>cashDeskId</code>, <code>bankName</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/hr/payroll/jobs/:jobId</code></td>
+<td>Статус фоновой задачи расчёта ЗП (BullMQ)</td>
+</tr>
+</tbody>
+</table>
+<p>Полный перечень — OpenAPI <code>/api</code>. См. также <code>/api/treasury/*</code>, <code>POST /api/banking/manual-entry</code>, <code>GET /api/holdings/:id/consolidated-pnl</code>, <code>GET /api/reporting/pl?departmentId=…</code>.</p>
+<hr>
+<h2 id="0-prd"><a class="toclink" href="#0-prd">0. Синхронизация с PRD</a></h2>
+<p>Таблица <strong>§0.0</strong> отражает актуальные контракты <strong>v25.0</strong>. Расширенное описание модулей — разделы <strong>§2–§10</strong>, <strong>§6.0</strong>, <strong>§7.0</strong>; продуктовые формулировки — <strong>PRD §4.12</strong>, <strong>§4.13</strong>, <strong>§5.1</strong>.</p>
+<hr>
+<h2 id="1-mvp"><a class="toclink" href="#1-mvp">1. Инфраструктура и стек (MVP)</a></h2>
+<table>
+<thead>
+<tr>
+<th>Компонент</th>
+<th>Решение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Хостинг</strong></td>
+<td>Один VPS; оркестрация — <strong>Docker Compose</strong></td>
+</tr>
+<tr>
+<td><strong>БД</strong></td>
+<td>PostgreSQL + расширение <code>uuid-ossp</code></td>
+</tr>
+<tr>
+<td><strong>Кэш / очереди</strong></td>
+<td><strong>Redis</strong> + <strong>BullMQ</strong>: расчёт ЗП, импорт выписок, прочие долгие задачи — <strong>вне</strong> HTTP-запроса API</td>
+</tr>
+<tr>
+<td><strong>Файлы (PDF, логотипы)</strong></td>
+<td><strong><code>STORAGE_SERVICE</code></strong>: в <strong>production</strong> ожидается <strong><code>STORAGE_DRIVER=s3</code></strong> и переменные <strong><code>S3_*</code></strong>; локально — <strong><code>STORAGE_DRIVER=local</code></strong> + <code>STORAGE_LOCAL_ROOT</code> (см. PRD §11.0)</td>
+</tr>
+<tr>
+<td><strong>Почта</strong></td>
+<td><strong>Nodemailer (SMTP)</strong> — счета, сброс пароля</td>
+</tr>
+<tr>
+<td><strong>Monorepo</strong></td>
+<td><code>apps/web</code> (Next.js), <code>apps/api</code> (NestJS), <code>packages/database</code> (Prisma и общие типы при необходимости)</td>
+</tr>
+<tr>
+<td><strong>Локаль</strong></td>
+<td>БД: <strong>UTC</strong>; UI: <strong>i18next</strong>; язык по умолчанию <strong>RU</strong>, подготовка полных строк под <strong>AZ</strong>; форматирование дат и <strong>AZN</strong> — локаль Азербайджана</td>
+</tr>
+<tr>
+<td><strong>Локальная инфра (Windows)</strong></td>
+<td>Тома Docker, загрузки API, <strong>npm-кэш</strong>, <strong>TEMP/TMP</strong> — только <strong>D:</strong> (<code>D:\DockerData\dayday_erp</code>); корневой <code>.npmrc</code>. Образы Docker — <strong>Disk image location</strong> на D в Docker Desktop</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Production HTTPS requirement (hardening):</strong></p>
+<ul>
+<li>Production environment <strong>must use HTTPS</strong> for the web origin.</li>
+<li>Rationale: parts of the frontend rely on <strong>WebCrypto</strong> capabilities that may be restricted in insecure contexts (plain HTTP), and browsers can degrade/disable APIs and increase fetch instability under mixed/insecure conditions.</li>
+<li>Development exception: <code>http://localhost</code> is allowed.</li>
+</ul>
+<h3 id="11-reporting-aggregator"><a class="toclink" href="#11-reporting-aggregator">1.1. Архитектура холдинга: консолидация валют (Reporting Aggregator)</a></h3>
+<p><strong>Maintenance mode (admin runbook) — before Prisma deploy migrations (PRD §10.0 / TZ §1):</strong></p>
+<p>Цель: перед <code>prisma migrate deploy</code> временно отключить UI (и при необходимости API) понятной заглушкой, чтобы пользователи не работали в полусостоянии во время деплоя.</p>
+<ul>
+<li><strong>Caddy / app-level (рекомендуется для типового Compose-деплоя)</strong></li>
+<li>В <code>.env</code>: <code>MAINTENANCE_MODE=1</code></li>
+<li>Применить: <code>docker compose -f docker-compose.prod.yml up -d web</code></li>
+<li>
+<p>Выключить: убрать/обнулить <code>MAINTENANCE_MODE</code>, затем снова <code>up -d web</code>.</p>
+</li>
+<li>
+<p><strong>Nginx (UI boundary, альтернативный вариант)</strong></p>
+</li>
+<li>Положить страницу: <code>docs/maintenance.html</code> → <code>/var/www/html/maintenance.html</code></li>
+<li>Подключить сниппет: <code>docs/nginx-maintenance.conf</code> (возвращает <strong>503</strong> если существует <code>/var/www/html/maintenance.enable</code>)</li>
+<li>
+<p>Включить режим обслуживания:</p>
+<p><code>bash
+sudo touch /var/www/html/maintenance.enable
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx</code></p>
+</li>
+<li>
+<p>Выключить режим обслуживания:</p>
+<p><code>bash
+sudo rm -f /var/www/html/maintenance.enable
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx</code></p>
+</li>
+<li>
+<p><strong>Deploy flow (recommended)</strong></p>
+</li>
+<li>Enable maintenance (см. выше)</li>
+<li>
+<p>Apply DB migrations:</p>
+<p><code>bash
+docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy</code></p>
+</li>
+<li>
+<p>Optional platform init:</p>
+<p><code>bash
+docker compose -f docker-compose.prod.yml exec api npm run db:prod-init</code></p>
+</li>
+<li>
+<p>Disable maintenance</p>
+</li>
+</ul>
+<p><strong>Сводный P&amp;L по холдингу за период</strong> (<code>HoldingsReportingService.consolidatedProfitAndLoss</code>): реализовано <strong>помесячной нарезкой периода</strong> (UTC, <code>accrualMonthSlices</code> в <code>reporting-period.util.ts</code>). Для каждого фрагмента вызывается <code>ReportingService.profitAndLoss(org, from, to)</code>, затем <strong><code>CurrencyConverterService.convert(netProfit, orgCurrency, holdingBase, fxAsOf)</code></strong> с <strong><code>fxAsOf</code> = последний день фрагмента</strong>. Результаты по фрагментам <strong>суммируются</strong>. Это и есть продуктовый стандарт <strong>Monthly Slices</strong> (PRD §1.1).</p>
+<p><strong><code>CurrencyConverterService.convert</code></strong> — точечная конвертация на дату <code>asOf</code> (кросс через AZN); для «историчности» по длинному периоду используется <strong>внешний</strong> цикл по фрагментам (см. выше), а не один вызов на <code>dateTo</code>.</p>
+<p><strong>Дашборд cash/bank</strong> по холдингу (<code>getHoldingSummary</code>): конвертация остатков на <strong>одну</strong> дату <code>asOf</code> — отдельно от политики P&amp;L.</p>
+<p><strong>Источник курсов:</strong> <code>cbar_official_rates</code>, <code>CbarFxService</code>.</p>
+<h3 id="14-background-jobs"><a class="toclink" href="#14-background-jobs">1.4. Очереди и Background Jobs</a></h3>
+<ul>
+<li><strong>Обязательный стандарт:</strong> BullMQ + Redis для всех тяжёлых и массовых задач (Payroll, bulk-операции по инвойсам, пересчёты COGS, импорты/синхронизации).</li>
+<li><strong>Ролевая архитектура узлов:</strong> инстансы разделяются на:</li>
+<li><strong>API-nodes</strong> — принимают HTTP/WebSocket, валидируют вход, ставят задачи в очередь, возвращают <code>jobId</code>.</li>
+<li><strong>Worker-nodes</strong> — исполняют фоновые задачи из очередей, не обрабатывают пользовательские HTTP-запросы.</li>
+<li><strong>SLO Async-First:</strong> операции с ожидаемой CPU-нагрузкой &gt;500 мс не выполняются синхронно в request/response контуре.</li>
+<li><strong>Массовый импорт холдингов:</strong> загрузка Excel/JSON дампов (в т.ч. 1С-маппинг) должна поддерживать пакетный запуск миграций для 20–30 компаний одновременно через BullMQ (partition by organization/import session).</li>
+<li><strong>IBAN validation pipeline:</strong> при импорте и ручном вводе реквизитов действует проверка формата AZ и алгоритм контрольной суммы <strong>MOD-97</strong>; невалидные строки уходят в reject-отчёт импорта.</li>
+</ul>
+<h3 id="15-digitalocean-vpc"><a class="toclink" href="#15-digitalocean-vpc">1.5. Сетевой регламент (DigitalOcean VPC)</a></h3>
+<ul>
+<li>Внутренний трафик между App/API/Workers, Redis и PostgreSQL должен проходить <strong>только через Private Networking</strong> (VPC/private interface).</li>
+<li>Публичный ingress допускается только для edge-слоя (reverse proxy / web entrypoint); Redis и PostgreSQL не публикуются во внешний интернет.</li>
+<li>Для production-топологии обязателен контроль security group/firewall правил, исключающий доступ к Redis/DB с public IP.</li>
+</ul>
+<h3 id="16-thundering-herd"><a class="toclink" href="#16-thundering-herd">1.6. Режим «Thundering Herd»</a></h3>
+<ul>
+<li>Для очередей задач использовать <strong>Managed Redis</strong> (или эквивалент managed deployment) с политикой памяти <strong><code>noeviction</code></strong>.</li>
+<li>Запрещены eviction-политики, способные удалять ключи очередей/lock-ключи BullMQ при пиковых нагрузках.</li>
+<li>При приближении к лимитам памяти — горизонтальное масштабирование Redis и/или ограничение producer-rate до восстановления нормального headroom.</li>
+</ul>
+<hr>
+<h2 id="2-1-identity-access-management-iam-multi-tenancy"><a class="toclink" href="#2-1-identity-access-management-iam-multi-tenancy">2. Модуль 1: Identity &amp; Access Management (IAM) &amp; Multi-tenancy</a></h2>
+<h3 id="_1"><a class="toclink" href="#_1">Цель</a></h3>
+<p>Создать безопасную среду, где данные разных компаний никогда не пересекаются.</p>
+<h3 id="_2"><a class="toclink" href="#_2">Модель тенанта</a></h3>
+<ul>
+<li><strong>1 tenant = 1 юрлицо (один VÖEN).</strong> Пользователь с несколькими компаниями состоит в нескольких организациях (связь <strong>many-to-many</strong> через membership).</li>
+<li>В сущности <strong>Organization</strong> сразу завести поле <strong><code>subscriptionPlan</code></strong>; лимиты тарифов в MVP <strong>не хардкодить</strong> (детализация подписок — §14).</li>
+</ul>
+<h3 id="21-many-to-many-auth"><a class="toclink" href="#21-many-to-many-auth">2.1. Рефакторинг на Many-to-Many (схема и auth)</a></h3>
+<p><strong>Prisma</strong></p>
+<ul>
+<li><strong>User:</strong> без <code>organizationId</code> на уровне пользователя; профиль: <code>fullName</code>, <code>avatarUrl</code> (и т.п.).</li>
+<li><strong>OrganizationMembership:</strong> связь <code>{ userId, organizationId, role, joinedAt }</code>, составной PK <code>(userId, organizationId)</code>.</li>
+<li><strong>AccessRequest:</strong> запрос на вступление в существующую организацию по VÖEN (статусы ожидания / принят / отклонён).</li>
+<li><strong>OrganizationInvite:</strong> приглашение по email в организацию (в т.ч. для пользователя, который ещё не зарегистрирован — доставка письмом; если пользователь уже есть — видит приглашение в кабинете).</li>
+</ul>
+<p><strong>Бизнес-логика и API</strong></p>
+<ol>
+<li><strong><code>POST /api/auth/login</code></strong> — в ответе <strong>accessToken</strong> (контекст первой/выбранной организации в JWT) и <strong>список доступных организаций</strong> (<code>organizations</code>).</li>
+<li><strong><code>POST /api/auth/switch</code></strong> — тело <code>{ organizationId }</code>; выдаётся новая пара токенов, в access JWT «вшит» выбранный <code>organizationId</code> при валидном membership.</li>
+<li><strong>Guards:</strong> из JWT читаются <code>organizationId</code> и роль; перед обработкой запроса проверяется наличие строки в <strong>OrganizationMembership</strong>.</li>
+<li><strong>Join по VÖEN:</strong> если организация найдена, создаётся <strong>AccessRequest</strong>; владелец/админ одобряет или отклоняет, при одобрении назначается роль.</li>
+<li><strong>Invite:</strong> <code>inviteUser(email, role)</code> создаёт запись приглашения; при существующем пользователе с тем же email — приглашение отображается в UI; иначе — письмо (SMTP).</li>
+</ol>
+<h3 id="rbac"><a class="toclink" href="#rbac">Система ролей (RBAC)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Роль</th>
+<th>Права</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Owner</strong></td>
+<td>Полный доступ, управление подпиской</td>
+</tr>
+<tr>
+<td><strong>Admin</strong></td>
+<td>Управление пользователями и настройками</td>
+</tr>
+<tr>
+<td><strong>Accountant</strong></td>
+<td>Доступ к финансам и отчётам</td>
+</tr>
+<tr>
+<td><strong>User</strong></td>
+<td>Ограниченный доступ (только свои документы)</td>
+</tr>
+<tr>
+<td><strong>PROCUREMENT</strong></td>
+<td>Создание закупочных документов, операции склада, создание черновиков оплат (KXO/Bank Draft) <strong>без права Post/Approve</strong></td>
+</tr>
+<tr>
+<td><strong>AUDITOR</strong></td>
+<td>Глобальный Read-Only: просмотр Ledger, Payroll, AuditLog и отчётов без права создавать/изменять данные</td>
+</tr>
+<tr>
+<td><strong>WAREHOUSE_KEEPER</strong></td>
+<td>Доступ только к M9 (Inventory) и M9.1 (Manufacturing); без доступа к финансам и зарплатам</td>
+</tr>
+<tr>
+<td><strong>HR_OFFICER</strong></td>
+<td>Доступ к карточкам сотрудников и табелю; без доступа к главной книге (Ledger) и финансовым проводкам</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Разграничение PROCUREMENT vs ACCOUNTANT:</strong></p>
+<ul>
+<li><code>PROCUREMENT</code> может подготавливать первичные документы и черновики оплат, но не имеет права проводить/утверждать финансовые операции.</li>
+<li><code>ACCOUNTANT</code> сохраняет исключительное право на проведение (<code>Post/Approve</code>) и фиксацию проводок в Ledger.</li>
+</ul>
+<h3 id="_3"><a class="toclink" href="#_3">Безопасность</a></h3>
+<ul>
+<li><strong>Middleware (NestJS):</strong> инъекция <code>organizationId</code> из JWT в каждый запрос.</li>
+<li><strong>Глобальный фильтр в Prisma:</strong> все запросы <code>findMany</code>, <code>findUnique</code> должны включать <code>where: { organizationId }</code>.</li>
+<li><strong>Auth:</strong> Access Token (JWT); Refresh Token — в <strong>HttpOnly Cookie</strong>.</li>
+</ul>
+<h3 id="validation-strict-mode-v58-17"><a class="toclink" href="#validation-strict-mode-v58-17">Validation Strict Mode (v5.8) — синхронно с §17</a></h3>
+<ul>
+<li>Глобальный <code>ValidationPipe</code> в <code>main.ts</code>: <code>whitelist: true</code>, <strong><code>forbidNonWhitelisted: true</code></strong>, <code>transform: true</code> (см. <strong>§17</strong> — та же формулировка для RC). Поля тела запроса, не описанные в DTO (<code>class-validator</code>), приводят к ответу <strong>400 Bad Request</strong> (а не молчаливому отбрасыванию).</li>
+</ul>
+<h3 id="policy-guard-v58-casl-like"><a class="toclink" href="#policy-guard-v58-casl-like">Policy Guard (v5.8, CASL-like)</a></h3>
+<ul>
+<li>Для детализации ролей <strong>Accountant</strong> и <strong>User</strong> в финансовых документах используются явные проверки политик (например модуль <code>auth/policies</code>): мутации инвойсов в статусе <strong>PAID</strong> и ручные проводки журнала недоступны роли <strong>User</strong>, где это зафиксировано в <a href="./PRD.md">PRD.md</a> §7.9; критичные эндпоинты дополнительно защищаются <strong>RolesGuard</strong> / <code>@Roles(...)</code>.</li>
+</ul>
+<h3 id="sql"><a class="toclink" href="#sql">Сырой SQL и изоляция тенанта</a></h3>
+<ul>
+<li>При использовании <strong><code>$queryRaw</code></strong> / <strong><code>$executeRaw</code></strong> в запросах к данным организации вручную добавлять условие по <strong><code>organizationId</code></strong> (или параметризованный эквивалент), чтобы исключить пересечение тенантов.</li>
+<li><strong>Реализация (v23.0):</strong> в API доступен <strong><code>TenantPrismaRawService</code></strong> (<code>$queryRaw</code> / <code>$executeRaw</code> / <code>*Tx</code>) — <strong>обязательный аргумент <code>organizationId</code></strong> на уровне вызова; SQL собирается через <code>Prisma.sql</code> и должен связывать этот идентификатор. DDL и платформенный SQL без тенанта — только через <strong><code>executePlatformRawUnsafe</code></strong> в пакете <code>@dayday/database</code> (скрипты вроде <code>prod-init.ts</code>), не через tenant-обёртку.</li>
+</ul>
+<p><strong>Неизменяемый журнал аудита (продуктовый модуль 8)</strong> — требования к <code>AuditMutationInterceptor</code>, полям <code>AuditLog</code> и архиву: <strong>§9</strong>.</p>
+<hr>
+<h2 id="3-2-ledger-finance-core"><a class="toclink" href="#3-2-ledger-finance-core">3. Модуль 2: Ledger &amp; Finance Core</a></h2>
+<h3 id="_4"><a class="toclink" href="#_4">Цель</a></h3>
+<p>Обеспечить математическую точность учёта (финансовый движок double-entry).</p>
+<h3 id="chart-of-accounts-accounts"><a class="toclink" href="#chart-of-accounts-accounts">План счетов (Chart of Accounts / Accounts)</a></h3>
+<ul>
+<li>Иерархическая структура — дерево счетов (self-relation в БД).</li>
+<li>Типы: Asset, Liability, Equity, Revenue, Expense.</li>
+<li><strong>Seeding:</strong> единый план счетов бухучёта АР; данные подгружаются из <strong>JSON</strong> в репозитории (коды 101, 201, 521 и т.д.) при регистрации организации.</li>
+</ul>
+<h3 id="transaction-journal-entry"><a class="toclink" href="#transaction-journal-entry">Транзакции (Transaction) и проводки (Journal Entry)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Требование</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Валидация</strong></td>
+<td>Функция <code>validateBalance()</code> проверяет, что <strong>Σ Debit = Σ Credit</strong> перед сохранением</td>
+</tr>
+<tr>
+<td><strong>Атомарность</strong></td>
+<td><code>Prisma.$transaction</code>: при ошибке одной проводки откатывается вся транзакция</td>
+</tr>
+<tr>
+<td><strong>Блокировка</strong></td>
+<td>Невозможность удаления/изменения проводок в «закрытых» периодах; закрытие периода — только <strong>Owner</strong> или <strong>Admin</strong></td>
+</tr>
+<tr>
+<td><strong>Журнал (MVP)</strong></td>
+<td>Правки проводок <strong>допускаются</strong>, каждое изменение — в <strong><code>AuditLog</code></strong>; неизменяемый журнал / только сторно — позже</td>
+</tr>
+</tbody>
+</table>
+<h3 id="31-optimistic-locking"><a class="toclink" href="#31-optimistic-locking">3.1. Optimistic Locking для массовых параллельных расчётов</a></h3>
+<ul>
+<li>Для сущностей, обновляемых конкурентно в тяжёлых сценариях (массовые начисления, пакетные пересчёты), предусматривается версионность строк (<code>version</code>-поле в Prisma-моделях) и обновление по схеме compare-and-set.</li>
+<li>При конфликте версий операция должна завершаться контролируемой ошибкой конкурентного обновления с повторной попыткой по политике сервиса/воркера.</li>
+<li>Внедрение optimistic locking не отменяет инвариантов §3 (Σ Debit = Σ Credit, ACID-транзакции) и применяется как слой защиты от deadlock/last-write-wins в высоком параллелизме.</li>
+</ul>
+<h3 id="32-stateless-workers"><a class="toclink" href="#32-stateless-workers">3.2. Stateless Workers</a></h3>
+<ul>
+<li>Все фоновые воркеры выполняются в модели <strong>stateless</strong>: состояние задачи хранится в Redis/БД, а не в памяти процесса.</li>
+<li>Любой свободный воркер должен уметь обработать любую задачу из очереди без локального session-state.</li>
+<li>Повторяемость/идемпотентность шагов обязательна для безопасного retry при падениях/переездах задач между инстансами.</li>
+</ul>
+<h3 id="33-netting"><a class="toclink" href="#33-netting">3.3. Дополнение: взаимозачёт (Netting)</a></h3>
+<p>Оформление <strong>взаимозачёта</strong> (схлопывание встречных требований) по одному контрагенту: уменьшение <strong>кредиторки 531</strong> и <strong>дебиторки 211</strong> одной проводкой.</p>
+<h4 id="financeservice"><a class="toclink" href="#financeservice">Сервис <code>FinanceService</code> (фасад)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getNettingCandidate(counterpartyId)</code></td>
+<td>Возвращает оценки <strong>дебиторки</strong> (как в отчёте по неоплаченным инвойсам с выручкой), <strong>кредиторки 531</strong> (обороты по счёту 531 с <code>transaction.counterpartyId</code>), <strong>suggestedAmount = min(оба)</strong>, флаг <strong><code>canNet</code></strong> (истина, если min &gt; 0). Книга: query <code>ledgerType</code> (<strong>NAS</strong> / <strong>IFRS</strong>) для счёта 531.</td>
+</tr>
+<tr>
+<td><code>executeNetting(counterpartyId, amount)</code></td>
+<td>Валидация <code>amount ≤ min(...)</code>; в <strong>одной БД-транзакции</strong>: проводки <strong>Дт 531 — Кт 211</strong> на <code>amount</code> (<code>counterpartyId</code> на транзакции); затем <strong>распределение</strong> суммы по неоплаченным инвойсам контрагента (FIFO по <code>dueDate</code>, строки <code>InvoicePayment</code> с <code>transactionId</code> = транзакция зачёта, <strong>без</strong> второй пары проводок). Обновление статусов инвойсов (PAID / PARTIALLY_PAID и т.д.).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>REST (реализация):</strong> <code>GET /api/reporting/netting/preview</code>, <code>POST /api/reporting/netting</code> (см. Swagger).</p>
+<h4 id="_5"><a class="toclink" href="#_5">Согласованность отчётов</a></h4>
+<p>После зачёта <strong>дебиторка</strong> (<code>accountsReceivable</code>) и <strong>старение</strong> остаются согласованными с ГК по 211, т.к. уменьшение долга по инвойсу отражено записями оплат, привязанными к той же финансовой транзакции, что и Кт 211.</p>
+<h4 id="ui-7"><a class="toclink" href="#ui-7">UI (модуль 7 / отчёты)</a></h4>
+<ul>
+<li><strong>Акт сверки</strong> (<code>/reporting/reconciliation</code>): блок <strong>«Встречные требования»</strong> (остатки 211 / 531 и лимит зачёта); кнопка формирования взаимозачёта <strong>доступна только при <code>canNet</code></strong>.</li>
+<li><strong>Карточка инвойса:</strong> при непогашенном остатке и <code>canNet</code> — действие <strong>«Оплатить зачётом»</strong> (сумма по умолчанию ≤ min(остаток инвойса, suggestedAmount)).</li>
+</ul>
+<hr>
+<h2 id="4-3-crm-counterparties"><a class="toclink" href="#4-3-crm-counterparties">4. Модуль 3: CRM &amp; Counterparties</a></h2>
+<h3 id="_6"><a class="toclink" href="#_6">Цель</a></h3>
+<p>Централизованное управление базой клиентов и поставщиков.</p>
+<h3 id="_7"><a class="toclink" href="#_7">Карточка контрагента</a></h3>
+<ul>
+<li><strong>Тип:</strong> физическое лицо / юридическое лицо; в учёте взаимодействий — <strong>Клиент / Поставщик</strong>.</li>
+<li><strong>Обязательные поля:</strong> Name, VÖEN (10 цифр), Address, Bank Accounts.</li>
+</ul>
+<h3 id="_8"><a class="toclink" href="#_8">Взаиморасчёты</a></h3>
+<ul>
+<li>Счёт <strong>211</strong> (дебиторская задолженность) — для клиентов.</li>
+<li>Счёт <strong>531</strong> (кредиторская задолженность) — для поставщиков.</li>
+<li>Автоматическое обновление баланса контрагента при каждой финансовой проводке.</li>
+</ul>
+<hr>
+<h2 id="5-4-sales-invoicing"><a class="toclink" href="#5-4-sales-invoicing">5. Модуль 4: Sales &amp; Invoicing</a></h2>
+<h3 id="_9"><a class="toclink" href="#_9">Цель</a></h3>
+<p>Автоматизация выставления документов и признания выручки.</p>
+<h3 id="ui-vxy"><a class="toclink" href="#ui-vxy">UI (реализация vX.Y): создание через модальные окна</a></h3>
+<ul>
+<li>Создание <strong>инвойса</strong> выполняется через модальное окно <strong>CreateInvoiceModal</strong> на странице <code>/invoices</code> (без отдельной страницы создания).</li>
+<li>Создание <strong>контрагента</strong> выполняется через модальное окно <strong>CreateCounterpartyModal</strong> на странице <code>/counterparties</code> (без отдельной страницы создания).</li>
+<li>Legacy-маршруты:</li>
+<li><code>/invoices/new</code> → редирект на <code>/invoices</code> (создание через модалку).</li>
+<li><code>/counterparties/new</code> → редирект на <code>/counterparties</code> (создание через модалку).</li>
+</ul>
+<h3 id="voen-mdm-lookup-uirest"><a class="toclink" href="#voen-mdm-lookup-uirest">Контрагенты (VÖEN / MDM lookup) — UI/REST</a></h3>
+<ul>
+<li>Валидация: VÖEN (<code>taxId</code>) — <strong>строго 10 цифр</strong>.</li>
+<li>Автозаполнение (MDM): при вводе 10 цифр UI вызывает <code>GET /api/counterparties/global/by-voen/:taxId</code> и автозаполняет <strong>имя</strong> и <strong>статус НДС</strong>.</li>
+<li>Ручная проверка: кнопка «Yoxla» повторно запускает lookup; если MDM не вернул запись, допускается fallback-проверка через <code>GET /api/tax/taxpayer-info?voen=...</code>.</li>
+</ul>
+<h3 id="invoice"><a class="toclink" href="#invoice">Invoice</a></h3>
+<ul>
+<li>Генерация уникального номера по маске (например, <code>INV-2026-001</code>).</li>
+<li>Расчёт НДС (ƏDV / EDV) на MVP: <strong>только</strong> 0%, 18% и «освобождён».</li>
+<li>Каталог товаров и услуг; акты приёмки-передачи (<strong>Handover Acts</strong>).</li>
+<li>Статусы оплаты: Draft, Sent, Paid, Overdue, Cancelled.</li>
+</ul>
+<h3 id="ui"><a class="toclink" href="#ui">НДС и услуги (UI)</a></h3>
+<ul>
+<li><code>vatInclusive</code>: чекбокс «Qiymətlər ƏDV daxil (brüt)» — если включён, <code>unitPrice</code> в UI трактуется как <strong>брутто</strong>, backend рассчитывает нетто.</li>
+<li><code>vatRate</code>: ставка <strong>0%</strong> или <strong>18%</strong>.</li>
+<li>Услуги: флаг <strong>isService</strong> в UI — скрывает складские предупреждения и в PDF отображает строку как «Xidmət».</li>
+</ul>
+<h3 id="-"><a class="toclink" href="#-">Бизнес-логика (триггеры)</a></h3>
+<p><strong>При смене статуса инвойса на Paid:</strong></p>
+<ol>
+<li>Создать <code>Transaction</code>.</li>
+<li>Проводка: <strong>Дт 101/221</strong> (Касса/Банк) — <strong>Кт 211</strong> (дебиторка).</li>
+</ol>
+<h3 id="52-e-taxesgovaz"><a class="toclink" href="#52-e-taxesgovaz">5.2. Экспорт для e-taxes.gov.az</a></h3>
+<ul>
+<li><strong>Назначение:</strong> генерация отчётных Excel-файлов для передачи в e-taxes.gov.az.</li>
+<li><strong>Покрытие шаблонов:</strong> приложения по НДС и подоходному налогу формируются из нормализованных данных Ledger/Payroll.</li>
+<li><strong>Формат выгрузки:</strong> XLSX с валидацией структуры листов/колонок до выдачи пользователю.</li>
+<li><strong>Режим выполнения:</strong> большие выборки и многоорганизационные выгрузки выполняются асинхронно через BullMQ с выдачей job status.</li>
+</ul>
+<h3 id="_10"><a class="toclink" href="#_10">Печатные формы</a></h3>
+<ul>
+<li>Генерация PDF на <strong>AZ / RU / EN</strong>.</li>
+</ul>
+<hr>
+<h2 id="6-5-cash-management"><a class="toclink" href="#6-5-cash-management">6. Модуль 5: Cash Management</a></h2>
+<h3 id="_11"><a class="toclink" href="#_11">Цель</a></h3>
+<p>Контроль за движением реальных денег.</p>
+<h3 id="60-treasury-apibankingcash-apibanking-rest-dto"><a class="toclink" href="#60-treasury-apibankingcash-apibanking-rest-dto">6.0. Treasury, касса (<code>/api/banking/cash</code>), банк (<code>/api/banking</code>) — REST, DTO, проведение, миграция БД</a></h3>
+<p><em>В нумерации продукта это </em><em>модуль 5 (Cash)</em><em>; в данном Т/З он оформлен как </em><em>§6</em><em>. Технический блок «5.0» из обсуждения = этот подраздел </em><em>§6.0</em><em>.</em></p>
+<p><strong>Общие правила HTTP</strong></p>
+<ul>
+<li>Глобальный префикс Nest: <strong><code>/api</code></strong> (итоговые пути: <code>/api/treasury/...</code>, <code>/api/banking/...</code>).</li>
+<li>Аутентификация: <strong>Bearer JWT</strong>; контекст организации — из токена (декоратор <code>@OrganizationId()</code>).</li>
+<li><strong>Treasury</strong> — отдельный контроллер <strong>без</strong> <code>SubscriptionGuard</code> (доступ при валидном членстве в организации); мутации защищены <strong><code>RolesGuard</code></strong>.</li>
+<li><strong>Банк</strong> — контроллер <code>banking</code> с <strong><code>SubscriptionGuard</code></strong> и <strong><code>@RequiresModule(BANKING_PRO)</code></strong> (см. <code>ModuleEntitlement</code>).</li>
+<li><strong>Касса</strong> — контроллер <code>banking/cash</code> с <strong><code>SubscriptionGuard</code></strong> и <strong><code>@RequiresModule(KASSA_PRO)</code></strong>.</li>
+</ul>
+<p><strong>Терминология (азербайджанский бухучёт, стандарты АР) — UI и печать</strong><br>
+- Для пользователя (веб-i18n, заголовок вкладки браузера, <strong>H1</strong> печатной формы кассового ордера) основной текст — <strong>официальные</strong> формулировки, а не «cash order report»:<br>
+  - <strong>Приход в кассу</strong> (income, поступление наличных): <strong>Kassa Mədaxil Orderi</strong>, аббревиатура <strong>KMO</strong> (приход — <em>mədaxil</em>, касса — <em>kassa</em>).<br>
+  - <strong>Расход из кассы</strong> (expense, выдача наличных): <strong>Kassa Məxaric Orderi</strong>, <strong>KXO</strong> (расход — <em>məxaric</em>).<br>
+- <strong>Legacy / backwards compatibility:</strong> в существующих данных и части кода/маршрутов может встречаться старое именование <strong>MKO/MXO</strong>. В рамках миграции UX и API применяется переименование <strong>MKO → KMO</strong>, <strong>MXO → KXO</strong> (без изменения бизнес-смысла); legacy-алиасы допускаются на переходный период.<br>
+- См. также <code>apps/web/lib/i18n/resources.ts</code> (<code>banking.cash.*</code>) и печать ордера (web print + server HTML, в зависимости от реализации) в <code>apps/api/src/kassa/cash-order.service.ts</code>.</p>
+<hr>
+<h4 id="1-cashflowitem"><a class="toclink" href="#1-cashflowitem">Шаг 1. Справочник статей ДДС (<code>CashFlowItem</code>)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод и путь</th>
+<th>Роли</th>
+<th>Тело / ответ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/treasury/cash-flow-items</code></td>
+<td>JWT (роли не навешаны на метод)</td>
+<td>Массив записей <code>{ id, organizationId, code, name, createdAt, updatedAt }</code>. Если у организации <strong>0</strong> строк — в той же логике запроса выполняется <strong>транзакция</strong> с созданием типового набора из <strong>5</strong> кодов: <code>CF-OPS</code>, <code>CF-SUP</code>, <code>CF-SAL</code>, <code>CF-TAX</code>, <code>CF-OTH</code> (названия по умолчанию на AZ), затем возвращается полный список.</td>
+</tr>
+<tr>
+<td><code>POST /api/treasury/cash-flow-items</code></td>
+<td><strong>Owner, Admin, Accountant</strong></td>
+<td><strong>DTO <code>CreateCashFlowItemDto</code>:</strong> <code>code</code> — string, 1…64; <code>name</code> — string, 1…255. Ответ: созданная сущность. Ошибка <strong>400</strong>, если <code>code</code>/<code>name</code> после <code>trim</code> пустые. Уникальность <strong><code>(organizationId, code)</code></strong> на уровне БД (<code>@@unique</code>).</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h4 id="2-cashdesk"><a class="toclink" href="#2-cashdesk">Шаг 2. Справочник физических касс (<code>CashDesk</code>)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод и путь</th>
+<th>Роли</th>
+<th>Тело / ответ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/treasury/cash-desks</code></td>
+<td>JWT</td>
+<td>Список <strong><code>isActive: true</code></strong>, сортировка по <code>name</code>. <strong>Include:</strong> <code>employee { id, firstName, lastName, finCode }</code> при наличии <code>employeeId</code>.</td>
+</tr>
+<tr>
+<td><code>POST /api/treasury/cash-desks</code></td>
+<td><strong>Owner, Admin, Accountant</strong></td>
+<td><strong>DTO <code>CreateCashDeskDto</code>:</strong> <code>name</code> — string, 1…255 (обязательно); <code>employeeId</code> — optional UUID; <code>currencies</code> — optional <code>string[]</code> (ISO коды; если не передан или пустой — сохраняется <strong><code>[]</code></strong>). Ответ: созданная касса с тем же <code>include</code> по сотруднику. <strong>400</strong>, если <code>name</code> пустой после <code>trim</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Сервисные проверки (используются кассой/банком):</strong></p>
+<ul>
+<li><code>assertCashFlowItem(organizationId, id)</code> — строка существует в организации; иначе <strong>400</strong> <code>cashFlowItemId not found for organization</code>.</li>
+<li><code>assertCashDesk(organizationId, id)</code> — строка существует, <strong><code>isActive: true</code></strong>; иначе <strong>400</strong> <code>cashDeskId not found for organization</code>.</li>
+</ul>
+<hr>
+<h4 id="3-cashdeskcontroller-apibankingcash-prisma-kmo-kxo-legacy-mko-mxo"><a class="toclink" href="#3-cashdeskcontroller-apibankingcash-prisma-kmo-kxo-legacy-mko-mxo">Шаг 3. Кассовые ордера (<code>CashDeskController</code>, базовый путь <code>/api/banking/cash</code>; в БД/Prisma — <code>KMO</code> / <code>KXO</code>; legacy: <code>MKO</code> / <code>MXO</code>)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод и путь</th>
+<th>Роли</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/banking/cash/balances</code></td>
+<td>JWT</td>
+<td>Остатки по счетам <strong>101*</strong> по валютам; query <code>ledgerType</code> — как в остальных отчётах (<code>parseLedgerTypeQuery</code>).</td>
+</tr>
+<tr>
+<td><code>GET /api/banking/cash/orders</code></td>
+<td>JWT</td>
+<td>Журнал ордеров организации.</td>
+</tr>
+<tr>
+<td><code>POST /api/banking/cash/orders/kmo</code></td>
+<td><strong>Owner, Admin, Accountant</strong></td>
+<td>Черновик <strong>KMO</strong>; тело <strong><code>CreatePkoDraftDto</code></strong>.</td>
+</tr>
+<tr>
+<td><code>POST /api/banking/cash/orders/kxo</code></td>
+<td>те же</td>
+<td>Черновик <strong>KXO</strong>; тело <strong><code>CreateRkoDraftDto</code></strong>.</td>
+</tr>
+<tr>
+<td><code>POST /api/banking/cash/orders/:id/post</code></td>
+<td>те же</td>
+<td><strong>Проведение</strong> черновика → проводка в ГК + статус <strong>POSTED</strong>.</td>
+</tr>
+<tr>
+<td><code>GET /api/banking/cash/orders/:id/print</code></td>
+<td>JWT</td>
+<td>HTML бланк для печати.</td>
+</tr>
+<tr>
+<td><code>GET /api/banking/cash/accountable</code></td>
+<td>JWT</td>
+<td>Подотчётные (сальдо <strong>244</strong>).</td>
+</tr>
+<tr>
+<td><code>POST /api/banking/cash/advance-reports</code> / <code>…/:id/post</code></td>
+<td><strong>Owner, Admin, Accountant</strong></td>
+<td>Авансовый отчёт (без изменений в рамках §6.0).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>KO-1 print form (форма № KO-1)</strong></p>
+<ul>
+<li>For <strong>KMO</strong> (incoming cash order), UI provides an additional print view <strong>KO-1</strong> with a strict grid layout (per the accountant audit template).</li>
+<li>The print view includes the field <strong>“Məbləğ yazı ilə”</strong> rendered in <strong>AZ</strong> and <strong>RU</strong> (amount-to-words).</li>
+<li>UI entry point: button <strong>“Çap et”</strong> in the cash order view modal (web print).</li>
+</ul>
+<p><strong>DTO черновика MKO — <code>CreatePkoDraftDto</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Тип / ограничения</th>
+<th>Обяз.</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>date</code></td>
+<td><code>YYYY-MM-DD</code> (<code>@IsDateString</code>)</td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>pkoSubtype</code></td>
+<td>enum <strong>Prisma</strong> <code>CashOrderPkoSubtype</code>: <code>INCOME_FROM_CUSTOMER</code>, <code>RETURN_FROM_ACCOUNTABLE</code>, <code>WITHDRAWAL_FROM_BANK</code>, <code>OTHER</code></td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>number, <code>@Type(() =&gt; Number)</code>, finite, max 4 знака после запятой, <strong>≥ 0.01</strong></td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>string, optional (по умолчанию при сохранении <strong><code>AZN</code></strong>)</td>
+<td>нет</td>
+</tr>
+<tr>
+<td><code>purpose</code></td>
+<td>string</td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>cashAccountCode</code></td>
+<td>string, optional — иначе подстановка <strong>101*</strong> по валюте (<code>resolveCashAccountCodeForCurrency</code>)</td>
+<td>нет</td>
+</tr>
+<tr>
+<td><code>offsetAccountCode</code></td>
+<td>string, optional — <strong>обязателен</strong> для подтипов <code>OTHER</code>, <code>RETURN_FROM_ACCOUNTABLE</code>; для остальных может выводиться автоматически (601, 221 и т.д. по логике <code>resolvePkoOffset</code>)</td>
+<td>нет</td>
+</tr>
+<tr>
+<td><code>counterpartyId</code>, <code>employeeId</code></td>
+<td>UUID, optional</td>
+<td>нет</td>
+</tr>
+<tr>
+<td><code>notes</code></td>
+<td>string, optional</td>
+<td>нет</td>
+</tr>
+<tr>
+<td><strong><code>cashFlowItemId</code></strong></td>
+<td>UUID</td>
+<td><strong>да</strong> (валидация <code>@IsUUID</code>); при создании черновика проверяется через <code>assertCashFlowItem</code>.</td>
+</tr>
+<tr>
+<td><strong><code>cashDeskId</code></strong></td>
+<td>UUID, optional; если задан — <code>assertCashDesk</code>.</td>
+<td>нет</td>
+</tr>
+</tbody>
+</table>
+<p><strong>DTO черновика MXO — <code>CreateRkoDraftDto</code></strong></p>
+<p>Те же базовые поля, что у MKO по смыслу: <code>date</code>, <code>rkoSubtype</code> (<strong><code>CashOrderRkoSubtype</code></strong>: <code>SALARY</code>, <code>SUPPLIER_PAYMENT</code>, <code>ACCOUNTABLE_ISSUE</code>, <code>BANK_DEPOSIT</code>, <code>OTHER</code>), <code>amount</code>, <code>currency</code>, <code>purpose</code>, <code>cashAccountCode</code>, <code>offsetAccountCode</code>, <code>counterpartyId</code>, <code>employeeId</code>, <code>notes</code>, <strong><code>cashFlowItemId</code></strong> (обяз.), <strong><code>cashDeskId</code></strong> (optional).</p>
+<p>Дополнительно:</p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>withholdingTaxAmount</code></strong></td>
+<td>optional number, ≥ 0, finite, до 4 знаков; если &gt; 0 — сохраняется в ордере. <strong>Только для MXO</strong> (см. проведение).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Проведение <code>POST …/orders/:id/post</code> (<code>CashOrderService.postOrder</code>)</strong></p>
+<ol>
+<li>Ордер существует в организации, статус <strong><code>DRAFT</code></strong>; иначе <strong>404</strong> / <strong>409</strong>.</li>
+<li>Если <strong><code>skipJournalPosting</code></strong> — только смена статуса на <strong>POSTED</strong>, привязка <code>postedTransactionId</code> к уже существующей <code>linkedTransactionId</code> (без новой проводки).</li>
+<li>Иначе: обязателен <strong><code>cashFlowItemId</code></strong> на записи; повторная проверка <code>assertCashFlowItem</code>; при <strong><code>cashDeskId</code></strong> — <code>assertCashDesk</code>.</li>
+<li>Обязателен непустой <strong><code>offsetAccountCode</code></strong>; <strong><code>cashAccountCode</code></strong> должен проходить <strong><code>assertValidCashDeskAccountCode</code></strong> (касса <strong>101*</strong>).</li>
+<li><strong>Удержание налога у источника:</strong> если <code>withholdingTaxAmount</code> &gt; 0 — только для <strong><code>MXO</code></strong>; сумма <strong><code>amount</code></strong> трактуется как <strong>нетто</strong> (выдано из кассы), <strong>валовая</strong> = <code>amount + withholdingTaxAmount</code>. Проводки в одной транзакции: <strong>Дт</strong> второй счёт (<code>offset</code>) на <strong>gross</strong>, <strong>Кт</strong> касса на <strong>amount</strong>, <strong>Кт</strong> счёт <strong><code>521</code></strong> (<code>PAYROLL_TAX_PAYABLE_ACCOUNT_CODE</code>) на <strong>withholdingTaxAmount</strong>. Если удержание 0 — классическая пара Дт/Кт по кассе и второму счёту на сумму <code>amount</code>.</li>
+<li>MKO: <strong>Дт</strong> касса, <strong>Кт</strong> второй счёт на <code>amount</code>.</li>
+<li>После успеха — <code>postedTransactionId</code> на созданную финансовую транзакцию, статус <strong>POSTED</strong>.</li>
+</ol>
+<p><em>Черновики, созданные до появления поля ДДС в UI, могут не иметь <code>cashFlowItemId</code> в БД — такие ордера </em><em>не проведутся</em><em>, пока не будут пересозданы или не выполнен backfill.</em></p>
+<h4 id="601-validation-logic-cashorderservice"><a class="toclink" href="#601-validation-logic-cashorderservice">§6.0.1. Validation Logic: закрытые периоды и «заднее число» (<code>CashOrderService</code>)</a></h4>
+<p><strong>Закрытые периоды:</strong> проведение ордера вызывает <code>AccountingService.postJournalInTransaction</code>, где уже проверяется вхождение <code>monthKeyUtc(order.date)</code> в <code>settings.reporting.closedPeriods</code> — <strong>дополнительно</strong> UI не должен предлагать проведение в закрытом месяце (синхронизация с PRD §4.5.2).</p>
+<p><strong>Backdating (расход из кассы, <code>MXO</code>):</strong> если <code>order.date</code> <strong>раньше</strong> текущей календарной даты (UTC) и вид операции <strong>уменьшает</strong> остаток на счёте кассы <strong>101*</strong>, перед проведением выполняется проверка «кассового разрыва»:</p>
+<p>Для каждого календарного дня (t) от <code>order.date</code> до <strong>сегодня</strong> (включитель, UTC) вычисляется нетто <strong>Дт − Кт</strong> по счёту кассы на конец дня (t) <strong>без</strong> новой проводки; затем из нетто вычитается сумма расхода (A). Если для <strong>любого</strong> (t) результат (&lt; 0) — выброс <strong><code>ForbiddenException</code></strong> с текстом:</p>
+<blockquote>
+<p>Операция невозможна: возникнет кассовый разрыв на [Date]</p>
+</blockquote>
+<p>где <code>[Date]</code> — <strong>YYYY-MM-DD</strong> в UTC. Ограничение глубины backdating (например, не более <strong>400</strong> дней) допускается для защиты API от злоупотреблений.</p>
+<p><strong>MKO</strong> (приход в кассу): отдельная проверка «разрыва» не требуется (остаток не уменьшается).</p>
+<hr>
+<h4 id="4-post-apibankingmanual-entry"><a class="toclink" href="#4-post-apibankingmanual-entry">Шаг 4. Ручная банковская операция (<code>POST /api/banking/manual-entry</code>)</a></h4>
+<ul>
+<li>Модуль: <strong><code>BANKING_PRO</code></strong>; роли: <strong>Owner, Admin, Accountant</strong>.</li>
+<li><strong>DTO <code>ManualBankEntryDto</code>:</strong></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>enum <strong><code>BankStatementLineType</code></strong>: <code>INFLOW</code> | <code>OUTFLOW</code></td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>&gt; 0, finite, до 4 десятичных</td>
+</tr>
+<tr>
+<td><code>bankAccountCode</code></td>
+<td>строка; после trim должна удовлетворять <strong><code>isBankLedgerAccountCode</code></strong> — счета <strong>221*, 222*, 223*, 224*</strong></td>
+</tr>
+<tr>
+<td><code>offsetAccountCode</code></td>
+<td>второй счёт проводки (строка, не пустая)</td>
+</tr>
+<tr>
+<td><code>date</code></td>
+<td><code>YYYY-MM-DD</code></td>
+</tr>
+<tr>
+<td><strong><code>cashFlowItemId</code></strong></td>
+<td>UUID; проверка <code>treasury.assertCashFlowItem</code></td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>optional; в проводке/выписке по умолчанию текст <strong><code>Manual bank entry</code></strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Поведение сервиса (<code>BankingService.manualBankEntry</code>)</strong> — одна <strong><code>Prisma.$transaction</code></strong>:</p>
+<ol>
+<li>Формирование пар проводок: при <strong>INFLOW</strong> — <strong>Дт</strong> банк, <strong>Кт</strong> offset; при <strong>OUTFLOW</strong> — <strong>Дт</strong> offset, <strong>Кт</strong> банк.</li>
+<li><code>accounting.postJournalInTransaction</code> с <code>reference: "BANK-MANUAL"</code>, <code>isFinal: true</code>.</li>
+<li>Создание <strong><code>BankStatement</code></strong> с <code>bankName: "MANUAL_BANK"</code>, <code>channel: BANK</code>, <code>date</code>, <code>totalAmount = amount</code>.</li>
+<li>Создание <strong><code>BankStatementLine</code></strong> с <code>origin: MANUAL_BANK_ENTRY</code>, <code>type</code> из DTO, <code>valueDate</code>, <code>isMatched: true</code>, <strong><code>cashFlowItemId</code></strong> из DTO.</li>
+</ol>
+<p>Ответ: <code>{ ok: true, bankStatementId }</code>.</p>
+<p><strong>Разделение потоков Bank vs Cash (реестры операций):</strong></p>
+<ul>
+<li>Эндпоинт реестра: <code>GET /api/banking/lines</code>.</li>
+<li>Для страницы <strong>Bank</strong> (<code>/banking</code>) UI обязан запрашивать только банковские операции:<br>
+<code>GET /api/banking/lines?channel=BANK&amp;bankOnly=true</code></li>
+<li>При <code>bankOnly=true</code> сервер выполняет <strong>жёсткий фильтр</strong> по <code>origin</code>, исключая кассовые и системные источники, и возвращает <strong>только</strong>:</li>
+<li><code>MANUAL_BANK_ENTRY</code></li>
+<li><code>FILE_IMPORT</code></li>
+<li><code>DIRECT_SYNC</code></li>
+</ul>
+<hr>
+<h4 id="5-prisma"><a class="toclink" href="#5-prisma">Шаг 5. Схема миграции БД (эквивалент применённых изменений Prisma)</a></h4>
+<p>В репозитории миграции могут храниться вне рабочей копии; ниже — <strong>логический порядок</strong> изменений схемы, согласованный с <code>packages/database/prisma/schema.prisma</code> и кодом API.</p>
+<ol>
+<li>
+<p><strong>Таблица <code>cash_flow_items</code></strong><br>
+   - Колонки: <code>id</code> UUID PK, <code>organization_id</code> UUID FK → <code>organizations</code> ON DELETE CASCADE, <code>code</code> text, <code>name</code> text, <code>created_at</code>, <code>updated_at</code>.<br>
+   - <strong>UNIQUE</strong> <code>(organization_id, code)</code>. Индекс по <code>organization_id</code>.</p>
+</li>
+<li>
+<p><strong>Таблица <code>cash_desks</code></strong><br>
+   - <code>id</code> UUID PK, <code>organization_id</code> FK CASCADE, <code>name</code>, <code>employee_id</code> UUID NULL FK → <code>employees</code> ON DELETE SET NULL, <code>currencies</code> массив text (Postgres <code>text[]</code>), <code>is_active</code> boolean default true, timestamps.<br>
+   - Индексы: <code>organization_id</code>, <code>employee_id</code>.</p>
+</li>
+<li>
+<p><strong>Таблица <code>cash_orders</code></strong> — новые/изменённые поля<br>
+   - <code>cash_flow_item_id</code> UUID NULL FK → <code>cash_flow_items</code> ON DELETE SET NULL, индекс.<br>
+   - <code>cash_desk_id</code> UUID NULL FK → <code>cash_desks</code> ON DELETE SET NULL, индекс.<br>
+   - <code>withholding_tax_amount</code> <code>NUMERIC(19,4)</code> NULL — удержание на РКО.</p>
+</li>
+<li>
+<p><strong>Enum <code>BankStatementLineOrigin</code></strong> (Postgres <code>ENUM</code> или текст + маппинг — как сгенерировал Prisma)<br>
+   - Значение <strong><code>MANUAL_BANK_ENTRY</code></strong> (ручная банковская операция). Остальные значения enum: <code>FILE_IMPORT</code>, <code>DIRECT_SYNC</code>, <code>WEBHOOK</code>, <code>INVOICE_PAYMENT_SYSTEM</code>, <code>MANUAL_CASH_OUT</code>.</p>
+</li>
+<li>
+<p><strong>Таблица <code>bank_statement_lines</code></strong><br>
+   - Колонка <strong><code>origin</code></strong> с default <strong><code>FILE_IMPORT</code></strong>.<br>
+   - Колонка <strong><code>cash_flow_item_id</code></strong> UUID NULL FK → <code>cash_flow_items</code> ON DELETE SET NULL, индекс.</p>
+</li>
+<li>
+<p><strong>Связи в <code>Organization</code></strong> (Prisma): коллекции <code>cashFlowItems</code>, <code>cashDesks</code>; у <strong><code>CashFlowItem</code></strong> / <strong><code>CashDesk</code></strong> — обратные связи на <code>CashOrder</code> и <code>BankStatementLine</code> где задано в схеме.</p>
+</li>
+</ol>
+<p><strong>Применение в среде:</strong> <code>npm run db:migrate</code> из корня монорепо — это <strong><code>prisma migrate deploy</code></strong> (применить уже добавленные в репозиторий миграции; в CI — то же). Сгенерировать новую миграцию из <code>schema.prisma</code>: <strong><code>npm run db:migrate:dev</code></strong>. Для уже существующих черновиков ордеров без <code>cash_flow_item_id</code> — миграция данных или пересоздание документов перед проведением.</p>
+<hr>
+<h3 id="chart-of-accounts"><a class="toclink" href="#chart-of-accounts">Банковские и кассовые счета (не путать с Chart of Accounts)</a></h3>
+<ul>
+<li>Поддержка мультивалютности (AZN, USD, EUR).</li>
+<li><strong>Курсы:</strong> автозагрузка из <strong>XML/API ЦБА (cbar.az)</strong>; ежедневное обновление <strong>в 00:01</strong> (задача в BullMQ/cron).</li>
+<li><strong>Переоценка</strong> валютных остатков — <strong>регламентная операция на конец месяца</strong> (не «каждый день пересчитывать остатки» как бизнес-правило по умолчанию).</li>
+</ul>
+<h3 id="reconciliation"><a class="toclink" href="#reconciliation">Reconciliation (сверка)</a></h3>
+<ul>
+<li>Загрузка выписки: MVP — <strong>CSV / Excel</strong>; импорт тяжёлых файлов — через <strong>очередь</strong>. Прямые API банков (Pasha, ABB и др.) — дорожная карта (см. §13).</li>
+<li>Инструмент <strong>Match (Invoicing match):</strong> сопоставление строки выписки с существующим инвойсом или создание новой транзакции расхода (например, аренда или налоги).</li>
+</ul>
+<h3 id="kassa-v82"><a class="toclink" href="#kassa-v82">Подраздел Kassa (касса, v8.2)</a></h3>
+<p>Полноценный подмодуль <strong>наличных денежных средств</strong> в разделе казначейства (соответствие требованиям <strong>МФ АР</strong> к первичке и кассовому учёту).</p>
+<p><strong>Интерфейс</strong></p>
+<ul>
+<li>Отдельная страница <strong><code>/banking/cash</code></strong>: в <strong>центре</strong> — таблица кассового журнала (ордера MKO/MXO — см. терминологию <strong>§6.0</strong>); <strong>сверху</strong> — действия: <strong>Mədaxil Kassa Orderi (MKO)</strong>, <strong>Məxaric Kassa Orderi (MXO)</strong>, <strong>Avans hesabatı</strong>; <strong>боковая панель</strong> — подотчётные лица (сальдо <strong>244</strong>) и форма авансового отчёта.</li>
+<li>Печать: HTML-бланк ордера для печати на <strong>A4/A5</strong> (чистый шаблон под браузерную печать).</li>
+</ul>
+<p><strong>Функционал</strong></p>
+<table>
+<thead>
+<tr>
+<th>Функция</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MKO / MXO</strong></td>
+<td>Создание черновиков, проведение с проводкой на счета <strong>101</strong> и корреспондирующие счета (601, 244, 221 и т.д. по типу операции).</td>
+</tr>
+<tr>
+<td><strong>Avans hesabatı</strong></td>
+<td>Форма списания долга сотрудника перед кассой (<strong>счёт 244</strong>) через строки расходов по чекам; проведение <strong>Дт 731 / Кт 244</strong> (см. сервис <code>AdvanceReport</code>).</td>
+</tr>
+<tr>
+<td><strong>Инкассация</strong></td>
+<td>Специальный тип <strong>MXO</strong> (<strong><code>BANK_DEPOSIT</code></strong>): выдача наличных из кассы в банк (<strong>221</strong> как второй счёт проводки).</td>
+</tr>
+<tr>
+<td><strong>Быстрый расход из кассы</strong></td>
+<td>UI «как cashOut»: создаётся <strong>MXO</strong> с типом <strong>OTHER</strong> и счётом расходов <strong>731</strong> (аналог ручного списания без отдельной проводки вне журнала ордеров).</td>
+</tr>
+<tr>
+<td><strong>Авто-касса</strong></td>
+<td>Оплата <strong>Nəqd</strong> в продажах/закупках → <strong>черновик</strong> ордера в журнале кассы (связь с оплатой инвойса).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gating (v8.2)</strong></p>
+<ul>
+<li>API кассы (<code>/api/banking/cash/*</code>) требует модуль <strong><code>kassa_pro</code></strong> (алиас к полномочиям кассы/реестра) или <strong><code>banking_pro</code></strong> / <strong><code>kassa</code></strong> в <code>customConfig.modules</code>; <strong>ENTERPRISE</strong> — полный доступ.</li>
+<li>Slug <strong><code>kassa_pro</code></strong> может входить в базовый пресет конструктора; для отдельных клиентов (напр. <strong>TiVi Media</strong>) — выдача <strong>ENTERPRISE</strong> или явный список модулей.</li>
+</ul>
+<hr>
+<h2 id="7-6-hr-payroll"><a class="toclink" href="#7-6-hr-payroll">7. Модуль 6: HR &amp; Payroll (кадры и зарплата АР)</a></h2>
+<h3 id="_12"><a class="toclink" href="#_12">Цель</a></h3>
+<p>Расчёт выплат сотрудникам согласно законодательству АР.</p>
+<h3 id="70-absencetype-a-mzuniyyt-novlri"><a class="toclink" href="#70-absencetype-a-mzuniyyt-novlri">7.0. Справочник <code>AbsenceType</code> и логика отсутствий (ТК AР; məzuniyyət növləri)</a></h3>
+<p><strong>Источник требований:</strong> практика бухучёта АР (в т.ч. разбор по <strong>muhasib.az</strong> — «Məzuniyyət haqqı hesablanması»), согласование с заказчиком (отпуска/больничные/без оплаты).</p>
+<h4 id="prisma"><a class="toclink" href="#prisma">Схема БД (Prisma)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Модель / enum</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>AbsencePayFormula</code></strong></td>
+<td><code>LABOR_LEAVE_304</code> — orta aylıq (12 ay) ÷ <strong>30.4</strong> × təqvim günləri; <code>SICK_LEAVE_STAJ</code> — ilk <strong>14</strong> gün işəgötürən (staj %), sonrası DSMF (ERP-dən kənar); <code>UNPAID_RECORD</code> — yalnız tabellə, ə/h artımı yoxdur.</td>
+</tr>
+<tr>
+<td><strong><code>AbsenceType</code></strong></td>
+<td><code>id</code>, <code>organizationId</code>, <code>code</code> (unikal <code>{org, code}</code>), <code>nameAz</code>, <code>isPaid</code>, <strong><code>description</code></strong> (AZ izah), <code>formula</code>, <code>maxCalendarDays</code> (məs. ödənişsiz üçün <strong>30</strong>), timestamps.</td>
+</tr>
+<tr>
+<td><strong><code>Absence</code></strong></td>
+<td><code>employeeId</code>, <strong><code>absenceTypeId</code></strong> FK → <code>AbsenceType</code>, <code>startDate</code>, <code>endDate</code>, <code>note</code>, <code>approved</code>. (Колонка <code>type</code> enum удалена; при первом запросе справочника старые коды <strong>LABOR_MAIN</strong> / <strong>LABOR_ADD</strong> / <strong>SOCIAL</strong> / <strong>UNPAID</strong> / <strong>EDU_CREATIVE</strong> / <strong>SICK</strong> автоматически приводятся к каноническим кодам ниже.)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Автосид</strong> при первом <code>GET /api/hr/absence-types</code> (и миграция кодов для существующих организаций) — <strong>5 типов</strong> по ТК AР / источнику Inara:</p>
+<table>
+<thead>
+<tr>
+<th><code>code</code></th>
+<th><code>nameAz</code> (кратко)</th>
+<th><code>isPaid</code></th>
+<th><code>formula</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LABOR_LEAVE</strong></td>
+<td>Əmək məzuniyyəti</td>
+<td>да</td>
+<td><code>LABOR_LEAVE_304</code></td>
+</tr>
+<tr>
+<td><strong>SOCIAL_LEAVE</strong></td>
+<td>Sosial məzuniyyət (hamiləlik, uşağa qulluq)</td>
+<td>да</td>
+<td><code>LABOR_LEAVE_304</code></td>
+</tr>
+<tr>
+<td><strong>UNPAID_LEAVE</strong></td>
+<td>Ödənişsiz məzuniyyət</td>
+<td>нет</td>
+<td><code>UNPAID_RECORD</code> (max <strong>30</strong> təqvim günü)</td>
+</tr>
+<tr>
+<td><strong>EDUCATIONAL_LEAVE</strong></td>
+<td>Təhsil məzuniyyəti</td>
+<td>да</td>
+<td><code>LABOR_LEAVE_304</code></td>
+</tr>
+<tr>
+<td><strong>SICK_LEAVE</strong></td>
+<td>Xəstəlik vərəqəsi</td>
+<td>да (işəgötürən hissəsi)</td>
+<td><code>SICK_LEAVE_STAJ</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="rest"><a class="toclink" href="#rest">REST</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Путь</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/hr/absence-types</code></td>
+<td>Список типов (роли Owner/Admin/Accountant/<strong>User</strong>); пустой справочник → сид.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/hr/absences</code></td>
+<td>Тело <strong><code>CreateAbsenceDto</code></strong>: <code>employeeId</code>, <strong><code>absenceTypeId</code></strong>, <code>startDate</code>, <code>endDate</code>, <code>note?</code>.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/hr/absences/vacation-pay/calculate</code></td>
+<td><strong><code>VacationPayCalcDto</code></strong>: + optional <code>absenceTypeId</code> (должен иметь <code>LABOR_LEAVE_304</code>). Ответ: суммы с <strong>2</strong> знаками, <code>calendarDays</code> — целое, <code>divisor304</code>: <code>30.4</code>.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/hr/absences/sick-pay/calculate</code></td>
+<td><strong><code>SickPayCalcDto</code></strong>: <code>employeeId</code>, <code>periodStart</code>, <code>periodEnd</code>, <code>absenceTypeId?</code> (по умолчанию тип <strong>SICK_LEAVE</strong>).</td>
+</tr>
+</tbody>
+</table>
+<h4 id="timesheetservicesyncabsences"><a class="toclink" href="#timesheetservicesyncabsences">Табель (<code>TimesheetService.syncAbsences</code>)</a></h4>
+<ul>
+<li><code>LABOR_LEAVE_304</code> → ячейка <strong><code>VACATION</code></strong>.</li>
+<li><code>SICK_LEAVE_STAJ</code> → <strong><code>SICK</code></strong>.</li>
+<li><code>UNPAID_RECORD</code> → <strong><code>OFF</code></strong> (не входит в счётчики отпуска/больничного в ведомости).</li>
+</ul>
+<h4 id="payrollservice-createdraftrunsync"><a class="toclink" href="#payrollservice-createdraftrunsync"><code>PayrollService</code> и черновик ведомости (<code>createDraftRunSync</code>)</a></h4>
+<ul>
+<li>Методы <strong><code>previewLaborLeavePay</code></strong> / <strong><code>previewSickLeavePay</code></strong> делегируют в <strong><code>AbsencesService</code></strong> (калькуляторы без проведения ведомости).</li>
+<li>При создании черновика <strong>с привязкой к утверждённому табелю</strong> (<code>timesheetId</code>) для штатных (<strong><code>EmployeeKind.EMPLOYEE</code></strong>) подменяется <strong>базовый gross</strong> до расчёта налогов (<code>calculatePrivateNonOilPayroll</code>):</li>
+<li><strong>Оплачиваемые отпуска (LABOR_LEAVE_304)</strong> (<code>VACATION</code> в табеле): добавляется<br>
+    [<br>
+    (\text{SumGross} / (N_{\text{months}} \cdot 30.4)) \times \text{календарные дни отпуска в месяце}<br>
+    ]<br>
+    где (N_{\text{months}}) — количество <strong>полных</strong> отработанных календарных месяцев с даты <code>hireDate</code> (в карточке сотрудника) до месяца, предшествующего отпуску, но не более <strong>12</strong>. Если число календарных месяцев с <strong>проведёнными</strong> <code>payroll_slips</code> в 12-месячном ретроспективном окне <strong>меньше</strong> (N_{\text{months}}) и в карточке сотрудника задано <strong><code>initial_salary_balance</code> &gt; 0</strong>, то к сумме начислений в окне добавляется этот баланс (в т.ч. когда в ERP <strong>нет ни одной</strong> проведённой ведомости в окне — вся база для среднего берётся из <code>initial_salary_balance</code>). Если нет ни проводок, ни положительного <code>initial_salary_balance</code> — база = <strong>оклад</strong> (<code>salary</code>) / 30.4.</li>
+<li><strong>Больничный (<code>SICK_LEAVE_STAJ</code>)</strong>: к gross месяца добавляется сумма работодателя по правилам ТК AР за <strong>календарные дни больничного в этом месяце</strong>, с учётом <strong>первых 14 календарных дней каждого эпизода</strong> (по записям <code>Absence</code> с типом формулы <code>SICK_LEAVE_STAJ</code>) и процента от стажа; дни после 14-го оплачиваются DSMF вне ERP.</li>
+<li><strong>Без оплаты</strong> (<code>UNPAID_RECORD</code> → <code>OFF</code> в табеле): отработанные <strong>рабочие</strong> дни (<code>WORK</code> + <strong><code>BUSINESS_TRIP</code></strong> на рабочих днях производственного календаря АР) дают долю оклада (\text{оклад} \times (\text{дни} / N)), где (N) — число рабочих дней в месяце; дни <code>OFF</code> на рабочих днях в эту долю не входят (удержание по табелю).</li>
+<li>Подрядчики (<strong><code>CONTRACTOR</code></strong>) и ведомость <strong>без табеля</strong> — по-прежнему gross = поле <strong><code>salary</code></strong> (старое поведение).</li>
+</ul>
+<h3 id="payroll-processor"><a class="toclink" href="#payroll-processor">Payroll Processor</a></h3>
+<p>Черновик ведомости и проведение при превышении порога <strong><code>PAYROLL_ENTITY_ASYNC_THRESHOLD</code></strong> (константа в <code>payroll.constants.ts</code>; в продакшене <strong>0</strong> — при наличии сотрудников / листов фактически <strong>всегда</strong> через очередь <strong><code>payroll-heavy</code></strong>, BullMQ) выполняются <strong>асинхронно</strong>: ответ <strong><code>{ async: true, jobId }</code></strong>, статус — <strong><code>GET /api/hr/payroll/jobs/:jobId</code></strong>. Уведомления в UI / email — по политике продукта (опционально).</p>
+<table>
+<thead>
+<tr>
+<th>Направление</th>
+<th>Содержание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Вход</strong></td>
+<td>Gross Salary</td>
+</tr>
+<tr>
+<td><strong>Выход (удержания)</strong></td>
+<td>См. ниже</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Удержания и взносы:</strong></p>
+<ul>
+<li><strong>Income Tax:</strong> 14% (с учётом льготы 8000 AZN в ненефтяном секторе).</li>
+<li><strong>DSMF (соцстрах, private non‑oil):</strong> worker: 10% до 200 AZN + 10 AZN с остатка; employer: 22% (standard) или 15% (preferential) — берётся из <code>Organization.settings</code>.</li>
+<li><strong>ITS (медстрах):</strong> progressive (1%–2%) по текущим ставкам АР (см. реализацию tax calculator).</li>
+<li><strong>Unemployment Insurance:</strong> 0,5%.</li>
+</ul>
+<h3 id="-_1"><a class="toclink" href="#-_1">Авто-проводки</a></h3>
+<p>При расчёте зарплаты создаются проводки: <strong>Дт 721</strong> (расходы на оплату труда) — <strong>Кт 533</strong> (задолженность перед персоналом).</p>
+<h3 id="701-departmentid-quickexpense"><a class="toclink" href="#701-departmentid-quickexpense">7.0.1. ЦФО (<code>departmentId</code>): быстрый расход (QuickExpense) и зарплата</a></h3>
+<ul>
+<li>
+<p><strong><code>POST /api/accounting/quick-expense</code></strong> (<code>QuickExpenseDto</code>): поле <strong><code>departmentId</code></strong> <strong>необязательно</strong> в контракте API. Если передано — выполняется проверка, что <code>Department</code> принадлежит организации; значение сохраняется в <strong><code>Transaction.departmentId</code></strong> и участвует в отчётах с фильтром по ЦФО (например <strong><code>GET /api/reporting/pl?departmentId=…</code></strong>). Для корректного <strong>P&amp;L по подразделениям</strong> по операционным расходам, вводимым через этот эндпоинт, <strong><code>departmentId</code> следует передавать</strong> всегда, когда расход относится к конкретному ЦФО (иначе проводка попадает только в организационный срез без привязки к отделу).</p>
+</li>
+<li>
+<p><strong>Проведение ведомости ЗП</strong> (<code>PayrollService.postRunSync</code>): формируется <strong>одна агрегированная</strong> финансовая транзакция по счетам <strong>721 / 533 / 521</strong> и др. <strong>без</strong> заполнения <strong><code>Transaction.departmentId</code></strong>. Фонд оплаты труда в главной книге отражается <strong>по организации целиком</strong>; разнесение ФОТ по ЦФО через поле транзакции в текущей реализации <strong>не выполняется</strong>. Для аналитики по персоналу используются <strong><code>PayrollSlip</code></strong>, <strong><code>Employee</code> → <code>JobPosition</code> → <code>Department</code></strong>. Целевое распределение проводок ЗП по <code>departmentId</code> — отдельная доработка (до неё P&amp;L по ЦФО по строке «зарплата» опирается на методологию без построчного ЦФО в GL).</p>
+</li>
+</ul>
+<h3 id="_13"><a class="toclink" href="#_13">Организационная структура и позиции</a></h3>
+<p>Цель — связать кадры с <strong>иерархией подразделений</strong>, <strong>штатным расписанием</strong> и <strong>аналитикой по ЦФО</strong> (см. <a href="./PRD.md">PRD.md</a> §4.9).</p>
+<h4 id="prisma_1"><a class="toclink" href="#prisma_1">Схема данных (Prisma)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Модель</th>
+<th>Поля</th>
+<th>Примечания</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Department</strong></td>
+<td><code>id</code>, <code>name</code>, <code>parentId</code> (self-relation, nullable для корня), <code>managerId</code> (FK → <code>Employee</code>, nullable при первичном заведении структуры), <code>organizationId</code></td>
+<td>Индексы: <code>organizationId</code>, <code>parentId</code>. Уникальность имён в рамках организации — по политике продукта (по <code>parentId</code> + <code>name</code> или глобально).</td>
+</tr>
+<tr>
+<td><strong>JobPosition</strong></td>
+<td><code>id</code>, <code>name</code>, <code>departmentId</code> (FK → <code>Department</code>), <code>totalSlots</code> (Int, ≥ 1), <code>minSalary</code>, <code>maxSalary</code> (Decimal), <code>organizationId</code></td>
+<td>Вилка окладов — для контроля и отчётов; валидация <code>minSalary ≤ maxSalary</code>.</td>
+</tr>
+<tr>
+<td><strong>Employee</strong> (изменение)</td>
+<td>Добавить обязательное поле <strong><code>positionId</code></strong> (FK → <code>JobPosition</code>)</td>
+<td><strong>Миграция:</strong> для существующих строк — либо backfill служебной позицией «Без подразделения» / «Legacy», либо поэтапное заполнение до включения жёсткой валидации на API.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Зависимости:</strong> при появлении <code>Department.managerId</code> → <code>Employee</code> возможна циклическая ссылка (отдел ссылается на сотрудника, сотрудник — на позицию в отделе). На этапе миграции допускается <code>managerId = null</code>; заполнение руководителей — после создания карточек сотрудников.</p>
+<h4 id="-_2"><a class="toclink" href="#-_2">Бизнес-логика</a></h4>
+<p><strong>Валидация штата (<code>EmployeeService.create</code> / при смене позиции):</strong></p>
+<ul>
+<li>Пусть <code>occupied = count(Employee where positionId = X AND organizationId = …)</code> (при необходимости исключая удалённых / уволенных — по полю статуса, если появится).</li>
+<li>Условие: <code>occupied &lt; JobPosition.totalSlots</code>.</li>
+<li>При нарушении: HTTP <strong>402 Payment Required</strong>, тело с кодом <strong><code>QUOTA_EXCEEDED</code></strong> (см. <strong>§14.8.7</strong>); в NestJS — <strong><code>QuotaExceededException</code></strong>.</li>
+</ul>
+<p><strong>Иерархия отделов (UI / API):</strong></p>
+<ul>
+<li>Реализовать <strong>рекурсивный запрос</strong> для дерева подразделений: либо <strong>CTE</strong> в сыром SQL (<code>WITH RECURSIVE</code> в PostgreSQL), либо обход в сервисе при ограниченной глубине; ответ API — вложенный JSON (<code>children[]</code>) или плоский список с <code>parentId</code> + сортировка для построения дерева на клиенте.</li>
+</ul>
+<h4 id="reporting"><a class="toclink" href="#reporting">Аналитика (Reporting)</a></h4>
+<ul>
+<li><strong>QuickExpense и прочие проводки с <code>Transaction.departmentId</code>:</strong> разрезы P&amp;L по ЦФО — по полю транзакции (см. <strong>§7.0.1</strong>).</li>
+<li><strong>Зарплата:</strong> агрегированная проводка без <code>departmentId</code> на транзакции; для срезов по подразделениям — данные <strong><code>PayrollSlip</code></strong> и оргструктура (<strong><code>Employee</code> → <code>JobPosition</code> → <code>Department</code></strong>), до внедрения распределения ФОТ по проводкам.</li>
+</ul>
+<hr>
+<h2 id="8-7-reporting"><a class="toclink" href="#8-7-reporting">8. Модуль 7: Reporting</a></h2>
+<h3 id="_14"><a class="toclink" href="#_14">Цель</a></h3>
+<p>Визуализация состояния бизнеса.</p>
+<table>
+<thead>
+<tr>
+<th>Отчёт</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Trial Balance (ОСВ)</strong></td>
+<td>Сводка остатков на начало, оборотов за период и остатков на конец по всем счетам</td>
+</tr>
+<tr>
+<td><strong>P&amp;L</strong></td>
+<td>Доходы минус расходы (<strong>accrual basis</strong> — по отгрузке)</td>
+</tr>
+<tr>
+<td><strong>Balance Sheet</strong></td>
+<td>Активы, обязательства, капитал на дату</td>
+</tr>
+<tr>
+<td><strong>Cash Flow</strong></td>
+<td>Движение денег (<strong>cash basis</strong> — по факту оплаты)</td>
+</tr>
+</tbody>
+</table>
+<p>На MVP — <strong>внутренняя аналитика</strong>; интеграция с <strong>e-taxes.gov.az</strong> и прочими внешними отчётами — следующий этап (ориентир Q3–Q4).</p>
+<hr>
+<h2 id="9-8-auditmutationinterceptor"><a class="toclink" href="#9-8-auditmutationinterceptor">9. Модуль 8: Неизменяемый аудит (AuditMutationInterceptor)</a></h2>
+<h3 id="90-audit_logs-prisma-auditlog"><a class="toclink" href="#90-audit_logs-prisma-auditlog">§9.0 Структура таблицы <code>audit_logs</code> (Prisma: <code>AuditLog</code>)</a></h3>
+<p>Логические поля продукта и соответствие колонкам БД:</p>
+<table>
+<thead>
+<tr>
+<th>Логическое поле</th>
+<th>Колонка / Prisma</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>entityName</strong> (тип сущности)</td>
+<td><code>entity_type</code> / <code>entityType</code></td>
+<td>Например <code>Invoice</code>, <code>Employee</code>, <code>Product</code>, <code>JournalEntry</code>; для прочих мутаций — <code>HTTP_MUTATION</code>.</td>
+</tr>
+<tr>
+<td><strong>entityId</strong></td>
+<td><code>entity_id</code> / <code>entityId</code></td>
+<td>Идентификатор сущности (UUID или строка до 255 символов для fallback).</td>
+</tr>
+<tr>
+<td><strong>action</strong> (HTTP-метод мутации)</td>
+<td><code>action</code></td>
+<td><code>POST</code>, <code>PATCH</code>, <code>PUT</code>, <code>DELETE</code> (в UI OWNER-журнала маппится на CREATE / UPDATE / DELETE).</td>
+</tr>
+<tr>
+<td><strong>userId</strong></td>
+<td><code>user_id</code> / <code>userId</code></td>
+<td>Пользователь из JWT (nullable для edge cases).</td>
+</tr>
+<tr>
+<td><strong>oldData</strong></td>
+<td><code>old_values</code> / <code>oldValues</code></td>
+<td>JSON снимок до изменения (ключевые сущности).</td>
+</tr>
+<tr>
+<td><strong>newData</strong></td>
+<td><code>new_values</code> / <code>newValues</code></td>
+<td>JSON снимок после изменения или ответа API.</td>
+</tr>
+<tr>
+<td><strong>timestamp</strong></td>
+<td><code>created_at</code> / <code>createdAt</code></td>
+<td>UTC время записи.</td>
+</tr>
+</tbody>
+</table>
+<p>Дополнительно в той же строке: <code>organizationId</code>, <code>changes</code> (путь + тело для generic-мутаций), <code>clientIp</code>, <code>userAgent</code>, <code>hash</code> (SHA-256 целостности). Архивная копия — <code>audit_log_archives</code> с тем же набором полей плюс <code>archived_at</code>.</p>
+<h3 id="_15"><a class="toclink" href="#_15">Поведение</a></h3>
+<ul>
+<li><strong>Глобальный перехватчик</strong> NestJS (<code>AuditMutationInterceptor</code>): автоматически логирует <strong>мутации</strong> (<code>POST</code>, <code>PATCH</code>, <code>PUT</code>, <code>DELETE</code>) с привязкой к <strong><code>userId</code></strong> и <strong><code>organizationId</code></strong> (из JWT), за исключением публичных маршрутов auth (<code>/auth/login</code>, <code>/auth/register</code>, <code>/auth/refresh</code>). Запись в <code>audit_logs</code> выполняется <strong>после</strong> формирования HTTP-ответа <strong>без ожидания</strong> клиентом (fire-and-forget): снижает задержку ответа; при аварийном завершении процесса сразу после ответа теоретически возможна потеря последней audit-строки (см. PRD §10.0).</li>
+<li>Для сущностей <strong>Invoice</strong>, <strong>Employee</strong>, <strong>Product</strong> и для операций с <strong>проводками</strong> (например <code>POST /accounting/quick-expense</code> → снимок транзакции и строк <code>JournalEntry</code>) сохраняются <strong><code>oldValues</code></strong> и <strong><code>newValues</code></strong> (JSON); для прочих мутаций — запись типа <code>HTTP_MUTATION</code> с телом запроса в поле <code>changes</code>.</li>
+<li>В каждую запись записываются <strong><code>clientIp</code></strong>, <strong><code>userAgent</code></strong>, <strong><code>hash</code></strong> (SHA-256 от канонического JSON полей + секрет).</li>
+<li><strong>Проверка целостности:</strong> <code>POST /api/audit/integrity-check</code> (Owner/Admin) — сверка хешей по организации; строки без хеша (legacy) учитываются отдельно.</li>
+<li><strong>Архив:</strong> BullMQ-процесс <strong>раз в месяц</strong> переносит записи <code>AuditLog</code> старше <strong>1 года</strong> в <strong><code>AuditLogArchive</code></strong> (отключается <code>AUDIT_ARCHIVE_DISABLED=1</code>).</li>
+</ul>
+<p>Продуктовое описание — <a href="./PRD.md">PRD.md</a> §4.8.</p>
+<hr>
+<h2 id="10-9-inventory-service"><a class="toclink" href="#10-9-inventory-service">10. Модуль 9: Inventory Service (склад) — обновление</a></h2>
+<h3 id="_16"><a class="toclink" href="#_16">Цель</a></h3>
+<p>Поддержка корректировки складских остатков с немедленным отражением <strong>отклонения себестоимости</strong> в главной книге.</p>
+<h3 id="adjuststock"><a class="toclink" href="#adjuststock">Метод <code>adjustStock</code></a></h3>
+<table>
+<thead>
+<tr>
+<th>Параметр</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>productId</code></td>
+<td>Идентификатор номенклатуры (товара) в рамках организации</td>
+</tr>
+<tr>
+<td><code>quantity</code></td>
+<td>Величина корректировки в натуральных единицах (положительное число)</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td><code>'IN'</code> — оприходование (увеличение остатка); <code>'OUT'</code> — списание (уменьшение остатка)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Поведение:</strong></p>
+<ol>
+<li>Обновить складские движения / остатки (<code>StockMovement</code> или эквивалент) в <strong>одной БД-транзакции</strong> с финансовой частью.</li>
+<li>Создать <strong><code>Transaction</code></strong> и набор <strong><code>JournalEntry</code></strong>, отражающих <strong>разницу стоимости</strong> по результату корректировки (учётная себестоимость единицы × количество; метод оценки — как в действующем складском модуле — средняя / FIFO и т.д.).</li>
+<li>Корреспонденции — по плану счетов и политике продукта (например ТМЦ <strong>201</strong>, себестоимость <strong>701</strong>, прочие доходы/расходы для отклонений — см. <a href="./PRD.md">PRD.md</a> §4.10).</li>
+<li>Контекст запроса: <strong><code>organizationId</code></strong> из JWT; валидация принадлежности <code>productId</code> организации.</li>
+</ol>
+<p><strong>Инварианты:</strong> <code>validateBalance()</code> для проводок; запрет мутаций в закрытом периоде (как для прочих финопераций).</p>
+<h3 id="v59"><a class="toclink" href="#v59">Инвентаризационная опись (v5.9)</a></h3>
+<ul>
+<li><strong>Модель данных (Prisma):</strong></li>
+<li><strong><code>InventoryAudit</code></strong>: <code>id</code>, <code>organizationId</code>, <code>warehouseId</code> (<strong>1 аудит = 1 склад</strong>), <code>date</code>, <code>status</code> (<code>DRAFT</code> | <code>APPROVED</code>).</li>
+<li><strong><code>InventoryAuditLine</code></strong>: <code>id</code>, <code>organizationId</code>, <code>inventoryAuditId</code>, <code>productId</code>, <code>systemQty</code>, <code>factQty</code>, <code>costPrice</code>.</li>
+<li>Уникальность строки в рамках документа: <code>@@unique([inventoryAuditId, productId])</code>.</li>
+<li><strong>UI / процесс:</strong> <strong>черновик (DRAFT)</strong> создаётся для выбранного склада и формирует <strong>снимок системных остатков</strong> (автозаполнение строк <code>systemQty</code>, <code>factQty=systemQty</code>, <code>costPrice</code> из <code>StockItem.averageCost</code>). В DRAFT разрешено редактирование <code>factQty</code> и <code>costPrice</code>. Далее — проведение (approve).</li>
+</ul>
+<h4 id="101-v60-inventoryauditservice"><a class="toclink" href="#101-v60-inventoryauditservice">§10.1 (v6.0) <code>InventoryAuditService</code> — транзакция проведения</a></h4>
+<p><strong>Note (audit sync):</strong> Treasury cash orders were renamed <strong>MKO/MXO → KMO/KXO</strong>, and incoming cash orders (KMO) have an additional <strong>KO-1</strong> print form requirement (see §6.0).</p>
+<ul>
+<li><strong>Approve (проведение) выполняется атомарно</strong>: весь процесс оборачивается в <strong><code>prisma.$transaction</code></strong>.</li>
+<li><strong>Ограничения (Compliance):</strong></li>
+<li>Запрещено проводить документ в статусе <strong>APPROVED</strong> повторно.</li>
+<li>Запрещено проведение и редактирование линий в <strong>закрытом периоде</strong> (проверка как в <code>AccountingService.postJournalInTransaction</code> через <code>closedPeriods</code>).</li>
+<li><strong>Алгоритм approve:</strong></li>
+<li>Для каждой строки вычислить ( \Delta = factQty - systemQty ).</li>
+<li>Определить <code>invAcc</code> по складу: <strong>201</strong> (товары) или <strong>204</strong> (готовая продукция) из <code>Warehouse.inventoryAccountCode</code>.</li>
+<li>Если ( \Delta &gt; 0 ): сумма ( amount = \Delta \times costPrice ) → проводка <strong>Дт invAcc / Кт 611</strong>, складское движение <strong>IN</strong>.</li>
+<li>Если ( \Delta &lt; 0 ): сумма ( amount = |\Delta| \times costPrice ) → проводка <strong>Дт 731 / Кт invAcc</strong>, складское движение <strong>OUT</strong>.</li>
+<li>Все складские изменения (<code>StockItem.quantity</code>, <code>StockItem.averageCost</code> при оприходовании) и <code>StockMovement</code> (reason=ADJUSTMENT), а также создание <code>Transaction</code>/<code>JournalEntry</code> выполняются внутри одной транзакции.</li>
+<li><strong>i18n (RU/AZ) для UI инвентаризации:</strong> ключи <code>inventory.audit*</code> используются на страницах <code>/inventory/audit/new</code>, <code>/inventory/audits</code>, <code>/inventory/audits/[id]</code> и должны проходить <code>npm run i18n:audit</code> (см. §17). Ключи включают, например: <code>inventory.auditTitle</code>, <code>inventory.auditSubtitle</code>, <code>inventory.auditThSystem</code>, <code>inventory.auditThFact</code>, <code>inventory.auditThDiff</code>, <code>inventory.auditThCost</code>, <code>inventory.auditThAmountDiff</code>, <code>inventory.auditTotalDiff</code>, <code>inventory.auditStatusDraft</code>, <code>inventory.auditStatusApproved</code>.</li>
+</ul>
+<h4 id="102-v140-manufacturing-productrecipe"><a class="toclink" href="#102-v140-manufacturing-productrecipe">§10.2 (v14.0) Модуль Manufacturing — спецификации (ProductRecipe)</a></h4>
+<p><strong>Связь с ЦФО:</strong> производственные и складские проводки, как и прочие операционные расходы, для P&amp;L по подразделениям должны согласовываться с правилами <strong><code>departmentId</code></strong> в финансовых транзакциях — см. <strong>§7.0.1</strong> (в т.ч. быстрый расход и отличие от агрегированной зарплатной проводки).</p>
+<h4 id="financial-reports-v161-balance-sheet-cash-flow"><a class="toclink" href="#financial-reports-v161-balance-sheet-cash-flow">Financial Reports (v16.1): Balance Sheet + Cash Flow</a></h4>
+<p><strong>Goal:</strong> management reporting built on top of the Ledger (double-entry), using <strong>Decimal</strong> arithmetic on the API side.</p>
+<p><strong>Balance Sheet mapping (GL → Management lines)</strong></p>
+<p>Balance is generated <strong>as of a date</strong> (<code>asOfDate</code>, UTC, inclusive) using closing balances from the Ledger.</p>
+<ul>
+<li><strong>Assets</strong></li>
+<li><strong>Cash &amp; Bank</strong>: <strong>101.*</strong> (cash desks), <strong>221.*</strong> (bank accounts), plus legacy <strong>223.*</strong> if present.</li>
+<li><strong>Receivables</strong>: <strong>211.*</strong></li>
+<li><strong>Inventory / Stock</strong>: <strong>201.*</strong> (goods), <strong>204.*</strong> (finished goods)</li>
+<li><strong>Liabilities</strong></li>
+<li><strong>Payables</strong>: <strong>531.*</strong></li>
+<li><strong>Payroll &amp; taxes payable</strong>: <strong>521.*</strong>, <strong>523.*</strong></li>
+<li><strong>Executive widgets</strong> (<code>GET /api/reports/executive-widgets</code>): ответ содержит <strong>отдельные</strong> суммы по <strong>531</strong> (кредиторка поставщиков) и по <strong>521 + 523</strong> (ЗП и налоги у источника и смежные обязательства); на дашборде не объединяются в одну KPI «кредиторка».</li>
+<li><strong><code>StockMovement.documentDate</code>:</strong> для метода оценки <strong>FIFO</strong> порядок слоёв при расчёте себестоимости списания — <strong><code>document_date</code> ASC</strong>, при равенстве дат — <strong><code>created_at</code> ASC</strong>; при создании движения задаётся бизнес-датой (например дата описи инвентаризации, <code>recognizedAt</code> / <code>createdAt</code> инвойса для отгрузки, текущий момент для закупки/перемещения/корректировки).</li>
+<li><strong>Equity</strong></li>
+<li><strong>Charter capital</strong>: <strong>301.*</strong> (and related equity codes if present)</li>
+<li><strong>Retained earnings / P&amp;L result</strong>: derived from equity / revenue / expense movements up to <code>asOfDate</code> (implementation detail in <code>FinancialReportService</code>)</li>
+</ul>
+<p><strong>Cash Flow (Direct method)</strong></p>
+<p>Cash Flow is generated for a period (<code>dateFrom</code>..<code>dateTo</code>, UTC inclusive). API: <strong><code>GET /api/reports/cash-flow</code></strong>.</p>
+<ul>
+<li><strong>Cash sources</strong>:</li>
+<li><strong>Bank</strong> (221.*): <code>BankStatementLine</code> с <strong><code>origin</code> ∈ {<code>FILE_IMPORT</code>, <code>MANUAL_BANK_ENTRY</code>}</strong>, с привязкой к <code>CashFlowItem</code>; период — по <strong><code>valueDate</code></strong>, при отсутствии — по дате выписки.</li>
+<li><strong>Cash desk</strong> (101.*): проведённые <strong>KMO/KXO</strong> (<code>CashOrder</code>), с привязкой к <code>CashFlowItem</code>.</li>
+<li><strong>Grouping</strong>: by <code>CashFlowItem</code> (code + name). Category is inferred from item code:</li>
+<li><code>CF-INV*</code> → Investing</li>
+<li><code>CF-FIN*</code> → Financing</li>
+<li>otherwise → Operating</li>
+</ul>
+<p><strong>Performance / caching</strong></p>
+<ul>
+<li>If the number of underlying ledger entries / source rows exceeds <strong>1000</strong>, the API may cache the computed report in <strong>Redis</strong> for a short TTL (keyed by org + params).</li>
+</ul>
+<p><strong>Цель:</strong> базовый CRUD для производственных рецептов (из каких материалов/сырья состоит готовый товар), закрывающий требования модуля <strong>Manufacturing</strong> на уровне MVP.</p>
+<p><strong>Схема данных (Prisma)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Модель</th>
+<th>Поля</th>
+<th>Примечания</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ProductRecipe</strong></td>
+<td><code>id</code> (UUID), <code>organizationId</code> (FK), <code>finishedProductId</code> (FK → <code>Product</code> — готовый товар, <strong>уникален</strong> в рамках org: одна рецептура на SKU)</td>
+<td>Расширение имени/<code>yieldQuantity</code> на уровне рецепта — по дорожной карте; выпуск задаётся телом <code>POST /manufacturing/release</code> (<code>quantity</code> = партия).</td>
+</tr>
+<tr>
+<td><strong>ProductRecipeLine</strong></td>
+<td><code>id</code> (UUID), <code>recipeId</code> (FK → <code>ProductRecipe</code>), <code>componentProductId</code> (FK → <code>Product</code> — сырьё/материал), <code>quantityPerUnit</code> (Decimal — расход на <strong>1</strong> единицу готовой продукции), <strong><code>wasteFactor</code></strong> (Decimal, по умолчанию <strong>0</strong> — доля технологических потерь; фактическое списание = <code>quantityPerUnit * (1 + wasteFactor)</code>)</td>
+<td>Уникальность <code>(recipeId, componentProductId)</code> — одно сырьё не дублируется в рецепте.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Бизнес-логика</strong></p>
+<ul>
+<li><strong>Валидация цикла:</strong> <code>finishedProductId</code> <strong>не может</strong> совпадать ни с одним <code>componentProductId</code> внутри того же рецепта (защита от рекурсивного производства). При нарушении — HTTP <strong>400</strong> с кодом <code>RECIPE_CIRCULAR_DEPENDENCY</code>.</li>
+<li><strong>Принадлежность:</strong> все <code>Product</code> (готовый и компоненты) должны принадлежать тому же <code>organizationId</code>.</li>
+<li><code>quantityPerUnit</code> &gt; 0; <code>wasteFactor</code> ≥ 0 (верхняя граница в коде, напр. <strong>2.0</strong>, защита от ошибочного ввода).</li>
+<li>Партия выпуска <code>batchQty</code> &gt; 0 — в <code>ReleaseProductionDto</code>.</li>
+</ul>
+<p><strong><code>ManufacturingService.releaseProduction</code></strong></p>
+<ul>
+<li>Для каждой строки рецепта: <code>need = quantityPerUnit * (1 + wasteFactor) * batchQty</code>.</li>
+<li>Складские движения <strong>OUT</strong> на сумму <code>need</code>; при необходимости последующим этапом — отдельный документ <strong>списание отходов</strong> / побочного продукта (PRD §4.10.1).</li>
+</ul>
+<p><strong>API (REST, префикс <code>/api</code>)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Путь</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/manufacturing/recipes</code></td>
+<td>Список рецептур организации (пагинация, поиск по <code>finishedProduct.name</code>).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/manufacturing/recipes/:id</code></td>
+<td>Детали рецепта с компонентами (<code>lines</code>).</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/manufacturing/recipes</code></td>
+<td>Создание рецепта с массивом <code>lines</code> (в одной <code>prisma.$transaction</code>).</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/manufacturing/recipes/:id</code></td>
+<td>Обновление (замена массива <code>lines</code>, в т.ч. <code>wasteFactor</code>).</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/manufacturing/recipes/:id</code></td>
+<td>Мягкое или жёсткое удаление (политика — при реализации; при наличии производственных ордеров — запрет).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gating:</strong> все эндпоинты защищены <code>@RequiresModule('manufacturing')</code>; при <code>tier === ENTERPRISE</code> — доступ без ограничений.</p>
+<h3 id="103"><a class="toclink" href="#103">10.3. Взаимозачёт и НДС (НК АР)</a></h3>
+<p>Дополняет <strong>§3.1</strong> (базовая проводка <strong>Дт 531 — Кт 211</strong> и распределение по <code>InvoicePayment</code>).</p>
+<p><strong>Налоговая логика:</strong> при вызове <strong><code>NettingService.executeNetting</code></strong> (или эквивалент <code>POST /api/reporting/netting</code>), если <strong>организация</strong> и <strong>контрагент</strong> признаны плательщиками НДС (<code>Counterparty.isVatPayer === true</code> и флаг учёта НДС по организации — по мере появления поля), в <strong>той же БД-транзакции</strong> допускается формирование:</p>
+<ul>
+<li>проводок по счетам <strong>241</strong> (НДС к зачёту) и/или <strong>541</strong> (НДС к уплате) <strong>пропорционально</strong> сумме зачёта и ставке НДС (аналогично отражению по банковской выплате / e-qaimə);</li>
+</ul>
+<p>или <strong>без</strong> проводок на первом этапе — только <strong>флаг/задача</strong> «создать e-qaimə» для интеграции с e-taxes (см. PRD §4.11).</p>
+<p><strong>UX:</strong> после успешного зачёта API может возвращать <code>{ suggestVatInvoice: true, amount, counterpartyId }</code> для мастера создания e-qaimə.</p>
+<hr>
+<h2 id="11"><a class="toclink" href="#11">11. Технические инструкции для разработки</a></h2>
+<p>При генерации кода <strong>для каждого модуля</strong> использовать единый паттерн:</p>
+<ol>
+<li><strong>DTO:</strong> описать входные данные, валидация через <code>class-validator</code>.</li>
+<li><strong>Service layer:</strong> бизнес-логика с обработкой ошибок (<code>InternalServerErrorException</code> или <code>BadRequestException</code> где уместно).</li>
+<li><strong>Controller:</strong> REST-эндпоинты (GET, POST, PATCH, DELETE).</li>
+<li><strong>Unit tests:</strong> минимум один тест на финансовую логику (например, сходимость баланса транзакции).</li>
+</ol>
+<h3 id="docker-compose"><a class="toclink" href="#docker-compose">Docker Compose</a></h3>
+<ul>
+<li>Сервисы: как минимум <strong>api</strong>, <strong>web</strong> (при контейнеризации фронта), <strong>postgres</strong>, <strong>redis</strong>.</li>
+<li><strong>PostgreSQL:</strong> инициализация с расширением <strong><code>uuid-ossp</code></strong>.</li>
+<li>Тома: данные БД, <strong>локальное файловое хранилище</strong> до переезда на S3-compatible.</li>
+</ul>
+<h3 id="api"><a class="toclink" href="#api">API</a></h3>
+<ul>
+<li>Документация: <strong>Swagger (OpenAPI)</strong> — см. PRD.</li>
+</ul>
+<hr>
+<h2 id="12-v2"><a class="toclink" href="#12-v2">12. Дорожная карта: v2 — расширения</a></h2>
+<p><strong>Базис:</strong> Core MVP считается реализованным; ниже — технические направления блока v2 (этот же документ). Продуктовый контекст — <a href="./PRD.md">PRD.md</a> §5.</p>
+<h3 id="121-multi-gaap"><a class="toclink" href="#121-multi-gaap">12.1. Multi-GAAP (параллельный учёт)</a></h3>
+<ul>
+<li><strong>БД:</strong> поле <code>ledgerType</code> (Enum: NAS, IFRS) в <code>JournalEntry</code> и <code>Account</code> (или эквивалентная модель).</li>
+<li><strong>Таблица</strong> <code>AccountMapping</code>: <code>{ nasAccountId, ifrsAccountId, ratio }</code>.</li>
+<li><strong>Логика:</strong> при сохранении проводки в режиме NAS — проверка маппинга и создание «теневой» копии для IFRS.</li>
+<li><strong>UI:</strong> глобальный переключатель в хедере: «Режим учета: NAS / IFRS».</li>
+</ul>
+<h3 id="122"><a class="toclink" href="#122">12.2. Дебиторка и акты сверки</a></h3>
+<ul>
+<li><strong>Partial payments:</strong> таблица <code>InvoicePayment</code> — <code>{ invoiceId, amount, date, transactionId }</code>.</li>
+<li><strong>Статусы:</strong> <code>PAID</code> только если <code>SUM(InvoicePayment.amount) &gt;= Invoice.totalAmount</code>; иначе <code>PARTIALLY_PAID</code>.</li>
+<li><strong>Reconciliation Service:</strong> выборка по счетам 211 / 531 для <code>counterpartyId</code>; PDF «Акт сверки взаиморасчетов» (AZ) с полями под подписи сторон.</li>
+</ul>
+<h3 id="123-hr-payroll"><a class="toclink" href="#123-hr-payroll">12.3. HR &amp; Payroll — расширение</a></h3>
+<ul>
+<li><strong>Оргструктура и позиции:</strong> детальная схема Prisma, валидация штата, дерево отделов, аналитика 721/533 по департаментам — см. <strong>§7</strong> (модуль 6), подраздел «Организационная структура и позиции».</li>
+<li><strong>Отпуска:</strong> справочник «Календарь отпусков»; формула отпускных: <code>(средняя ЗП за 12 мес / 30.4) * дни</code>.</li>
+<li><strong>ГПХ (VÖEN 5%):</strong> тип сотрудника «Подрядчик (ГПХ)»; авто-расчёт: выплата минус 5% и упрощённые налоги при применимости.</li>
+</ul>
+<h3 id="124"><a class="toclink" href="#124">12.4. Налоговый портал (экспорт)</a></h3>
+<ul>
+<li><strong>Export Engine:</strong> генерация файлов (например <strong>exceljs</strong>).</li>
+<li><strong>Шаблоны:</strong> приложения к декларации по НДС (покупки/продажи за квартал).</li>
+</ul>
+<h3 id="125-uxui-phase-2"><a class="toclink" href="#125-uxui-phase-2">12.5. UX/UI (Phase 2)</a></h3>
+<ul>
+<li>Адаптивность таблиц; на мобильных — скрытие второстепенных колонок или карточки.</li>
+<li><strong>Quick Actions:</strong> кнопка быстрого действия (создать инвойс / провести расход) на ключевых страницах.</li>
+</ul>
+<h3 id="126-v31"><a class="toclink" href="#126-v31">12.6. v3.1 — масштабирование вычислительного контура</a></h3>
+<ul>
+<li>Внедрение горизонтального автоскейлинга воркеров через API DigitalOcean / Kubernetes.</li>
+<li>Оптимизация транзакций Ledger: переход на пакетную запись итогов расчётов (<strong>Batch Insert</strong>) для массовых сценариев.</li>
+<li>Разработка маппера данных <strong>1С → DayDay NAS</strong> для сценариев Migration Mode.</li>
+<li>Реализация интерфейса ввода начальных остатков (<strong>Opening Balances Wizard</strong>) для кассы/банка, склада и зарплатных обязательств.</li>
+</ul>
+<hr>
+<h2 id="13-v3"><a class="toclink" href="#13-v3">13. Дорожная карта: v3 — интеграции и эксплуатация</a></h2>
+<p><strong>Цель:</strong> встраивание в цифровую инфраструктуру АР (ЭЦП, гос. сервисы, банки, безопасность SaaS). Продуктовый контекст — <a href="./PRD.md">PRD.md</a> §6.</p>
+<p><strong>Базис:</strong> функциональность v2.x считается реализованной; v3 наращивает интеграции и надёжность.</p>
+<h3 id="131-asan-imza-sima-mobile-id"><a class="toclink" href="#131-asan-imza-sima-mobile-id">13.1. ASAN İmza / SİMA (Mobile ID)</a></h3>
+<ul>
+<li><strong>UI:</strong> на PDF-инвойсе и PDF акта сверки — действие «Подписать» (ASAN İmza / SİMA / иной Mobile ID по контракту).</li>
+<li><strong>Backend:</strong> сессия подписания, получение подписанного пакета / detached-подпись, проверка цепочки — по спецификации провайдера.</li>
+<li><strong>Хранение:</strong> подписанный PDF (или оригинал + подпись) в объектном хранилище (S3-совместимый слой), привязка к <code>organizationId</code>, типу сущности, id документа.</li>
+<li><strong>Аудит:</strong> запись в <code>AuditLog</code> или <code>DocumentSignature</code>: пользователь, время, тип документа, id, алгоритм хеша, <strong>хеш содержимого</strong>, id сессии у провайдера.</li>
+<li><strong>API:</strong> read-only история подписей для документа (роли по политике продукта).</li>
+</ul>
+<h3 id="132-e-taxesgovaz-voen"><a class="toclink" href="#132-e-taxesgovaz-voen">13.2. e-taxes.gov.az и VÖEN</a></h3>
+<ul>
+<li><strong>Исследование:</strong> официальные API e-taxes / BTP; авторизация, форматы, лимиты, тестовый контур.</li>
+<li><strong>Реализация:</strong> вариант A — прямая отправка из API; вариант B — очередь через BTP-клиент / агент при нестабильном API; UI — «Отправить в e-taxes» + журнал попыток.</li>
+<li><strong>VÖEN Lookup (MDM-first):</strong> при вводе VÖEN UI сначала выполняет lookup в <strong>глобальном реестре</strong> <code>GlobalCounterparty</code> (MDM) и автозаполняет наименование/адрес/НДС-статус.</li>
+<li>API: <code>GET /api/counterparties/global/by-voen/:taxId</code></li>
+<li>Если записи нет — допускается внешний lookup (e-taxes) с кэшированием и последующим созданием/обновлением записи в MDM.</li>
+<li>Создание локального контрагента привязывает его к <code>globalId</code> (подписка организации на глобальные данные), при этом локальные данные сохраняются и не удаляются при изменении структуры холдинга.</li>
+</ul>
+<p><strong>UI холдинга (создание):</strong> страница <code>/holding</code> содержит кнопку «Новый холдинг», открывающую модальную форму (поля: <code>name</code>, <code>baseCurrency</code>) и выполняющую <code>POST /api/holdings</code>.</p>
+<h3 id="133-direct-banking-pasha-bank-abb"><a class="toclink" href="#133-direct-banking-pasha-bank-abb">13.3. Direct Banking (Pasha Bank, ABB и др.)</a></h3>
+<ul>
+<li><strong>Конфиг организации:</strong> учётные данные / OAuth / сертификаты — только в секретах.</li>
+<li><strong>Авто-выписка:</strong> BullMQ, целевой интервал <strong>раз в час</strong>; нормализация в <code>BankStatementLine</code> (или расширение модели); матчинг с инвойсами.</li>
+<li><strong>Исходящие платежи:</strong> черновик → «На подпись директору» → формат банка (JSON/XML) → API банка → статусы (принят / на подписи / исполнен / отклонён); связь с проводкой и <code>InvoicePayment</code> при необходимости.</li>
+<li><strong>Безопасность:</strong> раздельные права на выписки и инициацию платежей; 2FA для роли отправки (продукт или IdP).</li>
+</ul>
+<h3 id="134-saas"><a class="toclink" href="#134-saas">13.4. Инфраструктура и безопасность (SaaS)</a></h3>
+<ul>
+<li><strong>Подготовка к v4:</strong> сущности <code>Subscription</code>, <code>Plan</code>, <code>ModuleEntitlement</code>, связь с <code>Organization</code>; платёжный шлюз (Stripe / локальный PSP — выбор на проектировании): webhooks, идемпотентность. В v3 допускается <strong>MVP:</strong> один тариф + оплата картой + флаг «организация активна»; полное ценообразование — v4.</li>
+<li><strong>Бэкапы:</strong> PostgreSQL по расписанию в зашифрованный архив; файлы в S3 — lifecycle, репликация по возможности; алерт при пропуске; периодический тест восстановления (runbook).</li>
+<li><strong>Общее:</strong> секреты в vault/env; аудит доступа к бэкапам; минимизация ПДн в логах.</li>
+</ul>
+<h3 id="135-v32-"><a class="toclink" href="#135-v32-">13.5. v3.2+ — функционально-архитектурное расширение</a></h3>
+<p><strong>Цель v3.2+:</strong> поддержка 10,000+ конкурентных пользователей с сохранением инвариантов double-entry и B2G/B2B-разделения учёта.</p>
+<table>
+<thead>
+<tr>
+<th>Модуль</th>
+<th>Техническая специфика (API/infra)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>M1 — B2G &amp; Tax API</strong></td>
+<td>Интеграция e-tax/e-qaimə через асинхронные воркеры (<code>TaxWorker</code>); входящие накладные материализуются в draft-поступления; идемпотентность по <code>externalTaxId</code> (unique).</td>
+</tr>
+<tr>
+<td><strong>M2 — Inventory &amp; B2G Limits</strong></td>
+<td>Redis-кэш лимитов бюджета для pre-check закупок в GOVERNMENT; optimistic locking при параллельном резервировании остатков.</td>
+</tr>
+<tr>
+<td><strong>M3 — Production &amp; Costing</strong></td>
+<td>Многоуровневые BOM + рекурсивные CTE для обхода дерева; финальный monthly costing в фоновой очереди (закрытие периода).</td>
+</tr>
+<tr>
+<td><strong>M4 — Retail &amp; POS</strong></td>
+<td>Offline-first PWA (IndexedDB + очередь синхронизации); разделение быстрой регистрации чека и отложенного ledger-posting.</td>
+</tr>
+<tr>
+<td><strong>M5 — Advanced HRMS</strong></td>
+<td>Ежедневный cron-job в BullMQ для перерасчёта стажа/отпускных балансов; интеграции с e-sosial и расширенные профили льгот.</td>
+</tr>
+<tr>
+<td><strong>M6 — Budgeting &amp; Treasury</strong></td>
+<td>E-Smeta согласования с ЭЦП; смета как жёсткий gateway для GOVERNMENT-операций в M2/M5.</td>
+</tr>
+<tr>
+<td><strong>M7 — WMS Light</strong></td>
+<td>Mobile-first для ТСД; остатки по ячейкам зеркалируются в Redis (целевой ответ &lt;100ms для scanning flow).</td>
+</tr>
+<tr>
+<td><strong>M8 — Executive Dashboard</strong></td>
+<td>Материализованные представления PostgreSQL + WebSocket push для near-real-time KPI.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Обязательные технические правила v3.2+:</strong></p>
+<ul>
+<li>Контур API/Workers остаётся stateless (см. §3.2), состояние задач — только Redis/DB.</li>
+<li>Все тяжёлые операции идут через Async-First pipeline (см. §1.4 и PRD §10.3).</li>
+<li>Финансовая запись в Ledger выполняется транзакционно и балансно (см. §3), независимо от источника задачи (HTTP/job/replay).</li>
+</ul>
+<h3 id="v30"><a class="toclink" href="#v30">Критерии приёмки v3.0 (сводно)</a></h3>
+<ol>
+<li>Подписание PDF-инвойса и PDF акта сверки из UI с записью хеша в аудит.</li>
+<li>Сценарий отправки налоговых данных в сторону e-taxes <strong>или</strong> задокументированный обход через BTP.</li>
+<li>VÖEN lookup с автозаполнением имени и статуса НДС.</li>
+<li>Фоновая синхронизация банка (≥1 пилот) и матчинг с инвойсами.</li>
+<li>Черновой исходящий платёж в банк со статусами.</li>
+<li>Автоматические бэкапы БД и S3; базовый billing-скелет для v4.</li>
+</ol>
+<h3 id="v3"><a class="toclink" href="#v3">Зависимости и риски v3</a></h3>
+<ul>
+<li>Доступ к документации и sandbox: ASAN/SİMA, e-taxes, банки — внешние блокеры; этапы spike и пилоты.</li>
+<li>Версионирование адаптеров при смене API государства/банков.</li>
+</ul>
+<hr>
+<h2 id="14-v4-gating"><a class="toclink" href="#14-v4-gating">14. Дорожная карта: v4 — подписки, gating, квоты, демо</a></h2>
+<p><strong>Цель:</strong> коммерческий SaaS — тарифы, модульные права, квоты, демо и подготовка к биллингу (см. <a href="./PRD.md">PRD.md</a> §7).</p>
+<p><strong>Базис:</strong> v2/v3 считаются реализованными; v4 наращивает <strong>слой монетизации</strong> без переписывания доменной логики учёта.</p>
+<p><strong>Стек:</strong> Prisma (PostgreSQL), NestJS API, Next.js (App Router) web.</p>
+<h3 id="140-global-company-registry-v190"><a class="toclink" href="#140-global-company-registry-v190">§14.0 Global Company Registry (v19.0)</a></h3>
+<p><strong>Цель:</strong> единый справочник юрлиц по <strong>VÖEN (10 цифр)</strong> для подсказок при вводе контрагента и обогащения данных между организациями платформы (без нарушения изоляции тенанта: локальные записи остаются в <code>counterparties</code> с <code>organizationId</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Компонент</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Таблица <code>global_company_directory</code></strong></td>
+<td>Уникальный ключ <code>tax_id</code>; поля: <code>name</code>, <code>legal_address</code>, <code>phone</code>, <code>director_name</code> (денормализация).</td>
+</tr>
+<tr>
+<td><strong>Источники обновления</strong></td>
+<td>При сохранении <strong>профиля организации</strong> (<code>PATCH /api/organization/settings</code>) и при <strong>создании/обновлении контрагента</strong> запись по VÖEN <strong>асинхронно</strong> upsert-ится в справочник (fire-and-forget).</td>
+</tr>
+<tr>
+<td><strong>Связь с MDM</strong></td>
+<td>Таблица <code>global_counterparties</code> остаётся для НДС/lookup; глобальный реестр компаний дополняет UX (Smart-fill).</td>
+</tr>
+<tr>
+<td><strong>API чтения</strong></td>
+<td><code>GET /api/organization/directory/by-voen/:taxId</code> (JWT) — данные для автозаполнения формы контрагента.</td>
+</tr>
+<tr>
+<td><strong>Профиль организации</strong></td>
+<td>Поля <code>legal_address</code>, <code>phone</code>, <code>director_name</code>, <code>logo_url</code>, <code>valuation_method</code> (см. PRD §11.0); банковские счета — <code>organization_bank_accounts</code> (1:N).</td>
+</tr>
+<tr>
+<td><strong>Миграция БД</strong></td>
+<td>Файл в репозитории: <code>packages/database/prisma/migrations/20260429100000_org_profile_global_directory/migration.sql</code>. На стенде: <code>npm run db:migrate</code> из корня (= <code>migrate deploy</code>) с валидным <code>DATABASE_URL</code>; в CI — <code>prisma migrate deploy</code>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="customer-portal-security"><a class="toclink" href="#customer-portal-security">Customer Portal Security (гостевая ссылка на счёт)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Аспект</th>
+<th>Требование</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Токен</strong></td>
+<td>Не перечисляемый идентификатор: <strong>UUID v4</strong> + <strong>"."</strong> + <strong>HMAC-SHA256</strong> (секрет среды <code>INVOICE_PORTAL_TOKEN_SECRET</code>, иначе fallback на <code>JWT_SECRET</code>) по строке <code>{invoiceId}:{uuid}</code>; кодировка подписи <strong>base64url</strong>. Значение хранится в <code>invoices.public_token</code> (уникальный индекс).</td>
+</tr>
+<tr>
+<td><strong>Подбор</strong></td>
+<td>Перебор пространства токенов практически исключён; на <code>GET /api/public/invoices/:token</code> и PDF — <strong>rate limiting</strong> (<code>@nestjs/throttler</code>, лимит на IP).</td>
+</tr>
+<tr>
+<td><strong>Транспорт</strong></td>
+<td>Ссылка только по <strong>HTTPS</strong> в проде; в ответе портала не раскрывать внутренние UUID организации сверх необходимого публичного JSON.</td>
+</tr>
+<tr>
+<td><strong>Язык</strong></td>
+<td>Опционально <code>counterparties.portal_locale</code> ∈ {<code>az</code>,<code>ru</code>,<code>en</code>}; иначе язык UI портала по <strong>Accept-Language</strong> браузера.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="141-prisma"><a class="toclink" href="#141-prisma">14.1. Схема Prisma</a></h3>
+<p><strong>Enum <code>SubscriptionTier</code></strong></p>
+<pre><code class="language-prisma">enum SubscriptionTier {
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+</code></pre>
+<p><strong>Модель <code>OrganizationSubscription</code> (1:1 с <code>Organization</code>)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Тип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>UUID / cuid</td>
+<td>PK</td>
+</tr>
+<tr>
+<td><code>organizationId</code></td>
+<td>String</td>
+<td><code>@unique</code></td>
+</tr>
+<tr>
+<td><code>tier</code></td>
+<td><code>SubscriptionTier</code></td>
+<td>Текущий тариф / пресет (совместимость, демо)</td>
+</tr>
+<tr>
+<td><code>expiresAt</code></td>
+<td>DateTime?</td>
+<td>Конец оплаченного периода</td>
+</tr>
+<tr>
+<td><code>activeModules</code></td>
+<td>Массив slug</td>
+<td>Устаревший/параллельный реестр подключённых модулей (например <code>production</code>, <code>ifrs</code>)</td>
+</tr>
+<tr>
+<td><code>customConfig</code></td>
+<td>JSON?</td>
+<td><strong>v8.1 — конструктор тарифа</strong> (см. ниже)</td>
+</tr>
+<tr>
+<td><code>isTrial</code></td>
+<td>Boolean</td>
+<td>Пробный период</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>customConfig</code> (JSON) — структура v8.1 (рекомендуемая)</strong></p>
+<pre><code class="language-json">{
+  &quot;preset&quot;: &quot;full_access_constructor&quot;,
+  &quot;modules&quot;: [
+    &quot;banking_pro&quot;,
+    &quot;manufacturing&quot;,
+    &quot;fixed_assets&quot;,
+    &quot;ifrs_mapping&quot;,
+    &quot;hr_full&quot;,
+    &quot;kassa&quot;
+  ],
+  &quot;quotas&quot;: {
+    &quot;maxEmployees&quot;: 500,
+    &quot;maxInvoicesPerMonth&quot;: 2000,
+    &quot;storageGb&quot;: 50
+  }
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>modules</code></td>
+<td>Массив <strong>slug</strong> купленных модулей. Если массив <strong>непустой</strong>, <strong>гейтинг v2.0</strong> в первую очередь проверяет принадлежность slug этому списку (с алиасами: <code>production</code> → manufacturing, <code>ifrs</code> ↔ <code>ifrs_mapping</code>, <code>kassa</code> → доступ к кассе как к части banking).</td>
+</tr>
+<tr>
+<td><code>preset</code></td>
+<td>Имя шаблона (для поддержки и Super-Admin), не обязателен для API.</td>
+</tr>
+<tr>
+<td><code>quotas</code></td>
+<td>Переопределения лимитов конструктора (слайдеры); при отсутствии — используются квоты по <code>tier</code> / <code>SystemConfig</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Правило <code>tier: ENTERPRISE</code>:</strong> доступ ко <strong>всем</strong> модулям <strong>без</strong> перечисления <code>modules</code> (полный доступ по умолчанию).</p>
+<p><strong>Миграция:</strong> обратимая; для существующих организаций — <code>customConfig</code> может быть <code>null</code> (работает legacy-логика по <code>tier</code> + <code>activeModules</code>).</p>
+<h3 id="142-api-requiresmodule-guard"><a class="toclink" href="#142-api-requiresmodule-guard">14.2. API: <code>@RequiresModule</code> и Guard</a></h3>
+<ul>
+<li>Декоратор <code>@RequiresModule(moduleSlug)</code> + <strong>SubscriptionGuard</strong>: после auth загрузка подписки; проверка модуля: <strong>1)</strong> при <code>tier === ENTERPRISE</code> — разрешено; <strong>2)</strong> при непустом <code>customConfig.modules</code> — slug в списке (с алиасами); <strong>3)</strong> иначе legacy: <code>activeModules</code> + tier (как ранее).</li>
+<li>Ответ при отсутствии модуля: HTTP <strong>403</strong> с телом, например <code>code: "MODULE_NOT_ENTITLED"</code>, поле <code>module</code>. (Смысл «нужна оплата» — через этот код в UI; стандарт <strong>402</strong> в отрасли редок; зафиксирован <strong>403 + machine-readable code</strong>.)</li>
+</ul>
+<p><strong>Эндпоинт <code>GET /api/subscription/me</code>:</strong> возвращает <code>customConfig</code>, <code>modules</code> (объект флагов для UI), <code>activeModules</code>, <code>tier</code>, квоты.</p>
+<h3 id="143-41"><a class="toclink" href="#143-41">14.3. Демо (релиз продукта 4.1)</a></h3>
+<p>При создании организации: <code>OrganizationSubscription</code> с <code>isTrial: true</code>, <code>tier: BUSINESS</code>, <code>expiresAt = now() + 14 days</code> (UTC vs локаль — зафиксировать в коде).</p>
+<p><strong>Баннер на дашборде</strong> при активном демо (<code>isTrial === true</code>, срок не истёк): тексты AZ/RU из PRD; ссылка на <code>/settings/subscription</code> или аналог — <strong>на все дни</strong> trial, не только при остатке ≤ 5 дней.</p>
+<p><strong>Шапка приложения:</strong> рядом с названием компании — <strong>тариф</strong>, <strong>квоты</strong> (инвойсы за месяц, сотрудники), переход к подписке (см. PRD §7.3.1).</p>
+<p><strong>Главная страница:</strong> курсы ЦБА; блок <strong>закрытия месяца</strong> показывается только если <code>GET /api/reporting/close-period-prompt</code> возвращает незакрытый <strong>прошедший</strong> UTC-месяц (самый ранний из долга); блок размещается <strong>над</strong> курсами; отдельная страница не обязательна. Краткие <strong>P&amp;L / баланс / ДДС (упрощ.)</strong> — <code>GET /api/reporting/dashboard-mini</code> (текущий UTC-месяц, см. PRD §7.3.1).</p>
+<p><strong>READ_ONLY после истечения</strong> без оплаты: мутации POST/PATCH/DELETE по бизнес-сущностям запрещены; просмотр и экспорт по политике; HTTP <strong>403</strong> с кодом вроде <code>SUBSCRIPTION_READ_ONLY</code> / <code>TRIAL_EXPIRED</code>. Белый список: оплата, просмотр подписки, logout.</p>
+<h3 id="144-feature-gating-ui-nextjs"><a class="toclink" href="#144-feature-gating-ui-nextjs">14.4. Feature gating в UI (Next.js)</a></h3>
+<ul>
+<li>Guard layout / client для сегментов маршрутов: данные прав с API или контекста после логина.</li>
+<li>Без модуля — <strong>Paywall</strong> (описание, CTA на подписку).</li>
+<li><strong>AppShell:</strong> скрывать пункты сайдбара для недоступных модулей; при прямом URL — paywall.</li>
+</ul>
+<h3 id="145"><a class="toclink" href="#145">14.5. Квоты</a></h3>
+<ul>
+<li>Конфиг: например <code>apps/api/src/constants/quotas.ts</code> — для каждого <code>SubscriptionTier</code> лимиты (<code>maxEmployees</code>, <code>maxInvoicesPerMonth</code>, …). Числа — политика продукта; в ТЗ закреплён <strong>механизм</strong>.</li>
+<li><strong>Согласование с PRD §7.1 / §7.12.3 (v10.0):</strong> база Foundation включает <strong>1 пользователя</strong> на организацию; расширение — <strong>платные пакеты</strong> (сотрудники, диск, лимит исходящих инвойсов продаж); значения пакетов — <code>billing.quota_unit_pricing_v1</code> / <code>customConfig.quotas</code>.</li>
+<li>Перед <code>create</code> в сервисах — проверка счётчиков организации vs tier / квот конструктора.</li>
+<li>Превышение: <strong><code>QuotaExceededException</code></strong>, HTTP <strong>402 Payment Required</strong> с <code>code: "QUOTA_EXCEEDED"</code> и полями <code>quota</code>, <code>limit</code>, <code>current</code> (vs <strong>403</strong> для «нет модуля» / READ_ONLY).</li>
+</ul>
+<h3 id="146-billing-engine-v88-dynamic-billing-constructor-v100-hybrid-lego"><a class="toclink" href="#146-billing-engine-v88-dynamic-billing-constructor-v100-hybrid-lego">14.6. Billing Engine (v8.8 — Dynamic Billing Constructor; ориентиры v10.0 Hybrid LEGO)</a></h3>
+<p><strong>Таблица <code>PricingModule</code> (каталог модулей)</strong> — источник правды по ценам; начальное наполнение может соответствовать PRD §7.1 (ориентиры AZN/мес.: <strong>Kassa Pro 15</strong>, <strong>Banking Pro 19</strong>, <strong>Warehouse 25</strong>, <strong>Manufacturing 39</strong>, <strong>HR 19</strong>, <strong>IFRS 29</strong>).</p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Тип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>UUID</td>
+<td>PK</td>
+</tr>
+<tr>
+<td><code>key</code></td>
+<td>String, unique</td>
+<td>Slug модуля (<code>banking_pro</code>, <code>kassa_pro</code>, …)</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>String</td>
+<td>Отображаемое имя</td>
+</tr>
+<tr>
+<td><code>pricePerMonth</code></td>
+<td>Decimal</td>
+<td>Цена в AZN за месяц</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Таблица <code>PricingBundle</code> (именованные пакеты)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Тип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>UUID</td>
+<td>PK</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>String</td>
+<td>Название пакета (например «Retail Bundle»)</td>
+</tr>
+<tr>
+<td><code>discountPercent</code></td>
+<td>Decimal</td>
+<td>Скидка на сумму базы+модулей пакета, %</td>
+</tr>
+<tr>
+<td><code>moduleKeys</code></td>
+<td>JSON (массив строк)</td>
+<td>Ключи модулей, входящих в пакет</td>
+</tr>
+</tbody>
+</table>
+<p><strong>SystemConfig (база и квоты, не модули):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Ключ</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>billing.foundation_monthly_azn</code></td>
+<td>Базовая цена Foundation (AZN/мес.)</td>
+</tr>
+<tr>
+<td><code>billing.yearly_discount_percent</code></td>
+<td>Скидка при оплате за год (по умолчанию 20)</td>
+</tr>
+<tr>
+<td><code>billing.quota_unit_pricing_v1</code></td>
+<td>JSON: размер блока сотрудников, цена за блок, размер пакета документов, цена за пакет</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Расчёт (ориентир для UI и будущего checkout):</strong></p>
+<p>[<br>
+\text{TotalPrice} = \text{BasePrice} + \sum(\text{SelectedModules}) + (\text{ExtraQuotas} \times \text{UnitPrice})<br>
+]</p>
+<ul>
+<li><strong>Скидка пакета:</strong> итог после выбора модулей умножается на ((1 - \text{bundleDiscount}/100)), если применён именованный пакет.</li>
+<li><strong>Годовая скидка:</strong> при периоде «год» к месячному эквиваленту применяется ((1 - \text{yearlyDiscount}/100)) к сумме за 12 месяцев (или эквивалентная логика в одной строке — зафиксировать в коде биллинга).</li>
+</ul>
+<p><strong>API (Super-Admin):</strong> <code>GET /admin/config/billing</code> возвращает legacy <code>prices</code>/<code>quotas</code>, а также <code>foundationMonthlyAzn</code>, <code>yearlyDiscountPercent</code>, <code>quotaPricing</code>, <code>pricingModules[]</code>, <code>pricingBundles[]</code>. Обновление: <code>PATCH</code> foundation, yearly-discount, quota-pricing; <code>PATCH /admin/pricing-modules/:id</code>; CRUD <code>/admin/pricing-bundles</code>.</p>
+<h3 id="147-emergency-access-override-v89"><a class="toclink" href="#147-emergency-access-override-v89">14.7. Emergency Access Override (v8.9)</a></h3>
+<p><strong>Hardcoded bypass (только этап разработки / согласованный аккаунт):</strong> для пользователя с email <strong><code>shirinov.chingiz@gmail.com</code></strong> метод <strong><code>SubscriptionAccessService.assertModuleAccess</code></strong> на бэкенде <strong>безусловно разрешает</strong> доступ ко всем модулям (не выбрасывает 403 <code>MODULE_NOT_ENTITLED</code>). Реализация: <code>SubscriptionGuard</code> передаёт <code>user.email</code> в <code>assertModuleAccess</code>; константа <code>EMERGENCY_MODULE_ACCESS_EMAIL</code> в <code>subscription-access.service.ts</code>.</p>
+<p><strong>Фронтенд:</strong> в <code>subscription-context</code> тот же email получает <strong>снимок ENTERPRISE</strong> через <code>effectiveSnapshot</code> (без блокировок UI). Продакшен: убрать или заменить на конфиг из env.</p>
+<h3 id="148-api-prd-712-billing-v100"><a class="toclink" href="#148-api-prd-712-billing-v100">14.8. Владелец организации, схема биллинга и API (PRD §7.12, Billing v10.0)</a></h3>
+<p><strong>Цель:</strong> зафиксировать целевую модель данных и контракты API для <strong>биллинга платформы</strong> (подписка DayDay ERP), не смешивая их с <strong>инвойсами продаж</strong> (<code>Invoice</code> в домене учёта).</p>
+<p><strong>Доступ к Billing (UI и API):</strong> только пользователь с ролью <strong><code>OWNER</code></strong> в соответствующей организации; <strong>Admin / Accountant / User</strong> биллинг не видят (см. PRD §7.12.1). Маршруты привязки карты и истории платежей — те же правила.</p>
+<h4 id="1481"><a class="toclink" href="#1481">14.8.1. Терминология</a></h4>
+<table>
+<thead>
+<tr>
+<th>Термин</th>
+<th>Значение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Owner (роль)</strong></td>
+<td><code>UserRole.OWNER</code> в <code>OrganizationMembership</code>; единственная роль с доступом к подписке, оплате и истории по организации.</td>
+</tr>
+<tr>
+<td><strong>ownerId</strong></td>
+<td>FK <code>organizations.owner_id → users.id</code> — владелец для <strong>агрегированного счёта</strong> и <strong>Change Owner</strong>; при корректных данных совпадает с пользователем, у которого в этой org роль <strong>OWNER</strong>.</td>
+</tr>
+<tr>
+<td><strong>Счёт платформы</strong></td>
+<td>Таблицы <strong><code>billing_invoices</code></strong> / <strong><code>billing_invoice_items</code></strong> (Prisma: <code>BillingInvoice</code>, <code>BillingInvoiceItem</code>), не <code>invoices</code></td>
+</tr>
+<tr>
+<td><strong>Единый месячный счёт</strong></td>
+<td>Один документ <code>billing_invoices</code> на <code>ownerUserId</code> за период, с строками по <strong>нескольким</strong> <code>organizationId</code> (PRD §7.12.4).</td>
+</tr>
+</tbody>
+</table>
+<h4 id="1482-organizations"><a class="toclink" href="#1482-organizations">14.8.2. Расширение таблицы <code>organizations</code></a></h4>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Тип</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ownerId</code></td>
+<td>UUID FK → <code>users.id</code></td>
+<td>Владелец; при создании org = создатель; смена — только через <strong>Transfer</strong> (14.8.5)</td>
+</tr>
+<tr>
+<td><code>basePriceSnapshot</code></td>
+<td>Decimal?</td>
+<td>Зафиксированная базовая цена за юнит (AZN/мес.) на момент активации/последнего пересчёта</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>Enum (целевой)</td>
+<td><code>ACTIVE</code> | <code>TRIAL</code> | <code>SUSPENDED</code> — жизненный цикл доступа к org (согласовано с <code>OrganizationSubscription.isTrial</code> / <code>isBlocked</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Миграция:</strong> для существующих строк <code>ownerId</code> заполняется из первого пользователя с ролью <code>OWNER</code> в <code>OrganizationMembership</code> (скрипт бэкапа перед миграцией обязателен).</p>
+<h4 id="1483-organization_modules"><a class="toclink" href="#1483-organization_modules">14.8.3. Таблица <code>organization_modules</code> (нормализация модулей)</a></h4>
+<p>Связь <strong>M:N</strong> с атрибутами по организации:</p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>organizationId</code>, <code>moduleKey</code></td>
+<td>Составной PK или уникальный индекс</td>
+</tr>
+<tr>
+<td><code>priceSnapshot</code></td>
+<td>Цена модуля (AZN/мес.), зафиксированная при включении</td>
+</tr>
+<tr>
+<td><code>activatedAt</code></td>
+<td>Момент включения (для <strong>pro-rata</strong>)</td>
+</tr>
+</tbody>
+</table>
+<p>До внедрения строки модулей могут дублироваться из <code>OrganizationSubscription.activeModules</code> / <code>customConfig.modules</code> — при внедрении — <strong>одна</strong> точка правды (политика: синхронизировать в транзакции при <code>toggle-module</code>).</p>
+<h4 id="1484-sales"><a class="toclink" href="#1484-sales">14.8.4. Счета платформы (не Sales)</a></h4>
+<p><strong><code>billing_invoices</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>PK</td>
+</tr>
+<tr>
+<td><code>ownerUserId</code></td>
+<td>FK → пользователь (плательщик, владелец организаций)</td>
+</tr>
+<tr>
+<td><code>totalAmount</code></td>
+<td>Итог</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>Enum: <code>DRAFT</code>, <code>ISSUED</code>, <code>PAID</code>, <code>OVERDUE</code>, …</td>
+</tr>
+<tr>
+<td><code>periodStart</code>, <code>periodEnd</code></td>
+<td>Месячный (или иной) расчётный период</td>
+</tr>
+<tr>
+<td><code>pdfLink</code></td>
+<td>URL объекта в S3-хранилище</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>billing_invoice_items</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Поле</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>invoiceId</code></td>
+<td>FK → <code>billing_invoices</code></td>
+</tr>
+<tr>
+<td><code>organizationId</code></td>
+<td>FK → <code>organizations</code> — разбивка по VÖEN</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>Текст строки (модуль, квота, база)</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>Сумма строки (AZN)</td>
+</tr>
+</tbody>
+</table>
+<p>Существующая <strong><code>PaymentOrder</code></strong> может оставаться для оплаты через шлюз; связь <code>PaymentOrder</code> ↔ <code>BillingInvoice</code> добавляется при реализации (FK опционально).</p>
+<h4 id="1485-api-api-jwt"><a class="toclink" href="#1485-api-api-jwt">14.8.5. API (префикс <code>/api</code>, JWT)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Путь</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/billing/summary</code></td>
+<td>Организации, где текущий пользователь — <strong><code>OWNER</code></strong> и согласованно <strong><code>ownerId</code></strong> (портфель для биллинга); помесячные агрегаты по каждой org: база, модули, квоты; итог <strong><code>estimatedNextPayment</code></strong> на следующий цикл (сумма по портфелю).</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/billing/invoices</code></td>
+<td><strong>Billing History:</strong> список счетов платформы (<code>billing_invoices</code>) для <code>currentUser</code> как владельца — дата, период, сумма, статус, ссылка на <strong>PDF</strong> (<code>pdfLink</code>); пагинация.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/billing/invoices/:id/pdf</code></td>
+<td>Опционально: отдача PDF по id счёта (если не используется прямой URL из <code>pdfLink</code>).</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/billing/toggle-module</code></td>
+<td>Тело: <code>{ organizationId, moduleKey, enabled }</code>. <strong>Guard:</strong> только <strong>OWNER</strong> для этой org; идемпотентность по <code>(org, module)</code>; обновление <code>organization_modules</code> и <code>OrganizationSubscription</code>; <strong>pro-rata</strong> при включении в середине периода.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/billing/transfer</code></td>
+<td>Смена владельца: <strong>double opt-in</strong>; в одной <code>prisma.$transaction</code>: <code>organizations.ownerId</code>, роли membership.</td>
+</tr>
+</tbody>
+</table>
+<p>Ответы <strong>403</strong> при отсутствии роли <strong>OWNER</strong> или попытке доступа к чужой организации; <strong>404</strong> для чужой <code>organizationId</code>.</p>
+<h4 id="1486-pro-rata"><a class="toclink" href="#1486-pro-rata">14.8.6. Платёжный цикл и pro-rata</a></h4>
+<ul>
+<li><strong>Месячный цикл:</strong> выставление счёта / списание — раз в месяц; границы периода — зафиксировать в коде (UTC или <code>Asia/Baku</code>).</li>
+<li><strong>Pro-rata:</strong> при <strong>включении</strong> модуля не в начале периода: доплата (\approx) ((\text{price} \times \text{daysRemaining}) / \text{daysInPeriod}); округление до 2 знаков AZN.</li>
+<li><strong>Отключение модуля (зафиксированная политика):</strong> доступ <strong>сохраняется до конца оплаченного расчётного периода</strong>. Возвраты (refunds) и кредиты на баланс <strong>не предусмотрены</strong>. При отключении в <code>organization_modules</code> (или эквиваленте) проставляется отметка <strong><code>cancelledAt</code></strong> / <strong><code>renewsAt = null</code></strong> (отмена продления); <strong>SubscriptionGuard</strong> продолжает пропускать запросы по этому модулю до <code>periodEnd</code>; по наступлении нового цикла модуль исключается из активных и gating блокирует доступ.</li>
+</ul>
+<h4 id="1487-quotaguard"><a class="toclink" href="#1487-quotaguard">14.8.7. QuotaGuard и перехват на фронте</a></h4>
+<p><strong>Декоратор <code>@CheckQuota(resource)</code></strong> (Nest): метаданные для ресурса (<code>USERS</code>, <code>INVOICES_PER_MONTH</code>, <code>STORAGE</code> — квота хранилища дополняется проверками в сервисах загрузки файлов / PDF). Guard вызывает <strong><code>QuotaService</code></strong> до мутации; при превышении — <strong><code>QuotaExceededException</code> → HTTP 402</strong> с телом <code>QUOTA_EXCEEDED</code>.</p>
+<p><strong>Фронтенд:</strong> глобальный перехват в <code>apiFetch</code> для <code>402</code> + <code>code === "QUOTA_EXCEEDED"</code> — событие <strong><code>dayday:quota-upgrade</code></strong> и отображение модалки апгрейда (тот же UX-паттерн, что и <code>SUBSCRIPTION_READ_ONLY</code>).</p>
+<h4 id="1488-v230"><a class="toclink" href="#1488-v230">14.8.8. Вебхуки платёжных систем (v23.0)</a></h4>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Путь</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/billing/webhooks/:provider</code></td>
+<td>Приём уведомления шлюза (<code>mock</code>, <code>pasha</code>, <code>pasha_bank</code>). <strong>Публичный</strong> маршрут (<code>@Public()</code>): без JWT.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Подпись:</strong> тело <code>{ orderId, status, signature, externalId? }</code>; проверка HMAC как у PAŞA Bank mock/реального шлюза (<code>PashaBankPaymentProvider.verifyWebhookSignature</code>). Неверная подпись → <strong>401</strong>.</li>
+<li><strong>Идемпотентность:</strong> перевод <code>PaymentOrder</code> из <code>PENDING</code> в <code>PAID</code> через <strong><code>updateMany</code></strong> с условием <code>status = PENDING</code>; повторный вебхук не продлевает подписку повторно. Запись <strong><code>SubscriptionInvoice</code></strong> — с защитой от дубликата по <code>paymentOrderId</code>.</li>
+<li><strong>Побочные эффекты при успехе:</strong> обновление <strong><code>OrganizationSubscription</code></strong> (продление <code>expiresAt</code> / модули по metadata pro-rata), запись в <strong><code>audit_logs</code></strong> с <code>organizationId = null</code>, <code>entityType = platform.billing.payment_applied</code> (глобальный аудит платформы).</li>
+<li><strong>Legacy:</strong> <code>POST /api/public/billing/webhook</code> сохраняется для совместимости; новые заказы используют callback URL на <strong><code>/api/billing/webhooks/pasha_bank</code></strong>.</li>
+</ul>
+<hr>
+<h3 id="v40"><a class="toclink" href="#v40">Критерии приёмки v4.0 (сводно)</a></h3>
+<ol>
+<li><code>SubscriptionTier</code> и <code>OrganizationSubscription</code> 1:1; миграция без потери данных.</li>
+<li>API платных модулей отклоняет запросы без slug в <code>activeModules</code> с документированным JSON.</li>
+<li>UI скрывает меню и показывает paywall при прямом заходе без права.</li>
+<li>Создание сотрудника/инвойса блокируется при превышении квоты с предсказуемым кодом.</li>
+<li>Лимиты централизованы в <code>quotas.ts</code>, без «магических чисел» в сервисах.</li>
+<li>Демо: регистрация → trial BUSINESS, +14 дней; баннер на дашборде на все дни trial; после истечения без оплаты — READ_ONLY.</li>
+</ol>
+<h3 id="v4"><a class="toclink" href="#v4">Зависимости и риски v4</a></h3>
+<ul>
+<li>Синхронизация slug между Prisma, Guard, Next.js и маркетингом.</li>
+<li>Кэш подписки на запрос (короткий TTL) при частых проверках.</li>
+<li>Следующий этап: платёжный шлюз, webhooks, обновление <code>expiresAt</code> / <code>activeModules</code> — см. PRD, биллинг MVP.</li>
+</ul>
+<hr>
+<h2 id="15-admin-panel-super-back-office"><a class="toclink" href="#15-admin-panel-super-back-office">15. Платформа: Admin Panel (Super-Back-office)</a></h2>
+<blockquote>
+<p>В <a href="./PRD.md">PRD.md</a> соответствующий блок — <strong>§7.6</strong>. Ниже — архитектура <strong>платформенной</strong> админки (не путать с <strong>модулем 6</strong> HR в §7 этого документа).</p>
+</blockquote>
+<h3 id="151-"><a class="toclink" href="#151-">15.1. Архитектура Супер-админа</a></h3>
+<p><strong>Безопасность</strong></p>
+<ul>
+<li>Роль <strong>SUPER_ADMIN</strong> (флаг в профиле): не привязана к конкретной организации в смысле доступа к данным — эндпоинты супер-админа <strong>обходят</strong> фильтрацию по <code>organizationId</code> и отдают данные по всей системе.</li>
+<li><strong>Guard:</strong> <code>SuperAdminGuard</code> — проверка <code>isSuperAdmin</code> в JWT/профиле.</li>
+</ul>
+<p><strong>Схема данных (расширение)</strong></p>
+<ul>
+<li><strong><code>SystemConfig</code>:</strong> ключ–значение (JSON): цены тарифов, квоты, системные сообщения.</li>
+<li><strong><code>TranslationOverride</code>:</strong> переопределения строк i18n поверх статических файлов (<code>resources.ts</code> на web). В бандле дублируются краткие строки <strong><code>paymentHistory.*</code></strong> (страница истории) и <strong><code>subscriptionSettings.paymentHistory.*</code></strong> (тот же смысл в блоке подписки); при оверрайдах из БД не использовать родительский ключ вместо вложенных полей.</li>
+</ul>
+<p><strong>Эндпоинты (REST, префикс <code>/api</code>)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Метод</th>
+<th>Путь</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/admin/stats</code></td>
+<td>Сводка: выручка (сумма оплаченных заказов), новые пользователи за 24 ч, число организаций, активные триалы.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/admin/organizations</code></td>
+<td>Список компаний с пагинацией и поиском по VÖEN/названию.</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/admin/organizations/:id/subscription</code></td>
+<td>Принудительное продление, блокировка, смена тарифа.</td>
+</tr>
+<tr>
+<td>GET/PATCH</td>
+<td><code>/admin/config/billing</code></td>
+<td>Чтение цен, квот, Foundation, каталога <code>PricingModules</code>, <code>PricingBundles</code> (через <code>SystemConfig</code> + Prisma).</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/admin/config/billing/foundation</code>, <code>/yearly-discount</code>, <code>/quota-pricing</code></td>
+<td>База, годовая скидка, единицы квот.</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/admin/pricing-modules/:id</code></td>
+<td>Цена модуля в каталоге.</td>
+</tr>
+<tr>
+<td>POST/PATCH/DELETE</td>
+<td><code>/admin/pricing-bundles</code>, <code>/admin/pricing-bundles/:id</code></td>
+<td>Пакеты (Paket yaradıcısı).</td>
+</tr>
+<tr>
+<td>GET/POST/DELETE</td>
+<td><code>/admin/translations</code></td>
+<td>Редактор переводов; <code>POST /admin/translations/sync</code> — инкремент версии кэша для клиентов.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/public/translations?locale=</code></td>
+<td>Публичная выдача переопределений для слияния на клиенте.</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/admin/audit-logs</code></td>
+<td>Глобальный просмотр <code>AuditLog</code> с фильтром по <code>organizationId</code>.</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/admin/impersonate/:userId</code></td>
+<td>Выдача токенов от имени пользователя (поддержка).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Биллинг:</strong> <code>GET /billing/plans</code> и поле <code>tier</code> в <code>POST /billing/checkout</code> — цены из <code>SystemConfig</code>, не из констант.</p>
+<h3 id="152-tarif-konstruktoru-v81-ui-v88"><a class="toclink" href="#152-tarif-konstruktoru-v81-ui-v88">15.2. Tarif Konstruktoru (конструктор тарифов, v8.1+; UI v8.8)</a></h3>
+<p><strong>Цель:</strong> в Super-Admin задать <strong>цены конструктора</strong> и <strong>именованные пакеты</strong> (см. PRD §7.1).</p>
+<table>
+<thead>
+<tr>
+<th>Элемент</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Прайс-лист</strong></td>
+<td>Вкладка <strong>«Прайс-лист» / Qiymət siyahısı</strong>: секция <strong>Foundation</strong> (базовая цена), таблица <strong>модулей</strong> из <code>PricingModules</code> (цена/мес.), секция <strong>квот</strong> — единицы расширения (<code>billing.quota_unit_pricing_v1</code>) и <strong>годовая скидка</strong> (%).</td>
+</tr>
+<tr>
+<td><strong>Paket yaradıcısı</strong></td>
+<td>Вкладка <strong>«Paket yaradıcısı»</strong>: выбор модулей <strong>переключателями (switch)</strong>, имя пакета, <strong>скидка пакета</strong> (%), <strong>предпросмотр</strong> для клиента (месяц / год с учётом годовой скидки); сохранение в <code>PricingBundles</code>.</td>
+</tr>
+<tr>
+<td><strong>Стиль</strong></td>
+<td>Карточки: <code>CARD_CONTAINER_CLASS</code>, палитра <strong>#34495E</strong> / <strong>#2980B9</strong> (см. DESIGN.md).</td>
+</tr>
+<tr>
+<td><strong>Связь с БД</strong></td>
+<td>Модули и пакеты — таблицы <strong><code>pricing_modules</code></strong>, <strong><code>pricing_bundles</code></strong>; база, квоты и годовая скидка — <code>SystemConfig</code>. Подписка организации — по-прежнему <code>OrganizationSubscription.customConfig</code> + <code>tier</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Legacy-цены тиров (<code>billing.price.STARTER</code> и т.д.) остаются в API для совместимости; основной UX v8.8 — конструктор, не три карточки тиров.</p>
+<hr>
+<h2 id="16-v56"><a class="toclink" href="#16-v56">16. Платформа (v5.6): изоляция тенантов и асинхронность</a></h2>
+<h3 id="prisma-extension-strict-multi-tenancy"><a class="toclink" href="#prisma-extension-strict-multi-tenancy">Prisma Extension (Strict Multi-tenancy)</a></h3>
+<ul>
+<li><strong><code>PrismaService</code></strong> строится с <strong><code>$extends</code></strong>: перехват операций <code>find*</code>, <code>update*</code>, <code>delete*</code>, <code>create*</code>, <code>count</code>, <code>aggregate</code> (по моделям с полем <code>organizationId</code>) для <strong>принудительного</strong> слияния условия <code>organizationId</code> с контекстом текущего запроса.</li>
+<li><strong>Сырой SQL:</strong> см. <strong>§2</strong> — <code>TenantPrismaRawService</code> + <code>executePlatformRawUnsafe</code> для не-тенантного DDL.</li>
+<li><strong>Контекст:</strong> <code>AsyncLocalStorage</code> (или эквивалент), заполняется HTTP-interceptor’ом из JWT (<code>organizationId</code>); для маршрутов <strong><code>/api/admin</code></strong> при <code>isSuperAdmin</code> — режим без фильтра по тенанту (только для платформенных эндпоинтов).</li>
+<li><strong>Исключения:</strong> модели без тенанта (<code>User</code>, <code>Organization</code>, <code>SystemConfig</code>, <code>TranslationOverride</code> и т.д.) не подмешивают <code>organizationId</code>.</li>
+<li><strong>Воркеры BullMQ:</strong> в начале обработки job выставляют тот же контекст (<code>organizationId</code> из payload) либо <code>skipTenantFilter</code> для глобальных задач (например архив аудита).</li>
+</ul>
+<h3 id="async-processing-bullmq"><a class="toclink" href="#async-processing-bullmq">Async Processing (BullMQ)</a></h3>
+<ul>
+<li>Операции с <strong>настраиваемым порогом</strong> по числу затронутых сущностей (например тяжёлые импорты) выполняются <strong>асинхронно</strong> через BullMQ: API возвращает <strong><code>jobId</code></strong>, клиент опрашивает статус / отображает прогресс (конкретные пороги — в коде соответствующих сервисов).</li>
+<li><strong>Зарплата:</strong> очередь <strong><code>payroll-heavy</code></strong>; порог <strong><code>PAYROLL_ENTITY_ASYNC_THRESHOLD</code></strong> (см. <strong>§7</strong> — при <strong>0</strong> черновик и проведение ставятся в очередь при ненулевом числе сотрудников / листов). Статус: <strong><code>GET /api/hr/payroll/jobs/:jobId</code></strong>.</li>
+</ul>
+<h3 id="_17"><a class="toclink" href="#_17">Квоты и продукт</a></h3>
+<ul>
+<li>Явная проверка <strong>лимита числа организаций на пользователя</strong> (<code>maxOrganizations</code> по эффективному тиру) при создании новой организации уже существующим пользователем.</li>
+</ul>
+<h3 id="161-soft-delete"><a class="toclink" href="#161-soft-delete">16.1. Soft Delete (архивация сущностей)</a></h3>
+<p><strong>Цель:</strong> не разрушать целостность при удалении; соответствие PRD §12.</p>
+<table>
+<thead>
+<tr>
+<th>Модель (этап внедрения)</th>
+<th>Поведение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>Organization</code></strong>, <strong><code>Holding</code></strong> (в коде v1; <strong><code>Transaction</code></strong> — целевое расширение с фильтрацией в отчётах / журнале)</td>
+<td>Вместо физического <code>delete</code>: установить <strong><code>isDeleted: true</code></strong>, <strong><code>deletedAt = now()</code></strong> (или только <code>deletedAt</code>).</td>
+</tr>
+<tr>
+<td><strong>Чтение</strong></td>
+<td>Расширение Prisma <strong><code>$extends</code></strong>: для <strong>Organization</strong> / <strong>Holding</strong> — <code>findMany</code> / <code>findFirst</code> / агрегаты с фильтром <strong><code>isDeleted: false</code></strong>; <code>delete</code> перенаправляется в <strong><code>update</code></strong>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Миграции:</strong> добавление колонок и бэкфилл <code>false</code>/<code>null</code> — отдельной миграцией; до внедрения <strong>hard delete</strong> на критичных таблицах запрещён политикой код-ревью.</p>
+<hr>
+<h2 id="17-v57-ux"><a class="toclink" href="#17-v57-ux">17. Платформа (v5.7): консистентность данных и UX</a></h2>
+<h3 id="validation-layer-strict-sync-2"><a class="toclink" href="#validation-layer-strict-sync-2">Validation Layer (Strict Sync с §2)</a></h3>
+<ul>
+<li>Глобальный <strong><code>ValidationPipe</code></strong> в <code>main.ts</code>: <strong><code>whitelist: true</code></strong>, <strong><code>forbidNonWhitelisted: true</code></strong>, <strong><code>transform: true</code></strong>. Неизвестные поля в теле запроса <strong>не отбрасываются молча</strong> — клиент получает <strong>400 Bad Request</strong>; описанные в DTO поля проходят в <code>class-validator</code> / <code>class-transformer</code>.</li>
+<li>DTO (<code>*.dto.ts</code>): без <strong><code>any</code></strong>; идентификаторы — <strong><code>@IsUUID()</code></strong>; числа — <strong><code>@IsNumber()</code></strong> / <strong><code>@Min()</code></strong>; даты — <strong><code>@IsDateString()</code></strong> / ISO; перечисления — <strong><code>@IsIn()</code></strong> / <strong><code>@IsEnum()</code></strong>.</li>
+</ul>
+<h3 id="transaction-pattern-finance-inventory-hr"><a class="toclink" href="#transaction-pattern-finance-inventory-hr">Transaction Pattern (Finance / Inventory / HR)</a></h3>
+<ul>
+<li>Операции, затрагивающие <strong>более одной записи</strong> или <strong>проводки + доменные сущности</strong>, оформляются как <strong><code>this.prisma.$transaction(async (tx) =&gt; { ... })</code></strong>, с передачей <strong><code>tx</code></strong> в <strong><code>AccountingService.postJournalInTransaction</code></strong> при необходимости.</li>
+<li><strong>Примеры:</strong> проведение зарплаты (проводки + обновление <code>PayrollRun</code>); закупка/списание/корректировка склада; инвойсы (смена статуса с выручкой/COGS/оплатой) — в рамках существующего кода.</li>
+</ul>
+<h3 id="ui-web"><a class="toclink" href="#ui-web">UI (web)</a></h3>
+<ul>
+<li>Таблицы без строк: компонент <strong>Empty State</strong>; мутации с ошибкой <strong>4xx/5xx</strong> — <strong>toast</strong> (Sonner); кнопки подтверждения — <strong>disabled</strong> и состояние загрузки на время запроса.</li>
+</ul>
+<h3 id="i18n-ci-v140"><a class="toclink" href="#i18n-ci-v140">i18n CI (v14.0)</a></h3>
+<ul>
+<li>CI pipeline <strong>обязан</strong> включать шаг <strong><code>npm run i18n:audit</code></strong>, гарантирующий полноту ключей локализации для <strong>RU</strong> и <strong>AZ</strong> локалей. Сборка должна <strong>завершаться ошибкой</strong> при обнаружении пропущенных ключей. Скрипт сканирует <strong>все</strong> страницы и компоненты web-приложения (<code>apps/web</code>) на предмет обращений к <code>t(...)</code> / <code>useTranslation</code> и сверяет с <code>resources.ts</code> (или эквивалентным источником статических переводов). EN — рекомендуется, но не блокирует сборку на текущем этапе.</li>
+</ul>
+<hr>
+<h2 id="18-templategroup"><a class="toclink" href="#18-templategroup">18. Регламент регистрации (templateGroup) и история версий документа ТЗ</a></h2>
+<h3 id="181-templategroup"><a class="toclink" href="#181-templategroup">18.1. Обязательный выбор <code>templateGroup</code> при регистрации организации</a></h3>
+<ul>
+<li>Для регистрации новой организации выбор типа шаблона учёта является <strong>обязательным</strong> шагом: <code>templateGroup = COMMERCIAL | GOVERNMENT</code> (Commercial / Government).</li>
+<li>Выбранный <code>templateGroup</code> передаётся в онбординг и используется для фильтрации системного каталога счетов при создании tenant-данных организации в рамках одной транзакции.</li>
+</ul>
+<h3 id="182"><a class="toclink" href="#182">18.2. Ограничение смены типа организации после начала учёта</a></h3>
+<ul>
+<li>Смена <code>templateGroup</code> должна быть <strong>заблокирована</strong> после появления первой финансовой транзакции организации (<code>transactions</code> / <code>journal_entries</code>), чтобы сохранять целостность Ledger и неизменность исторических проводок.</li>
+<li>До первой транзакции смена допускается только в рамках административного сценария и с повторной валидацией шаблона счетов.</li>
+</ul>
+<h3 id="183"><a class="toclink" href="#183">18.3. История версий документа ТЗ</a></h3>
+<table>
+<thead>
+<tr>
+<th>Версия документа</th>
+<th>Статус</th>
+<th>Что зафиксировано</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>2026.04.0 (Baseline)</strong></td>
+<td>Старт синхронного ведения</td>
+<td>Консолидированы технические изменения прошлых циклов: модули §1–§17, B2G/templateGroup, billing, Audit/Validation hardening, масштабирование и v3.2+ расширения.</td>
+</tr>
+<tr>
+<td><strong>2026.04.1</strong></td>
+<td>Текущая</td>
+<td>Унифицирован формат истории версий с PRD, очищены смешанные release-треки, закреплён регламент синхронного инкремента версий документов.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_18"><a class="toclink" href="#_18">Принцип ведения истории (дальше)</a></h3>
+<ul>
+<li>PRD и TZ используют общий формат версии: <code>YYYY.MM.patch</code>.</li>
+<li>Любой новый пакет изменений фиксируется в обоих документах с одинаковым <code>YYYY.MM</code> и повышением <code>patch</code>.</li>
+<li>История документа содержит только факт изменения спецификации; продуктовые release-метки (<code>v3</code>, <code>v14.3</code>, <code>v25.1</code>) указываются в тексте соответствующих разделов, а не как версия самого документа.</li>
+</ul>
+<h3 id="184-frontend"><a class="toclink" href="#184-frontend">18.4. Интерфейс выбора типа организации (Frontend)</a></h3>
+<ul>
+<li><strong>Компонент:</strong> <code>apps/web/app/register-org/page.tsx</code> (форма регистрации организации).</li>
+<li><strong>UI-элемент:</strong> селектор <strong>Accounting Profile</strong> с обязательным выбором типа.</li>
+<li><strong>Варианты:</strong></li>
+<li><code>COMMERCIAL</code> — загружает профиль NAS-Business (например, <code>101</code> — Касса, <code>111</code> — Основные средства).</li>
+<li><code>GOVERNMENT</code> — загружает профиль NAS-Gov (например, <code>101</code> — Основные средства, <code>201</code> — Касса).</li>
+<li><strong>Локализация:</strong> использовать ключи <code>auth.organizationTypeCommercial</code>, <code>auth.organizationTypeGovernment</code> и описания профилей <code>auth.organizationTypeCommercialDesc</code>, <code>auth.organizationTypeGovernmentDesc</code>.</li>
+</ul>
+<h3 id="185-backend"><a class="toclink" href="#185-backend">18.5. Атомарность и валидация (Backend)</a></h3>
+<ul>
+<li><strong>API-контракты:</strong> эндпоинты <code>POST /api/auth/register</code> и <code>POST /api/organizations</code> требуют обязательное поле <code>templateGroup</code> при создании организации.</li>
+<li><strong>Валидация входа:</strong> отсутствие <code>templateGroup</code> или передача невалидного значения должны возвращать <strong><code>400 Bad Request</code></strong> до начала транзакции создания организации в БД.</li>
+<li><strong>Транзакционная гарантия:</strong> при валидном входе выбор <code>templateGroup</code> применяется в атомарном онбординге (<code>Organization</code> + membership + копирование шаблона счетов по группе) без промежуточных состояний.</li>
+</ul>
+<p>Актуальная спецификация — <strong>этот <code>TZ.md</code></strong>; при изменениях править только его.</p>
+<hr>
+<p><em>Конец документа.</em></p>
+</main>
+</body>
+</html>

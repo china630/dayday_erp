@@ -12,3 +12,8 @@ export function canCloseAccountingPeriod(role: string | undefined): boolean {
 export function canAccessBilling(role: string | null | undefined): boolean {
   return role === "OWNER";
 }
+
+/** Фильтр P&L по департаменту: только Owner и Accountant. */
+export function canUsePlDepartmentFilter(role: string | undefined): boolean {
+  return role === "OWNER" || role === "ACCOUNTANT";
+}

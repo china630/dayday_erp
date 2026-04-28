@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
+import { useSearchParams } from "next/navigation";
 import {
   CARD_CONTAINER_CLASS,
   INPUT_BORDERED_CLASS,
@@ -32,10 +33,19 @@ type AccessReq = {
   requester: { id: string; email: string; fullName: string | null };
 };
 
+type InviteRow = {
+  id: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  invitedBy?: { id: string; email: string; fullName: string | null } | null;
+};
+
 const ROLES = ["USER", "ACCOUNTANT", "ADMIN", "OWNER"] as const;
 
 export default function TeamSettingsPage() {
   const { t } = useTranslation();
+  const search = useSearchParams();
   const { ready, token } = useRequireAuth();
   const { user, refreshSession } = useAuth();
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -46,6 +56,8 @@ export default function TeamSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<string>("USER");
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [tab, setTab] = useState<"members" | "invites">("members");
 
   const canManage =
     user?.role === "OWNER" || user?.role === "ADMIN";
@@ -71,12 +83,42 @@ export default function TeamSettingsPage() {
     } else {
       setRequests([]);
     }
+    if (canManage) {
+      const inv = await apiFetch("/api/team/invites");
+      if (inv.ok) {
+        setInvites((await inv.json()) as InviteRow[]);
+      } else {
+        setInvites([]);
+      }
+    } else {
+      setInvites([]);
+    }
   }, [token, canManage]);
 
   useEffect(() => {
     if (!ready || !token) return;
     void load();
   }, [ready, token, load]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    const tokenParam = search.get("invite");
+    if (!tokenParam) return;
+    void (async () => {
+      const res = await apiFetch("/api/auth/invites/accept-by-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenParam }),
+      });
+      if (!res.ok) {
+        setInviteMsg(`${t("teamPage.inviteAcceptErr", { defaultValue: "Не удалось принять приглашение" })}: ${res.status}`);
+        return;
+      }
+      setInviteMsg(t("teamPage.inviteAcceptOk", { defaultValue: "Приглашение принято. Членство добавлено." }));
+      await load();
+      await refreshSession();
+    })();
+  }, [ready, token, search, load, refreshSession, t]);
 
   async function removeMember(targetUserId: string) {
     if (!canManage) return;
@@ -158,6 +200,24 @@ export default function TeamSettingsPage() {
     }
   }
 
+  async function revokeInvite(inviteId: string) {
+    if (!canManage) return;
+    setBusyId(inviteId);
+    try {
+      const res = await apiFetch(`/api/team/invites/${inviteId}/revoke`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        setInviteMsg(txt || String(res.status));
+        return;
+      }
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!ready || !token) {
     return <div className="text-sm text-gray-500">{t("common.loading")}</div>;
   }
@@ -224,6 +284,25 @@ export default function TeamSettingsPage() {
         </section>
       )}
 
+      {canManage && (
+        <div className="flex gap-2 border-b border-slate-200 pb-2">
+          <button
+            type="button"
+            onClick={() => setTab("members")}
+            className={`${tab === "members" ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}`}
+          >
+            {t("teamPage.membersTitle")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("invites")}
+            className={`${tab === "invites" ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}`}
+          >
+            {t("teamPage.invitesTab", { defaultValue: "Приглашения" })}
+          </button>
+        </div>
+      )}
+
       {canManage && requests.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-medium text-gray-900">{t("teamPage.requestsTitle")}</h2>
@@ -262,6 +341,7 @@ export default function TeamSettingsPage() {
         </section>
       )}
 
+      {tab === "members" && (
       <section className="space-y-3">
         <h2 className="text-lg font-medium text-gray-900">{t("teamPage.membersTitle")}</h2>
         <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
@@ -304,6 +384,44 @@ export default function TeamSettingsPage() {
           </table>
         </div>
       </section>
+      )}
+
+      {canManage && tab === "invites" && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-medium text-gray-900">
+            {t("teamPage.invitesTab", { defaultValue: "Приглашения" })}
+          </h2>
+          {invites.length === 0 ? (
+            <p className="text-sm text-slate-600">
+              {t("teamPage.invitesEmpty", { defaultValue: "Активных приглашений нет." })}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {invites.map((inv) => (
+                <li
+                  key={inv.id}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex flex-wrap gap-3 items-center justify-between"
+                >
+                  <div className="text-sm">
+                    <div className="font-medium text-gray-900">{inv.email}</div>
+                    <div className="text-xs text-slate-600">
+                      {inv.role} · {new Date(inv.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busyId === inv.id}
+                    onClick={() => void revokeInvite(inv.id)}
+                    className={`${SECONDARY_BUTTON_CLASS} disabled:opacity-50`}
+                  >
+                    {t("teamPage.revokeInvite", { defaultValue: "Отозвать" })}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

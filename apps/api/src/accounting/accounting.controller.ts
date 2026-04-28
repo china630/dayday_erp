@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -62,5 +62,19 @@ export class AccountingController {
       ],
     });
     return { transactionId };
+  }
+
+  @Get("period-close/checklist")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary:
+      "Проверка готовности к закрытию месяца: draft invoices, negative stock/cash, depreciation",
+  })
+  periodCloseChecklist(
+    @OrganizationId() organizationId: string,
+    @Query("month") month: string,
+  ) {
+    return this.accounting.getPeriodCloseChecklist(organizationId, month);
   }
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
+import { useLedger } from "../../../lib/ledger-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { ModulePageLinks } from "../../../components/module-page-links";
 import {
@@ -27,6 +28,7 @@ type CashFlowRow = {
 type CashFlowPayload = {
   dateFrom: string;
   dateTo: string;
+  ledgerType?: string;
   methodologyNote?: string;
   source: { cashDeskId: string | null; bankName: string | null };
   sections: Array<{
@@ -60,6 +62,7 @@ function fmt(v: unknown): string {
 export default function CashFlowPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
+  const { ledgerType, ready: ledgerReady } = useLedger();
   const b = useMemo(() => monthBounds(), []);
 
   const [from, setFrom] = useState(b.from);
@@ -68,6 +71,7 @@ export default function CashFlowPage() {
   const [bankName, setBankName] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState<null | "pdf" | "xlsx">(null);
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<CashFlowPayload | null>(null);
 
@@ -82,6 +86,7 @@ export default function CashFlowPage() {
       ...(cashDeskId.trim() ? { cashDeskId: cashDeskId.trim() } : {}),
       ...(bankName.trim() ? { bankName: bankName.trim() } : {}),
     });
+    qs.set("ledgerType", ledgerType);
     const res = await apiFetch(`/api/reports/cash-flow?${qs.toString()}`);
     setLoading(false);
     if (!res.ok) {
@@ -89,14 +94,46 @@ export default function CashFlowPage() {
       return;
     }
     setData((await res.json()) as CashFlowPayload);
-  }, [token, from, to, cashDeskId, bankName, t]);
+  }, [token, from, to, cashDeskId, bankName, t, ledgerType]);
+
+  async function exportFile(format: "pdf" | "xlsx") {
+    if (!token) return;
+    setExporting(format);
+    try {
+      const qs = new URLSearchParams({
+        dateFrom: from,
+        dateTo: to,
+        ledgerType,
+        format,
+        ...(cashDeskId.trim() ? { cashDeskId: cashDeskId.trim() } : {}),
+        ...(bankName.trim() ? { bankName: bankName.trim() } : {}),
+      });
+      const res = await apiFetch(`/api/reports/cash-flow/export?${qs.toString()}`);
+      if (!res.ok) {
+        setErr(`${t("reporting.exportErr", { defaultValue: "Export failed" })}: ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cash-flow-${from}-${to}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   useEffect(() => {
-    if (!ready || !token) return;
+    if (!ready || !token || !ledgerReady) return;
     void load();
-  }, [ready, token, load]);
+  }, [ready, token, ledgerReady, load, ledgerType]);
 
-  if (!ready) return <div className="text-gray-600">{t("common.loading")}</div>;
+  if (!ready || !ledgerReady)
+    return <div className="text-gray-600">{t("common.loading")}</div>;
   if (!token) return null;
 
   const secTitle = (s: SectionKey) =>
@@ -117,6 +154,9 @@ export default function CashFlowPage() {
           </h1>
           <p className="mt-1 text-[13px] text-[#7F8C8D]">
             {t("reports.cashFlow.hint")}
+          </p>
+          <p className="mt-1 text-[12px] text-[#7F8C8D]">
+            {t("reporting.activeLedger", { ledger: ledgerType })}
           </p>
         </div>
         <div className={`${CARD_CONTAINER_CLASS} p-4 flex flex-wrap items-end gap-3`}>
@@ -177,6 +217,26 @@ export default function CashFlowPage() {
             }}
           >
             {t("common.reset")}
+          </button>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            disabled={Boolean(exporting)}
+            onClick={() => void exportFile("pdf")}
+          >
+            {exporting === "pdf"
+              ? "…"
+              : t("reporting.exportPdf", { defaultValue: "Экспорт PDF" })}
+          </button>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            disabled={Boolean(exporting)}
+            onClick={() => void exportFile("xlsx")}
+          >
+            {exporting === "xlsx"
+              ? "…"
+              : t("reporting.exportXlsx", { defaultValue: "Экспорт XLSX" })}
           </button>
         </div>
       </div>

@@ -25,7 +25,6 @@ import { AuditService } from "./audit.service";
 @ApiBearerAuth("bearer")
 @Controller("audit")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.OWNER, UserRole.ADMIN)
 export class AuditController {
   constructor(
     private readonly prisma: PrismaService,
@@ -33,6 +32,7 @@ export class AuditController {
   ) {}
 
   @Get("recent")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.AUDITOR)
   @ApiOperation({
     summary: "Последние записи AuditLog (совместимость)",
   })
@@ -64,6 +64,7 @@ export class AuditController {
   }
 
   @Get("logs")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.AUDITOR)
   @ApiOperation({
     summary: "Журнал аудита с фильтрами (пагинация: page, pageSize; иначе take)",
   })
@@ -146,6 +147,7 @@ export class AuditController {
   }
 
   @Get("logs/:id")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.AUDITOR)
   @ApiOperation({ summary: "Одна запись аудита" })
   async logOne(
     @OrganizationId() organizationId: string,
@@ -172,10 +174,21 @@ export class AuditController {
   }
 
   @Post("integrity-check")
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
   @ApiOperation({
     summary: "Проверка целостности хешей audit_logs для организации",
   })
   async integrityCheck(@OrganizationId() organizationId: string) {
     return this.audit.verifyOrganizationLogs(organizationId);
+  }
+
+  @Post("verify-chain")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.AUDITOR)
+  @ApiOperation({
+    summary:
+      "Проверка hash-chain audit_logs; возвращает список скомпрометированных записей",
+  })
+  async verifyChain(@OrganizationId() organizationId: string) {
+    return this.audit.verifyOrganizationChain(organizationId);
   }
 }

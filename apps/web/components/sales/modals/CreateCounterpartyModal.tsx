@@ -3,10 +3,12 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { CheckCircle, Lock, Search } from "lucide-react";
 import { apiFetch } from "../../../lib/api-client";
 import { safeJson } from "../../../lib/api-fetch";
 import { notifyListRefresh } from "../../../lib/list-refresh-bus";
 import { inputFieldClass } from "../../../lib/form-classes";
+import { validateAzIban } from "../../../lib/iban";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
 const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
@@ -25,8 +27,12 @@ export function CreateCounterpartyModal({
   const [role, setRole] = useState<"CUSTOMER" | "SUPPLIER" | "BOTH" | "OTHER">("CUSTOMER");
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
+  const [iban, setIban] = useState("");
   const [isVatPayer, setIsVatPayer] = useState<boolean | null>(null);
+  const [isRiskyTaxpayer, setIsRiskyTaxpayer] = useState<boolean | null>(null);
+  const [nameLockedByLookup, setNameLockedByLookup] = useState(false);
   const [voenCheckBusy, setVoenCheckBusy] = useState(false);
+  const [ibanDeepBusy, setIbanDeepBusy] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const lastAutoLookup = useRef<string>("");
@@ -45,6 +51,7 @@ export function CreateCounterpartyModal({
     const dirRes = await apiFetch(
       `/api/organization/directory/by-voen/${encodeURIComponent(d)}`,
     );
+    let hasLookupData = false;
     if (dirRes.ok) {
       const dir = await safeJson<{
         name: string;
@@ -53,8 +60,11 @@ export function CreateCounterpartyModal({
         directorName?: string | null;
       }>(dirRes);
       if (dir) {
-        if (dir.name?.trim() && (!name.trim() || name.trim() !== dir.name.trim())) {
-          setName(dir.name);
+        if (dir.name?.trim()) {
+          hasLookupData = true;
+          if (!name.trim() || name.trim() !== dir.name.trim()) {
+            setName(dir.name);
+          }
         }
         if (dir.legalAddress?.trim()) {
           const incoming = dir.legalAddress.trim();
@@ -79,8 +89,11 @@ export function CreateCounterpartyModal({
       if (g) {
         setVoenCheckBusy(false);
         // Merge logic: patch only missing fields or different values; never reset user-entered data.
-        if (g.name?.trim() && (!name.trim() || name.trim() !== g.name.trim())) {
-          setName(g.name);
+        if (g.name?.trim()) {
+          hasLookupData = true;
+          if (!name.trim() || name.trim() !== g.name.trim()) {
+            setName(g.name);
+          }
         }
         if (g.vatStatus !== undefined && g.vatStatus !== null && isVatPayer !== g.vatStatus) {
           setIsVatPayer(g.vatStatus);
@@ -94,6 +107,7 @@ export function CreateCounterpartyModal({
             return prev;
           });
         }
+        setNameLockedByLookup(hasLookupData);
         return;
       }
     }
@@ -114,6 +128,7 @@ export function CreateCounterpartyModal({
       name: string;
       isVatPayer: boolean;
       address: string | null;
+      isRiskyTaxpayer?: boolean | null;
     }>(res);
     if (!j) {
       toast.error(t("counterparties.voenCheckErr"), {
@@ -121,11 +136,17 @@ export function CreateCounterpartyModal({
       });
       return;
     }
-    if (j.name?.trim() && (!name.trim() || name.trim() !== j.name.trim())) {
-      setName(j.name);
+    if (j.name?.trim()) {
+      hasLookupData = true;
+      if (!name.trim() || name.trim() !== j.name.trim()) {
+        setName(j.name);
+      }
     }
     if (isVatPayer !== j.isVatPayer) {
       setIsVatPayer(j.isVatPayer);
+    }
+    if (j.isRiskyTaxpayer !== undefined) {
+      setIsRiskyTaxpayer(j.isRiskyTaxpayer ?? null);
     }
     if (j.address?.trim()) {
       const incoming = j.address.trim();
@@ -136,6 +157,7 @@ export function CreateCounterpartyModal({
         return prev;
       });
     }
+    setNameLockedByLookup(hasLookupData);
   }
 
   useEffect(() => {
@@ -147,8 +169,12 @@ export function CreateCounterpartyModal({
     setRole("CUSTOMER");
     setAddress("");
     setEmail("");
+    setIban("");
     setIsVatPayer(null);
+    setIsRiskyTaxpayer(null);
+    setNameLockedByLookup(false);
     setVoenCheckBusy(false);
+    setIbanDeepBusy(false);
     setBusy(false);
     lastAutoLookup.current = "";
   }, [open]);
@@ -158,8 +184,8 @@ export function CreateCounterpartyModal({
     if (digits.length !== 10) return;
     if (lastAutoLookup.current === digits) return;
     lastAutoLookup.current = digits;
-    // авто-lookup только по MDM
-    void checkVoen({ allowFallback: false });
+    // обязательный авто-lookup: MDM -> e-taxes fallback
+    void checkVoen({ allowFallback: true });
   }, [digits, open]);
 
   async function onSubmit(e: FormEvent) {
@@ -180,6 +206,7 @@ export function CreateCounterpartyModal({
       role,
       address: address.trim() || undefined,
       email: email.trim() || undefined,
+      iban: iban.trim() || undefined,
       ...(isVatPayer !== null && { isVatPayer }),
     };
     const res = await apiFetch("/api/counterparties", {
@@ -195,6 +222,60 @@ export function CreateCounterpartyModal({
     toast.success(t("common.save"));
     notifyListRefresh("counterparties");
     onClose();
+  }
+
+  async function runDeepIbanValidation() {
+    const local = validateAzIban(iban);
+    if (!local.isValid) {
+      toast.error(t("counterparties.ibanInvalidLocal"));
+      return;
+    }
+    setIbanDeepBusy(true);
+    try {
+      const res = await apiFetch("/api/banking/validate-iban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ iban: local.normalized }),
+      });
+      if (res.ok) {
+        const body = (await safeJson<{
+          bankName?: string | null;
+          bic?: string | null;
+        }>(res)) ?? { bankName: null, bic: null };
+        if (body.bankName) {
+          toast.success(
+            t("counterparties.ibanDeepOkDetailed", {
+              bank: body.bankName,
+              bic: body.bic ?? "—",
+            }),
+          );
+        } else {
+          toast.success(t("counterparties.ibanDeepOk"));
+        }
+        return;
+      }
+      let code = "";
+      try {
+        const body = (await res.clone().json()) as { code?: string };
+        code = body.code ?? "";
+      } catch {
+        /* ignore */
+      }
+      if (res.status === 402 || (res.status === 403 && code === "MODULE_NOT_ENTITLED")) {
+        window.dispatchEvent(
+          new CustomEvent("dayday:upgrade-modal-custom", {
+            detail: {
+              title: t("counterparties.ibanDeepPaywallTitle"),
+              body: t("counterparties.ibanDeepPaywallBody"),
+            },
+          }),
+        );
+        return;
+      }
+      toast.error(t("counterparties.ibanDeepErr"), { description: `${res.status}` });
+    } finally {
+      setIbanDeepBusy(false);
+    }
   }
 
   return (
@@ -220,7 +301,12 @@ export function CreateCounterpartyModal({
       >
         <div>
           <span className={lbl}>{t("counterparties.name")}</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputFieldClass} />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={inputFieldClass}
+            disabled={nameLockedByLookup}
+          />
         </div>
         <div>
           <span className={lbl}>{t("counterparties.taxId")}</span>
@@ -229,7 +315,10 @@ export function CreateCounterpartyModal({
               inputMode="numeric"
               maxLength={10}
               value={digits}
-              onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              onChange={(e) => {
+                setTaxId(e.target.value.replace(/\D/g, "").slice(0, 10));
+                setNameLockedByLookup(false);
+              }}
               className={`${inputFieldClass} flex-1 min-w-[140px]`}
               aria-invalid={!taxValid && digits.length > 0}
             />
@@ -251,6 +340,11 @@ export function CreateCounterpartyModal({
               ? t("counterparties.vatPayerYes")
               : t("counterparties.vatPayerNo")}
         </div>
+        {isRiskyTaxpayer === true ? (
+          <div className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+            {t("counterparties.riskyTaxpayerBadge")}
+          </div>
+        ) : null}
         <div>
           <span className={lbl}>{t("counterparties.kind")}</span>
           <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className={inputFieldClass}>
@@ -276,6 +370,36 @@ export function CreateCounterpartyModal({
         <div>
           <span className={lbl}>{t("counterparties.email")}</span>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputFieldClass} />
+        </div>
+        <div>
+          <span className={lbl}>{t("counterparties.iban")}</span>
+          <div className="flex items-center gap-2">
+            <input
+              value={iban}
+              onChange={(e) => setIban(e.target.value.toUpperCase())}
+              onBlur={(e) => setIban(e.target.value.replace(/\s+/g, "").toUpperCase())}
+              className={`${inputFieldClass} flex-1`}
+              placeholder="AZ..."
+            />
+            {validateAzIban(iban).isValid ? (
+              <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" aria-label="IBAN valid" />
+            ) : null}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void runDeepIbanValidation()}
+              disabled={ibanDeepBusy}
+              className="px-3 py-2 rounded-[2px] border border-[#D5DADF] bg-white text-[#34495E] shadow-sm text-[13px] font-medium hover:bg-[#F4F5F7] disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+              <Lock className="h-3.5 w-3.5" aria-hidden />
+              {ibanDeepBusy ? t("common.loading") : t("counterparties.ibanDeepCheck")}
+            </button>
+          </div>
+          <p className="mt-2 rounded-[2px] border border-[#D5DADF] bg-[#EBEDF0]/40 p-2 text-xs text-[#34495E]">
+            {t("counterparties.ibanHint")}
+          </p>
         </div>
       </form>
     </SalesModalShell>

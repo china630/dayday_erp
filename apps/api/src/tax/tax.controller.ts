@@ -12,7 +12,7 @@ export class TaxController {
   @Get("taxpayer-info")
   @ApiOperation({
     summary:
-      "VÖEN lookup (e-taxes.gov.az): ad, ünvan, ƏDV statusu — JSON { name, isVatPayer, address }",
+      "VÖEN lookup (e-taxes.gov.az): ad, ünvan, ƏDV statusu + riskli vergi ödəyicisi flag",
   })
   taxpayerInfo(
     @OrganizationId() _organizationId: string,

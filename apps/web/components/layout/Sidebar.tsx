@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   Banknote,
   BarChart3,
+  BookOpen,
   Boxes,
   Briefcase,
   Building2,
@@ -30,6 +31,7 @@ import {
   Link2,
   Network,
   Package,
+  PackageSearch,
   PieChart,
   ScrollText,
   Settings,
@@ -39,6 +41,7 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   TrendingDown,
+  Upload,
   UserPlus,
   Users2,
   Wallet,
@@ -412,6 +415,13 @@ export function MainSidebar({
             onNavClick={onNavClick}
           />
           <SideNavSubItem
+            href="/inventory/physical"
+            label={t("inventory.physicalNav")}
+            isActive={pathname.startsWith("/inventory/physical")}
+            icon={PackageSearch}
+            onNavClick={onNavClick}
+          />
+          <SideNavSubItem
             href="/inventory/audits"
             label={t("nav.inventoryAudits")}
             isActive={pathname.startsWith("/inventory/audit")}
@@ -631,11 +641,36 @@ export function MainSidebar({
                   </>
                 ) : null}
                 <SideNavItem
+                  href="/settings/chart"
+                  label={t("nav.settingsChart")}
+                  isActive={pathname.startsWith("/settings/chart")}
+                  icon={BookOpen}
+                  nested
+                  onNavClick={onNavClick}
+                />
+                <SideNavItem
                   href="/settings/mapping"
                   label={t("nav.settingsMapping")}
                   isActive={pathname.startsWith("/settings/mapping")}
                   locked={lockedIfrsMapping}
                   icon={Link2}
+                  nested
+                  onNavClick={onNavClick}
+                />
+                <SideNavSubItem
+                  href="/settings/finance/ifrs-mapping"
+                  label={t("nav.settingsIfrsRules", {
+                    defaultValue: "IFRS Rules",
+                  })}
+                  isActive={pathname.startsWith("/settings/finance/ifrs-mapping")}
+                  icon={Link2}
+                  onNavClick={onNavClick}
+                />
+                <SideNavItem
+                  href="/settings/migration"
+                  label={t("nav.settingsMigration")}
+                  isActive={pathname.startsWith("/settings/migration")}
+                  icon={Upload}
                   nested
                   onNavClick={onNavClick}
                 />

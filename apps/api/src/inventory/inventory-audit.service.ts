@@ -15,6 +15,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { CreateInventoryAuditDto } from "./dto/create-inventory-audit.dto";
 import { AccountingService } from "../accounting/accounting.service";
 import { getClosedPeriodKeys, monthKeyUtc } from "../reporting/reporting-period.util";
+import { AccessControlService } from "../access/access-control.service";
 import {
   FINISHED_GOODS_ACCOUNT_CODE,
   INVENTORY_GOODS_ACCOUNT_CODE,
@@ -29,6 +30,7 @@ export class InventoryAuditService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accounting: AccountingService,
+    private readonly access: AccessControlService,
   ) {}
 
   async findAll(organizationId: string) {
@@ -83,6 +85,7 @@ export class InventoryAuditService {
   async approveDraft(
     organizationId: string,
     id: string,
+    actingUserId: string,
     actingUserRole: UserRole,
   ) {
     const draft = await this.prisma.inventoryAudit.findFirst({
@@ -95,6 +98,7 @@ export class InventoryAuditService {
     if (!draft) {
       throw new NotFoundException("Инвентаризационная опись не найдена");
     }
+    await this.access.assertMayPostAccounting(actingUserId, organizationId);
     assertMayPostManualJournal(actingUserRole);
 
     const org = await this.prisma.organization.findUnique({

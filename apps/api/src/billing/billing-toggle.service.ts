@@ -12,11 +12,8 @@ import {
   catalogModuleKeyToPatch,
   hasConstructorModulesInCustomConfig,
   isCatalogModuleActive,
-  proRataFractionUtc,
-  roundMoney2,
 } from "./billing-module-toggle.helpers";
 import type { ToggleModuleDto } from "./dto/toggle-module.dto";
-import { PaymentProviderService } from "./payment-provider.service";
 
 @Injectable()
 export class BillingToggleService {
@@ -25,7 +22,6 @@ export class BillingToggleService {
     private readonly access: AccessControlService,
     private readonly subscriptionAccess: SubscriptionAccessService,
     private readonly pricing: PricingService,
-    private readonly payment: PaymentProviderService,
     private readonly orgModules: OrganizationModuleService,
   ) {}
 
@@ -144,6 +140,35 @@ export class BillingToggleService {
           note: "reactivated_before_period_end",
         };
       }
+
+      // Post-paid pivot: module activation is zero-friction (no immediate charge/pro-rata).
+      const { activeModules } = await this.prisma.$transaction(async (tx) => {
+        const u = await this.subscriptionAccess.updateModuleAddons(
+          organizationId,
+          catalogModuleKeyToPatch(dto.moduleKey, true),
+          tx,
+        );
+        await this.orgModules.upsertActiveInTx(
+          tx,
+          organizationId,
+          dto.moduleKey,
+          row.pricePerMonth,
+        );
+        return u;
+      });
+      return {
+        organizationId,
+        moduleKey: dto.moduleKey,
+        enabled: true,
+        activeModules,
+        proRataAzn: "0.00",
+        orderId: null,
+        paymentUrl: null,
+        providerMode: null,
+        skipped: false,
+        requiresPayment: false,
+        note: "postpaid_activation_without_immediate_payment",
+      };
     } else {
       if (!inCatalog && !scheduledCancel) {
         return {
@@ -199,58 +224,5 @@ export class BillingToggleService {
         note: "cancellation_scheduled_end_of_month",
       };
     }
-
-    const monthly = Number(row.pricePerMonth);
-    const proRata = roundMoney2(monthly * proRataFractionUtc());
-
-    if (proRata < 0.01) {
-      const { activeModules } = await this.prisma.$transaction(async (tx) => {
-        const u = await this.subscriptionAccess.updateModuleAddons(
-          organizationId,
-          catalogModuleKeyToPatch(dto.moduleKey, true),
-          tx,
-        );
-        await this.orgModules.upsertActiveInTx(
-          tx,
-          organizationId,
-          dto.moduleKey,
-          row.pricePerMonth,
-        );
-        return u;
-      });
-      return {
-        organizationId,
-        moduleKey: dto.moduleKey,
-        enabled: true,
-        activeModules,
-        proRataAzn: "0.00",
-        orderId: null,
-        paymentUrl: null,
-        providerMode: null,
-        skipped: false,
-        requiresPayment: false,
-        note: "pro_rata_below_minimum_applied_without_payment",
-      };
-    }
-
-    const { orderId, paymentUrl, providerMode } =
-      await this.payment.createProRataModuleOrder(
-        organizationId,
-        proRata,
-        dto.moduleKey,
-      );
-
-    return {
-      organizationId,
-      moduleKey: dto.moduleKey,
-      enabled: true,
-      activeModules: snap.activeModules,
-      proRataAzn: proRata.toFixed(2),
-      orderId,
-      paymentUrl,
-      providerMode,
-      skipped: false,
-      requiresPayment: true,
-    };
   }
 }

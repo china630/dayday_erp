@@ -226,14 +226,24 @@ export default function HoldingDashboardPage() {
             </div>
 
             <div className="mt-3 flex items-center justify-end">
-              <Link
-                className="text-sm font-semibold text-action hover:underline"
-                href="/reporting/holding"
-              >
-                {t("holdingReport.title", {
-                  defaultValue: "Holding P&L hesabatı",
-                })}
-              </Link>
+              <div className="flex items-center gap-4">
+                <Link
+                  className="text-sm font-semibold text-action hover:underline"
+                  href={`/holding/${summary.holdingId}/dashboard`}
+                >
+                  {t("holdingDashboard.open", {
+                    defaultValue: "Open Holding Dashboard",
+                  })}
+                </Link>
+                <Link
+                  className="text-sm font-semibold text-action hover:underline"
+                  href="/reporting/holding"
+                >
+                  {t("holdingReport.title", {
+                    defaultValue: "Holding P&L hesabatı",
+                  })}
+                </Link>
+              </div>
             </div>
           </div>
         </div>

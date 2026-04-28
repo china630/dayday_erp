@@ -28,7 +28,6 @@ import { useAuth } from "../../../lib/auth-context";
 import { canAccessBilling } from "../../../lib/role-utils";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { EmptyState } from "../../../components/empty-state";
-import { PaymentConfirmationModal } from "../../../components/payment-confirmation-modal";
 import { toast } from "sonner";
 
 type PlatformInvoiceRow = {
@@ -55,6 +54,12 @@ type BillingCatalog = {
   currency: string;
   foundationMonthlyAzn: number;
   modules: BillingCatalogModule[];
+};
+
+type ModuleStateRow = {
+  moduleKey: string;
+  activatedAt: string;
+  pendingDeactivation: boolean;
 };
 
 function isModuleActiveInSubscription(
@@ -158,16 +163,17 @@ export default function SubscriptionSettingsPage() {
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesErr, setInvoicesErr] = useState<string | null>(null);
 
-  const [payModal, setPayModal] = useState<
+  const [consentModal, setConsentModal] = useState<
     | null
     | {
         mode: "enable" | "disable";
         moduleKey: string;
         monthlyAzn: string;
-        proRataAzn: string;
-        paymentUrl?: string;
       }
   >(null);
+  const [moduleStates, setModuleStates] = useState<Record<string, ModuleStateRow>>(
+    {},
+  );
 
   const locale = i18n.language.startsWith("az") ? "az-AZ" : "ru-RU";
 
@@ -227,6 +233,27 @@ export default function SubscriptionSettingsPage() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (!token || !canAccessBilling(user?.role ?? undefined)) {
+      setModuleStates({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const res = await apiFetch("/api/billing/module-states");
+      if (cancelled || !res.ok) return;
+      const data = (await res.json()) as { items?: ModuleStateRow[] };
+      const next: Record<string, ModuleStateRow> = {};
+      for (const row of data.items ?? []) {
+        next[row.moduleKey] = row;
+      }
+      setModuleStates(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.role, organizationId]);
+
   const expiresLabel = useMemo(() => {
     if (!effectiveSnapshot?.expiresAt)
       return t("subscriptionSettings.expiresNone");
@@ -279,80 +306,55 @@ export default function SubscriptionSettingsPage() {
     if (!token || isEnterprise || readOnlySub) return;
     setErr(null);
     setMsg(null);
-    if (!next) {
-      const mod = catalog?.modules.find((m) => m.key === moduleKey);
-      setPayModal({
-        mode: "disable",
-        moduleKey,
-        monthlyAzn: mod ? mod.pricePerMonth.toFixed(2) : "0.00",
-        proRataAzn: "0.00",
-      });
-      return;
-    }
-    setModuleBusyKey(moduleKey);
-    try {
-      const res = await apiFetch("/api/billing/toggle-module", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ moduleKey, enabled: true }),
-      });
-      const data = (await res.json()) as {
-        requiresPayment?: boolean;
-        paymentUrl?: string | null;
-        proRataAzn?: string;
-        skipped?: boolean;
-        note?: string;
-      };
-      if (!res.ok) {
-        setErr(typeof data === "object" ? JSON.stringify(data) : await res.text());
-        return;
-      }
-      const mod = catalog?.modules.find((m) => m.key === moduleKey);
-      if (data.requiresPayment && data.paymentUrl) {
-        setPayModal({
-          mode: "enable",
-          moduleKey,
-          monthlyAzn: mod ? mod.pricePerMonth.toFixed(2) : "0.00",
-          proRataAzn: data.proRataAzn ?? "0.00",
-          paymentUrl: data.paymentUrl ?? undefined,
-        });
-        return;
-      }
-      if (data.note === "reactivated_before_period_end") {
-        toast.success(t("subscriptionSettings.modulesUpdated"));
-      } else {
-        setMsg(t("subscriptionSettings.modulesUpdated"));
-      }
-      await refetch();
-    } finally {
-      setModuleBusyKey(null);
-    }
+    const mod = catalog?.modules.find((m) => m.key === moduleKey);
+    setConsentModal({
+      mode: next ? "enable" : "disable",
+      moduleKey,
+      monthlyAzn: mod ? mod.pricePerMonth.toFixed(2) : "0.00",
+    });
   };
 
-  const confirmDisableModule = async () => {
-    if (!payModal || payModal.mode !== "disable" || !token) return;
-    setModuleBusyKey(payModal.moduleKey);
-    setPayModal(null);
+  const confirmToggleModule = async () => {
+    if (!consentModal || !token) return;
+    const next = consentModal.mode === "enable";
+    const moduleKey = consentModal.moduleKey;
+    setModuleBusyKey(moduleKey);
+    setConsentModal(null);
     try {
       const res = await apiFetch("/api/billing/toggle-module", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          moduleKey: payModal.moduleKey,
-          enabled: false,
-        }),
+        body: JSON.stringify({ moduleKey, enabled: next }),
       });
-      const data = (await res.json()) as { note?: string };
+      const data = (await res.json()) as {
+        note?: string;
+        skipped?: boolean;
+      };
       if (!res.ok) {
-        setErr(JSON.stringify(data));
+        setErr(
+          typeof data === "object" ? JSON.stringify(data) : await res.text(),
+        );
         return;
       }
-      toast.message(
-        data.note === "cancellation_scheduled_end_of_month"
-          ? t("billing.subscription.disableScheduled")
-          : t("subscriptionSettings.modulesUpdated"),
-      );
+      if (next) {
+        toast.success(t("subscriptionSettings.modulesUpdated"));
+      } else {
+        toast.message(
+          data.note === "cancellation_scheduled_end_of_month"
+            ? t("billing.subscription.disableScheduled")
+            : t("subscriptionSettings.modulesUpdated"),
+        );
+      }
       await refetch();
+      const statesRes = await apiFetch("/api/billing/module-states");
+      if (statesRes.ok) {
+        const states = (await statesRes.json()) as { items?: ModuleStateRow[] };
+        const nextState: Record<string, ModuleStateRow> = {};
+        for (const row of states.items ?? []) {
+          nextState[row.moduleKey] = row;
+        }
+        setModuleStates(nextState);
+      }
     } finally {
       setModuleBusyKey(null);
     }
@@ -659,6 +661,7 @@ export default function SubscriptionSettingsPage() {
             {catalog.modules.map((mod) => {
               const on = isModuleOn(mod.key);
               const busy = moduleBusyKey === mod.key;
+              const pending = moduleStates[mod.key]?.pendingDeactivation === true;
               return (
                 <li
                   key={mod.id}
@@ -670,6 +673,11 @@ export default function SubscriptionSettingsPage() {
                       <div className="text-[13px] font-medium text-[#34495E]">
                         {mod.name}
                       </div>
+                      {pending && (
+                        <div className="mt-1 inline-flex rounded-[2px] border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                          {t("subscriptionSettings.pendingDeactivationBadge")}
+                        </div>
+                      )}
                       <div className="text-[12px] text-[#7F8C8D] mt-0.5 tabular-nums">
                         +{mod.pricePerMonth.toFixed(2)} AZN /{" "}
                         {t("subscriptionSettings.perMonth")}
@@ -766,24 +774,44 @@ export default function SubscriptionSettingsPage() {
         </button>
       </section>
 
-      <PaymentConfirmationModal
-        open={payModal != null}
-        mode={payModal?.mode ?? "enable"}
-        monthlyAzn={payModal?.monthlyAzn ?? "0"}
-        proRataAzn={payModal?.proRataAzn ?? "0"}
-        onClose={() => setPayModal(null)}
-        onConfirmPay={() => {
-          if (!payModal) return;
-          if (payModal.mode === "disable") {
-            void confirmDisableModule();
-            return;
-          }
-          if (payModal.paymentUrl) {
-            window.location.href = payModal.paymentUrl;
-          }
-          setPayModal(null);
-        }}
-      />
+      {consentModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className={`${CARD_CONTAINER_CLASS} max-w-md w-full p-6 space-y-4`}>
+            <h3 className="text-lg font-semibold text-[#34495E]">
+              {consentModal.mode === "enable"
+                ? t("subscriptionSettings.consentEnableTitle")
+                : t("subscriptionSettings.consentDisableTitle")}
+            </h3>
+            <p className="text-[13px] leading-relaxed text-[#34495E]">
+              {consentModal.mode === "enable"
+                ? t("subscriptionSettings.consentEnableBody", {
+                    monthly: consentModal.monthlyAzn,
+                  })
+                : t("subscriptionSettings.consentDisableBody")}
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConsentModal(null)}
+                className="rounded-[2px] border border-[#D5DADF] bg-white px-4 py-2 text-[13px] font-medium text-[#34495E] hover:bg-[#F8F9FA]"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmToggleModule()}
+                className={PRIMARY_BUTTON_CLASS}
+              >
+                {t("subscriptionSettings.consentConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

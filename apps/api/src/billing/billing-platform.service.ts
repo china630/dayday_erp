@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  BillingStatus,
   PaymentOrderStatus,
   Prisma,
   SubscriptionInvoiceStatus,
@@ -29,6 +30,12 @@ function startOfMonthUtc(d: Date): Date {
 
 function endOfMonthUtc(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+}
+
+function billingPeriodLabelUtc(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
 }
 
 @Injectable()
@@ -84,6 +91,7 @@ export class BillingPlatformService {
     const paidAt = order.paidAt ?? new Date();
     const periodStart = startOfMonthUtc(paidAt);
     const periodEnd = endOfMonthUtc(paidAt);
+    const billingPeriod = billingPeriodLabelUtc(paidAt);
     const dateOnly = new Date(
       Date.UTC(
         paidAt.getUTCFullYear(),
@@ -106,6 +114,7 @@ export class BillingPlatformService {
         date: dateOnly,
         periodStart,
         periodEnd,
+        billingPeriod,
         paymentOrderId: order.id,
         items: {
           create: [
@@ -117,6 +126,10 @@ export class BillingPlatformService {
           ],
         },
       },
+    });
+    await tx.organization.update({
+      where: { id: order.organizationId },
+      data: { billingStatus: BillingStatus.ACTIVE },
     });
   }
 

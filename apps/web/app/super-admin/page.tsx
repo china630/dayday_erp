@@ -267,7 +267,9 @@ export default function SuperAdminPage() {
     Array<{
       id: string;
       code: string;
-      name: string;
+      nameAz: string;
+      nameRu: string;
+      nameEn: string;
       accountType: string;
       parentCode: string | null;
       cashProfile: string | null;
@@ -278,7 +280,9 @@ export default function SuperAdminPage() {
   const [chartTplBusy, setChartTplBusy] = useState(false);
   const [newTpl, setNewTpl] = useState({
     code: "",
-    name: "",
+    nameAz: "",
+    nameRu: "",
+    nameEn: "",
     accountType: "EXPENSE",
     parentCode: "",
     sortOrder: 0,
@@ -470,7 +474,9 @@ export default function SuperAdminPage() {
       (await res.json()) as Array<{
         id: string;
         code: string;
-        name: string;
+        nameAz: string;
+        nameRu: string;
+        nameEn: string;
         accountType: string;
         parentCode: string | null;
         cashProfile: string | null;
@@ -490,7 +496,9 @@ export default function SuperAdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: newTpl.code.trim(),
-          name: newTpl.name.trim(),
+          nameAz: newTpl.nameAz.trim(),
+          nameRu: newTpl.nameRu.trim(),
+          nameEn: newTpl.nameEn.trim(),
           accountType: newTpl.accountType,
           parentCode: newTpl.parentCode.trim() || null,
           sortOrder: Number(newTpl.sortOrder) || 0,
@@ -503,7 +511,9 @@ export default function SuperAdminPage() {
       }
       setNewTpl({
         code: "",
-        name: "",
+        nameAz: "",
+        nameRu: "",
+        nameEn: "",
         accountType: "EXPENSE",
         parentCode: "",
         sortOrder: 0,
@@ -1692,7 +1702,7 @@ export default function SuperAdminPage() {
           </div>
           <form
             onSubmit={(e) => void saveChartTemplateRow(e)}
-            className={`${CARD_CONTAINER_CLASS} p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6`}
+            className={`${CARD_CONTAINER_CLASS} p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-8`}
           >
             <label className="text-xs font-medium text-[#34495E]">
               {t("superAdmin.chartColCode")}
@@ -1703,12 +1713,30 @@ export default function SuperAdminPage() {
                 className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
               />
             </label>
-            <label className="text-xs font-medium text-[#34495E] sm:col-span-2">
-              {t("superAdmin.chartColName")}
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColNameAz")}
               <input
                 required
-                value={newTpl.name}
-                onChange={(e) => setNewTpl((s) => ({ ...s, name: e.target.value }))}
+                value={newTpl.nameAz}
+                onChange={(e) => setNewTpl((s) => ({ ...s, nameAz: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColNameRu")}
+              <input
+                required
+                value={newTpl.nameRu}
+                onChange={(e) => setNewTpl((s) => ({ ...s, nameRu: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-[#34495E]">
+              {t("superAdmin.chartColNameEn")}
+              <input
+                required
+                value={newTpl.nameEn}
+                onChange={(e) => setNewTpl((s) => ({ ...s, nameEn: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
               />
             </label>
@@ -1770,7 +1798,9 @@ export default function SuperAdminPage() {
                 <thead className="bg-gray-50 text-left text-gray-600 sticky top-0">
                   <tr>
                     <th className="px-2 py-2">{t("superAdmin.chartColCode")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColName")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColNameAz")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColNameRu")}</th>
+                    <th className="px-2 py-2">{t("superAdmin.chartColNameEn")}</th>
                     <th className="px-2 py-2">{t("superAdmin.chartColType")}</th>
                     <th className="px-2 py-2">{t("superAdmin.chartColParent")}</th>
                     <th className="px-2 py-2">{t("superAdmin.chartColSort")}</th>
@@ -1781,7 +1811,15 @@ export default function SuperAdminPage() {
                   {chartTpl.map((r) => (
                     <tr key={r.id} className="border-t border-gray-100">
                       <td className="px-2 py-1 font-mono whitespace-nowrap">{r.code}</td>
-                      <td className="px-2 py-1">{r.name}</td>
+                      <td className="px-2 py-1 max-w-[14rem] truncate" title={r.nameAz}>
+                        {r.nameAz}
+                      </td>
+                      <td className="px-2 py-1 max-w-[14rem] truncate" title={r.nameRu}>
+                        {r.nameRu}
+                      </td>
+                      <td className="px-2 py-1 max-w-[14rem] truncate" title={r.nameEn}>
+                        {r.nameEn}
+                      </td>
                       <td className="px-2 py-1">{r.accountType}</td>
                       <td className="px-2 py-1 font-mono">{r.parentCode ?? "—"}</td>
                       <td className="px-2 py-1">{r.sortOrder}</td>

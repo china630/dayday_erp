@@ -22,11 +22,11 @@ export const INVENTORY_GOODS_ACCOUNT_CODE = "201";
 export const PAYABLE_SUPPLIERS_ACCOUNT_CODE = "531";
 export const COGS_ACCOUNT_CODE = "701";
 
-/** Основные средства: накопленная амортизация; расход по амортизации (как в ТЗ — 721). */
+/** Основные средства: накопленная амортизация; расход по амортизации (v2 — 713). */
 export const ACCUMULATED_DEPRECIATION_ACCOUNT_CODE = "112";
 /** Готовая продукция (выпуск из компонентов). */
 export const FINISHED_GOODS_ACCOUNT_CODE = "204";
-export const DEPRECIATION_EXPENSE_ACCOUNT_CODE = "721";
+export const DEPRECIATION_EXPENSE_ACCOUNT_CODE = "713";
 
 /** Прочие операционные расходы (быстрая запись из UI). */
 export const MISC_OPERATING_EXPENSE_ACCOUNT_CODE = "731";

@@ -27,6 +27,11 @@ export class PurchaseLineDto {
   @IsNumber()
   @Min(0)
   unitPrice!: number;
+
+  @ApiPropertyOptional({ description: "Ячейка склада (WMS-light)" })
+  @IsOptional()
+  @IsUUID()
+  binId?: string;
 }
 
 export class PurchaseStockDto {

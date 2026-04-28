@@ -64,7 +64,9 @@ async function main() {
       data: {
         organizationId: org.id,
         code: "1200",
-        name: "Дебиторская задолженность (IFRS)",
+        nameAz: "Debitor borcu (IFRS)",
+        nameRu: "Дебиторская задолженность (IFRS)",
+        nameEn: "Trade receivables (IFRS)",
         type: AccountType.ASSET,
         ledgerType: LedgerType.IFRS,
       },
@@ -86,7 +88,9 @@ async function main() {
       data: {
         organizationId: org.id,
         code: "4000",
-        name: "Выручка (IFRS Revenue)",
+        nameAz: "Gəlir (IFRS)",
+        nameRu: "Выручка (IFRS Revenue)",
+        nameEn: "Revenue (IFRS)",
         type: AccountType.REVENUE,
         ledgerType: LedgerType.IFRS,
       },

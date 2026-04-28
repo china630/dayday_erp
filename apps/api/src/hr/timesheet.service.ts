@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -54,9 +55,16 @@ function defaultHoursForType(t: TimesheetEntryType): Decimal {
 
 @Injectable()
 export class TimesheetService {
+  private readonly logger = new Logger(TimesheetService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByMonthIfExists(organizationId: string, year: number, month: number) {
+  async findByMonthIfExists(
+    organizationId: string,
+    year: number,
+    month: number,
+    departmentId?: string,
+  ) {
     if (!Number.isFinite(year) || year < 1900 || year > 2100) {
       throw new BadRequestException("year must be 1900–2100");
     }
@@ -70,10 +78,15 @@ export class TimesheetService {
     if (!ts) {
       return { timesheet: null, employees: [], entries: [] };
     }
-    return this.getFull(organizationId, ts.id);
+    return this.getFull(organizationId, ts.id, departmentId);
   }
 
-  async getOrCreate(organizationId: string, year: number, month: number) {
+  async getOrCreate(
+    organizationId: string,
+    year: number,
+    month: number,
+    departmentId?: string,
+  ) {
     if (!Number.isFinite(year) || year < 1900 || year > 2100) {
       throw new BadRequestException("year must be 1900–2100");
     }
@@ -89,21 +102,32 @@ export class TimesheetService {
         data: { organizationId, year, month, status: TimesheetStatus.DRAFT },
       });
     }
-    return this.getFull(organizationId, ts.id);
+    return this.getFull(organizationId, ts.id, departmentId);
   }
 
-  async getFull(organizationId: string, timesheetId: string) {
+  async getFull(
+    organizationId: string,
+    timesheetId: string,
+    departmentId?: string,
+  ) {
     const ts = await this.prisma.timesheet.findFirst({
       where: { id: timesheetId, organizationId },
     });
     if (!ts) throw new NotFoundException("Timesheet not found");
     const employees = await this.prisma.employee.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(departmentId ? { jobPosition: { departmentId } } : {}),
+      },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: { id: true, firstName: true, lastName: true, finCode: true },
     });
+    const employeeIds = employees.map((e) => e.id);
     const entries = await this.prisma.timesheetEntry.findMany({
-      where: { timesheetId },
+      where: {
+        timesheetId,
+        ...(departmentId ? { employeeId: { in: employeeIds } } : {}),
+      },
       orderBy: [{ employeeId: "asc" }, { dayDate: "asc" }],
     });
     const entriesJson = entries.map((e) => ({
@@ -119,7 +143,11 @@ export class TimesheetService {
     }
   }
 
-  async autofill(organizationId: string, timesheetId: string) {
+  async autofill(
+    organizationId: string,
+    timesheetId: string,
+    departmentId?: string,
+  ) {
     const ts = await this.prisma.timesheet.findFirst({
       where: { id: timesheetId, organizationId },
     });
@@ -128,7 +156,10 @@ export class TimesheetService {
     const { year, month } = ts;
     const { lastDay } = monthBoundsUtc(year, month);
     const employees = await this.prisma.employee.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(departmentId ? { jobPosition: { departmentId } } : {}),
+      },
       select: { id: true },
     });
     await this.prisma.$transaction(async (tx) => {
@@ -171,10 +202,14 @@ export class TimesheetService {
         }
       }
     });
-    return this.getFull(organizationId, timesheetId);
+    return this.getFull(organizationId, timesheetId, departmentId);
   }
 
-  async syncAbsences(organizationId: string, timesheetId: string) {
+  async syncAbsences(
+    organizationId: string,
+    timesheetId: string,
+    departmentId?: string,
+  ) {
     const ts = await this.prisma.timesheet.findFirst({
       where: { id: timesheetId, organizationId },
     });
@@ -189,6 +224,9 @@ export class TimesheetService {
         approved: true,
         startDate: { lte: monthEnd },
         endDate: { gte: monthStart },
+        ...(departmentId
+          ? { employee: { jobPosition: { departmentId } } }
+          : {}),
       },
       include: { absenceType: true },
     });
@@ -233,13 +271,14 @@ export class TimesheetService {
         }
       }
     });
-    return this.getFull(organizationId, timesheetId);
+    return this.getFull(organizationId, timesheetId, departmentId);
   }
 
   async batchUpdate(
     organizationId: string,
     timesheetId: string,
     batches: TimesheetBatchItemDto[],
+    departmentId?: string,
   ) {
     const ts = await this.prisma.timesheet.findFirst({
       where: { id: timesheetId, organizationId },
@@ -258,7 +297,11 @@ export class TimesheetService {
           throw new BadRequestException("Диапазон дней выходит за пределы месяца");
         }
         const emp = await tx.employee.findFirst({
-          where: { id: b.employeeId, organizationId },
+          where: {
+            id: b.employeeId,
+            organizationId,
+            ...(departmentId ? { jobPosition: { departmentId } } : {}),
+          },
         });
         if (!emp) {
           throw new BadRequestException(`Сотрудник ${b.employeeId} не найден`);
@@ -302,10 +345,14 @@ export class TimesheetService {
         }
       }
     });
-    return this.getFull(organizationId, timesheetId);
+    return this.getFull(organizationId, timesheetId, departmentId);
   }
 
-  async approve(organizationId: string, timesheetId: string) {
+  async approve(
+    organizationId: string,
+    timesheetId: string,
+    departmentId?: string,
+  ) {
     const ts = await this.prisma.timesheet.findFirst({
       where: { id: timesheetId, organizationId },
     });
@@ -313,11 +360,81 @@ export class TimesheetService {
     if (ts.status === TimesheetStatus.APPROVED) {
       throw new ConflictException("Табель уже утверждён");
     }
+    if (departmentId) {
+      const outOfScope = await this.prisma.timesheetEntry.findFirst({
+        where: {
+          timesheetId,
+          employee: {
+            jobPosition: {
+              departmentId: { not: departmentId },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (outOfScope) {
+        throw new ForbiddenException(
+          "DEPARTMENT_HEAD can approve timesheet only for own department scope",
+        );
+      }
+    }
     await this.prisma.timesheet.update({
       where: { id: timesheetId },
       data: { status: TimesheetStatus.APPROVED },
     });
-    return this.getFull(organizationId, timesheetId);
+    return this.getFull(organizationId, timesheetId, departmentId);
+  }
+
+  async massApprove(
+    organizationId: string,
+    timesheetId: string,
+    employeeIds: string[],
+    departmentId?: string,
+  ) {
+    const ts = await this.prisma.timesheet.findFirst({
+      where: { id: timesheetId, organizationId },
+    });
+    if (!ts) throw new NotFoundException("Timesheet not found");
+    if (ts.status === TimesheetStatus.APPROVED) {
+      throw new ConflictException("Табель уже утверждён");
+    }
+    const uniqueIds = [...new Set(employeeIds.map((x) => x.trim()).filter(Boolean))];
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException("employeeIds must not be empty");
+    }
+
+    const scopedEmployees = await this.prisma.employee.findMany({
+      where: {
+        organizationId,
+        id: { in: uniqueIds },
+        ...(departmentId ? { jobPosition: { departmentId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (scopedEmployees.length !== uniqueIds.length) {
+      throw new ForbiddenException(
+        "DEPARTMENT_HEAD can approve timesheet only for own department scope",
+      );
+    }
+
+    const t0 = Date.now();
+    await this.prisma.auditLog.createMany({
+      data: uniqueIds.map((employeeId) => ({
+        organizationId,
+        userId: null,
+        entityType: "Timesheet",
+        entityId: timesheetId,
+        action: "MASS_APPROVE_EMPLOYEE",
+        newValues: { employeeId } as object,
+      })),
+    });
+    const elapsedMs = Date.now() - t0;
+    if (uniqueIds.length >= 100) {
+      this.logger.log(
+        `Timesheet massApprove: timesheetId=${timesheetId} employees=${uniqueIds.length} auditRowsMs=${elapsedMs}`,
+      );
+    }
+    return this.getFull(organizationId, timesheetId, departmentId);
   }
 
   /** Агрегаты по сотруднику для импорта в ведомость + mix для brüt ə/h (TK AР). */

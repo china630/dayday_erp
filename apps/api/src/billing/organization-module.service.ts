@@ -34,11 +34,13 @@ export class OrganizationModuleService {
         organizationId,
         moduleKey,
         priceSnapshot: pricePerMonth,
+        pendingDeactivation: false,
         cancelledAt: null,
         accessUntil: null,
       },
       update: {
         priceSnapshot: pricePerMonth,
+        pendingDeactivation: false,
         cancelledAt: null,
         accessUntil: null,
         activatedAt: new Date(),
@@ -65,10 +67,12 @@ export class OrganizationModuleService {
         organizationId,
         moduleKey,
         priceSnapshot: pricePerMonth,
+        pendingDeactivation: true,
         cancelledAt: new Date(),
         accessUntil,
       },
       update: {
+        pendingDeactivation: true,
         cancelledAt: new Date(),
         accessUntil,
       },
@@ -108,6 +112,38 @@ export class OrganizationModuleService {
       this.logger.log(
         `Finalized ${n} expired module cancellation(s) (organization_modules)`,
       );
+    }
+    return n;
+  }
+
+  /**
+   * Post-billing cleanup: finalize modules marked for deactivation at month end.
+   */
+  async finalizePendingDeactivations(): Promise<number> {
+    const pending = await this.prisma.organizationModule.findMany({
+      where: { pendingDeactivation: true },
+    });
+    let n = 0;
+    for (const row of pending) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.subscriptionAccess.updateModuleAddons(
+          row.organizationId,
+          catalogModuleKeyToPatch(row.moduleKey, false),
+          tx,
+        );
+        await tx.organizationModule.delete({
+          where: {
+            organizationId_moduleKey: {
+              organizationId: row.organizationId,
+              moduleKey: row.moduleKey,
+            },
+          },
+        });
+      });
+      n++;
+    }
+    if (n > 0) {
+      this.logger.log(`Finalized ${n} pending module deactivation(s)`);
     }
     return n;
   }

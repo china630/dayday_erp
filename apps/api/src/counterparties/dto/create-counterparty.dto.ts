@@ -44,6 +44,12 @@ export class CreateCounterpartyDto {
   @IsEmail()
   email?: string;
 
+  @ApiPropertyOptional({ description: "Counterparty IBAN (optional)" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  iban?: string;
+
   @ApiPropertyOptional({ description: "Плательщик НДС (после Yoxla / e-taxes)" })
   @IsOptional()
   @Type(() => Boolean)

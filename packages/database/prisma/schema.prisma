@@ -28,6 +28,7 @@ model Organization {
   valuationMethod              InventoryValuationMethod      @default(AVCO) @map("valuation_method")
   settings                     Json                          @default("{}")
   subscriptionPlan             String?                       @map("subscription_plan")
+  billingStatus                BillingStatus                 @default(ACTIVE) @map("billing_status")
   createdAt                    DateTime                      @default(now()) @map("created_at")
   updatedAt                    DateTime                      @updatedAt @map("updated_at")
   /// *
@@ -45,11 +46,14 @@ model Organization {
   storageUsedBytes             BigInt                        @default(0) @map("storage_used_bytes")
   deletedAt                    DateTime?                     @map("deleted_at") @db.Timestamptz(6)
   holdingId                    String?                       @map("holding_id") @db.Uuid
+  /// Профиль онбординга NAS: полный коммерческий план или упрощённый (малый бизнес).
+  coaTemplateProfile           CoaTemplateProfile            @default(COMMERCIAL_FULL) @map("coa_template_profile")
   isDeleted                    Boolean                       @default(false) @map("is_deleted")
   absenceTypes                 AbsenceType[]
   absences                     Absence[]
   accessRequests               AccessRequest[]
   accountMappings              AccountMapping[]
+  accountBalances              AccountBalance[]
   accounts                     Account[]
   advanceReports               AdvanceReport[]
   auditLogs                    AuditLog[]
@@ -66,9 +70,11 @@ model Organization {
   employees                    Employee[]
   fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
   fixedAssets                  FixedAsset[]
+  inventoryAdjustments         InventoryAdjustment[]
   inventoryAuditLines          InventoryAuditLine[]
   inventoryAudits              InventoryAudit[]
   invoiceItems                 InvoiceItem[]
+  paymentAllocations           PaymentAllocation[]
   invoicePayments              InvoicePayment[]
   invoices                     Invoice[]
   journalEntries               JournalEntry[]
@@ -79,7 +85,11 @@ model Organization {
   holding                      Holding?                      @relation(fields: [holdingId], references: [id])
   owner                        User?                         @relation("OrganizationOwner", fields: [ownerId], references: [id])
   paymentOrders                PaymentOrder[]
+  taxDeclarationExports        TaxDeclarationExport[]
   payrollRuns                  PayrollRun[]
+  salaryRegistries             SalaryRegistry[]
+  bankPaymentDrafts            BankPaymentDraft[]
+  ifrsMappingRules             IfrsMappingRule[]
   payrollSlips                 PayrollSlip[]
   productRecipes               ProductRecipe[]
   products                     Product[]
@@ -88,11 +98,59 @@ model Organization {
   timesheets                   Timesheet[]
   transactions                 Transaction[]
   warehouses                   Warehouse[]
+  warehouseBins                WarehouseBin[]
 
   @@index([ownerId])
   @@index([holdingId, id])
   @@index([holdingId])
+  @@index([coaTemplateProfile])
   @@map("organizations")
+}
+
+/// Профиль копирования глобального NAS в локальный план организации.
+enum CoaTemplateProfile {
+  COMMERCIAL_FULL
+  COMMERCIAL_SMALL
+}
+
+/// Глобальный справочник NAS (платформа): один код — одна строка; профили Small/Full через массив.
+model TemplateAccount {
+  id              String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code            String               @unique
+  nameAz          String               @map("name_az")
+  nameRu          String               @map("name_ru")
+  nameEn          String               @map("name_en")
+  accountType     AccountType          @map("account_type")
+  parentCode      String?              @map("parent_code")
+  cashProfile     String?              @map("cash_profile")
+  sortOrder       Int                  @default(0) @map("sort_order")
+  isDeprecated    Boolean              @default(false) @map("is_deprecated")
+  /// В каких профилях онбординга счёт входит (полный коммерческий и/или малый бизнес).
+  templateGroups  CoaTemplateProfile[] @default([]) @map("template_groups")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  accounts        Account[]
+
+  @@index([code])
+  @@map("template_accounts")
+}
+
+model AccountBalance {
+  id             String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  accountId      String      @map("account_id") @db.Uuid
+  ledgerType     LedgerType  @default(NAS) @map("ledger_type")
+  balanceDate    DateTime    @map("balance_date") @db.Date
+  debitBalance   Decimal     @default(0) @map("debit_balance") @db.Decimal(19, 4)
+  creditBalance  Decimal     @default(0) @map("credit_balance") @db.Decimal(19, 4)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  account        Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, accountId, ledgerType, balanceDate])
+  @@index([organizationId, ledgerType, balanceDate])
+  @@map("account_balances")
 }
 
 /// *
@@ -108,6 +166,7 @@ model OrganizationBankAccount {
   createdAt      DateTime               @default(now()) @map("created_at")
   updatedAt      DateTime               @updatedAt @map("updated_at")
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salaryRegistries SalaryRegistry[]
 
   @@index([organizationId])
   @@map("organization_bank_accounts")
@@ -135,6 +194,7 @@ model OrganizationModule {
   moduleKey      String       @map("module_key")
   priceSnapshot  Decimal      @map("price_snapshot") @db.Decimal(12, 2)
   activatedAt    DateTime     @default(now()) @map("activated_at")
+  pendingDeactivation Boolean @default(false) @map("pending_deactivation")
   /// *
   ///    * Заполнено при отключении: автопродление снято, доступ до accessUntil.
   cancelledAt    DateTime?    @map("cancelled_at")
@@ -185,6 +245,7 @@ model SubscriptionInvoice {
   ///    * Расчётный период (месяц и т.п.).
   periodStart    DateTime?                 @map("period_start") @db.Timestamptz(6)
   periodEnd      DateTime?                 @map("period_end") @db.Timestamptz(6)
+  billingPeriod  String?                   @map("billing_period")
   /// *
   ///    * Готовый PDF в объектном хранилище (опционально).
   pdfLink        String?                   @map("pdf_link")
@@ -197,6 +258,7 @@ model SubscriptionInvoice {
 
   @@index([userId])
   @@index([userId, date])
+  @@index([userId, billingPeriod])
   @@map("subscription_invoices")
 }
 
@@ -441,10 +503,12 @@ model Warehouse {
   createdAt            DateTime         @default(now()) @map("created_at")
   updatedAt            DateTime         @updatedAt @map("updated_at")
   inventoryAccountCode String           @default("201") @map("inventory_account_code")
+  inventory_adjustments InventoryAdjustment[]
   inventory_audits     InventoryAudit[]
   invoices             Invoice[]
   stockItems           StockItem[]
   stockMovements       StockMovement[]
+  bins                 WarehouseBin[]
   users                User[]
   organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -457,12 +521,14 @@ model StockItem {
   organizationId String       @map("organization_id") @db.Uuid
   warehouseId    String       @map("warehouse_id") @db.Uuid
   productId      String       @map("product_id") @db.Uuid
+  binId          String?      @map("bin_id") @db.Uuid
   quantity       Decimal      @default(0) @db.Decimal(19, 4)
   averageCost    Decimal      @default(0) @map("average_cost") @db.Decimal(19, 4)
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bin            WarehouseBin? @relation(fields: [binId], references: [id], onDelete: SetNull)
   warehouse      Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, warehouseId, productId])
@@ -475,6 +541,7 @@ model StockMovement {
   organizationId  String              @map("organization_id") @db.Uuid
   warehouseId     String              @map("warehouse_id") @db.Uuid
   productId       String              @map("product_id") @db.Uuid
+  binId           String?             @map("bin_id") @db.Uuid
   type            StockMovementType
   reason          StockMovementReason
   /// *
@@ -492,11 +559,31 @@ model StockMovement {
   invoice         Invoice?            @relation(fields: [invoiceId], references: [id])
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product         Product             @relation(fields: [productId], references: [id])
+  bin             WarehouseBin?       @relation(fields: [binId], references: [id], onDelete: SetNull)
   warehouse       Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, warehouseId, documentDate, createdAt])
   @@index([organizationId, productId, documentDate, createdAt])
   @@map("stock_movements")
+}
+
+model WarehouseBin {
+  id             String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  warehouseId    String        @map("warehouse_id") @db.Uuid
+  code           String
+  barcode        String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse      Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockItems     StockItem[]
+  stockMovements StockMovement[]
+
+  @@unique([warehouseId, code])
+  @@index([organizationId, warehouseId])
+  @@index([warehouseId, barcode])
+  @@map("warehouse_bins")
 }
 
 /// *
@@ -533,6 +620,9 @@ model Employee {
   lastName                   String           @map("last_name")
   startDate                  DateTime         @map("start_date") @db.Date
   /// *
+  ///    * Дата выхода на работу (миграционная/кадровая точка отсчёта).
+  hireDate                   DateTime         @map("hire_date") @db.Date
+  /// *
   ///    * Оклад gross (AZN), частный ненефтяной сектор
   salary                     Decimal          @map("salary") @db.Decimal(19, 4)
   createdAt                  DateTime         @default(now()) @map("created_at")
@@ -548,6 +638,12 @@ model Employee {
   /// *
   ///    * Initial balance for average salary calculations (pre-ERP payroll history), AZN.
   initialSalaryBalance       Decimal          @default(0) @map("initial_salary_balance") @db.Decimal(19, 4)
+  /// *
+  ///    * Остаток отпускных дней на дату миграции (Opening Balances Wizard).
+  initialVacationDays        Decimal          @default(0) @map("initial_vacation_days") @db.Decimal(8, 2)
+  /// *
+  ///    * Среднемесячный доход за последние 12 месяцев для миграционного расчёта отпускных.
+  avgMonthlySalaryLastYear   Decimal?         @map("avg_monthly_salary_last_year") @db.Decimal(19, 4)
   positionId                 String           @map("position_id") @db.Uuid
   /// *
   ///    * Субсчёт 244.x для подотчёта (если задан).
@@ -585,10 +681,53 @@ model PayrollRun {
   timesheet      Timesheet?       @relation(fields: [timesheetId], references: [id])
   transaction    Transaction?     @relation(fields: [transactionId], references: [id])
   slips          PayrollSlip[]
+  salaryRegistries SalaryRegistry[]
 
   @@unique([organizationId, year, month])
   @@index([organizationId, status])
   @@map("payroll_runs")
+}
+
+model SalaryRegistry {
+  id             String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  payrollRunId   String               @map("payroll_run_id") @db.Uuid
+  bankAccountId  String               @map("bank_account_id") @db.Uuid
+  status         SalaryRegistryStatus @default(DRAFT)
+  payoutFormat   SalaryPayoutFormat   @map("payout_format")
+  externalId     String?              @map("external_id")
+  exportUrl      String?              @map("export_url")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  bankAccount    OrganizationBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRun     PayrollRun           @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, payrollRunId])
+  @@index([organizationId, status])
+  @@map("salary_registries")
+}
+
+model BankPaymentDraft {
+  id             String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  amount         Decimal                @db.Decimal(19, 4)
+  currency       String                 @default("AZN")
+  recipientIban  String                 @map("recipient_iban")
+  purpose        String
+  provider       String?
+  providerDraftId String?               @map("provider_draft_id")
+  status         BankPaymentDraftStatus @default(PENDING)
+  rejectionReason String?               @map("rejection_reason")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  sentAt         DateTime?              @map("sent_at")
+  completedAt    DateTime?              @map("completed_at")
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@map("bank_payment_drafts")
 }
 
 model PayrollSlip {
@@ -726,7 +865,12 @@ model Account {
   id             String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   organizationId String                @map("organization_id") @db.Uuid
   code           String
-  name           String
+  /// Официальное / каноническое наименование на азербайджанском (NAS / MMÜS).
+  nameAz         String                @map("name_az")
+  /// Русскоязычное наименование (NAS / MMÜS).
+  nameRu         String                @map("name_ru")
+  /// Англоязычное наименование (NAS / MMÜS).
+  nameEn         String                @map("name_en")
   type           AccountType
   parentId       String?               @map("parent_id") @db.Uuid
   createdAt      DateTime              @default(now()) @map("created_at")
@@ -738,12 +882,15 @@ model Account {
   ///    * Книга: NAS (основной план) или IFRS (параллельный учёт).
   ledgerType     LedgerType            @default(NAS) @map("ledger_type")
   chartEntryId   String?               @map("chart_entry_id") @db.Uuid
+  templateAccountId String?            @map("template_account_id") @db.Uuid
   mappingsAsIfrs AccountMapping[]      @relation("AccountMappingIfrs")
   mappingsAsNas  AccountMapping[]      @relation("AccountMappingNas")
-  chartEntry     ChartOfAccountsEntry? @relation(fields: [chartEntryId], references: [id])
+  chartEntry       ChartOfAccountsEntry? @relation(fields: [chartEntryId], references: [id])
+  templateAccount  TemplateAccount?      @relation(fields: [templateAccountId], references: [id], onDelete: SetNull)
   organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent         Account?              @relation("AccountHierarchy", fields: [parentId], references: [id])
   children       Account[]             @relation("AccountHierarchy")
+  balances       AccountBalance[]
   journalEntries JournalEntry[]
 
   @@unique([organizationId, code, ledgerType])
@@ -751,6 +898,7 @@ model Account {
   @@index([organizationId, currency])
   @@index([organizationId, ledgerType])
   @@index([chartEntryId])
+  @@index([templateAccountId])
   @@map("accounts")
 }
 
@@ -773,6 +921,21 @@ model AccountMapping {
   @@unique([organizationId, nasAccountId])
   @@index([organizationId])
   @@map("account_mappings")
+}
+
+model IfrsMappingRule {
+  id                   String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId       String       @map("organization_id") @db.Uuid
+  sourceNasAccountCode String       @map("source_nas_account_code")
+  targetIfrsAccountCode String      @map("target_ifrs_account_code")
+  isActive             Boolean      @default(true) @map("is_active")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceNasAccountCode, targetIfrsAccountCode])
+  @@index([organizationId, sourceNasAccountCode, isActive])
+  @@map("ifrs_mapping_rules")
 }
 
 /**
@@ -817,6 +980,7 @@ model Transaction {
   cashOrdersPosted             CashOrder[]                   @relation("CashOrderPostedTx")
   fixedAssetDepreciationMonths FixedAssetDepreciationMonth[]
   invoicePayments              InvoicePayment[]
+  paymentAllocations           PaymentAllocation[]
   journalEntries               JournalEntry[]
   payrollRuns                  PayrollRun[]
   counterparty                 Counterparty?                 @relation(fields: [counterpartyId], references: [id])
@@ -824,6 +988,7 @@ model Transaction {
   organization                 Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, date])
+  @@index([organizationId, isFinal, date], map: "transactions_org_status_period_idx")
   @@index([counterpartyId])
   @@index([organizationId, createdAt])
   @@index([organizationId, date, isLocked])
@@ -847,6 +1012,8 @@ model JournalEntry {
 
   @@index([organizationId, transactionId])
   @@index([organizationId, accountId])
+  @@index([accountId], map: "journal_entries_account_id_idx")
+  @@index([organizationId, ledgerType, transactionId], map: "journal_entries_org_period_status_ledger_idx")
   @@index([organizationId, createdAt])
   @@index([organizationId, ledgerType])
   @@map("journal_entries")
@@ -922,10 +1089,12 @@ model Product {
   createdAt              DateTime             @default(now()) @map("created_at")
   updatedAt              DateTime             @updatedAt @map("updated_at")
   isService              Boolean              @default(false) @map("is_service")
+  inventoryAdjustmentLines InventoryAdjustmentLine[]
   inventoryAuditLines    InventoryAuditLine[]
   invoiceItems           InvoiceItem[]
-  recipeLinesAsComponent ProductRecipeLine[]  @relation("RecipeComponentProduct")
-  recipeFinished         ProductRecipe?       @relation("RecipeFinishedProduct")
+  recipeLinesAsComponent ProductRecipeLine[]      @relation("RecipeComponentProduct")
+  recipeByproducts       ProductRecipeByproduct[] @relation("RecipeByproductProduct")
+  recipeFinished         ProductRecipe?           @relation("RecipeFinishedProduct")
   organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stockItems             StockItem[]
   stockMovements         StockMovement[]
@@ -946,6 +1115,7 @@ model ProductRecipe {
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
   lines             ProductRecipeLine[]
+  byproducts        ProductRecipeByproduct[]
   finishedProduct   Product             @relation("RecipeFinishedProduct", fields: [finishedProductId], references: [id], onDelete: Cascade)
   organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -971,6 +1141,22 @@ model ProductRecipeLine {
   @@map("product_recipe_lines")
 }
 
+model ProductRecipeByproduct {
+  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  recipeId        String        @map("recipe_id") @db.Uuid
+  productId       String        @map("product_id") @db.Uuid
+  quantityPerUnit Decimal       @map("quantity_per_unit") @db.Decimal(19, 4)
+  costFactor      Decimal       @default(0) @map("cost_factor") @db.Decimal(19, 6)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  product         Product       @relation("RecipeByproductProduct", fields: [productId], references: [id])
+  recipe          ProductRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, productId])
+  @@index([recipeId])
+  @@map("product_recipe_byproducts")
+}
+
 /// *
 ///  * Основное средство (линейная амортизация).
 model FixedAsset {
@@ -978,10 +1164,12 @@ model FixedAsset {
   organizationId     String                        @map("organization_id") @db.Uuid
   name               String
   inventoryNumber    String                        @map("inventory_number")
-  commissioningDate  DateTime                      @map("commissioning_date") @db.Date
-  initialCost        Decimal                       @map("initial_cost") @db.Decimal(19, 4)
+  purchaseDate       DateTime                      @map("commissioning_date") @db.Date
+  purchasePrice      Decimal                       @map("initial_cost") @db.Decimal(19, 4)
   usefulLifeMonths   Int                           @map("useful_life_months")
   salvageValue       Decimal                       @default(0) @map("salvage_value") @db.Decimal(19, 4)
+  depreciationMethod FixedAssetDepreciationMethod  @default(STRAIGHT_LINE) @map("depreciation_method")
+  status             FixedAssetStatus              @default(ACTIVE)
   /// *
   ///    * Уже начисленная амортизация (сумма проведённых месяцев)
   bookedDepreciation Decimal                       @default(0) @map("booked_depreciation") @db.Decimal(19, 4)
@@ -991,7 +1179,7 @@ model FixedAsset {
   organization       Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, inventoryNumber])
-  @@index([organizationId, commissioningDate])
+  @@index([organizationId, purchaseDate])
   @@map("fixed_assets")
 }
 
@@ -1026,6 +1214,7 @@ model Invoice {
   ///    * Дт при оплате: 101 касса / 221 банк (см. ТЗ)
   debitAccountCode  String              @default("101") @map("debit_account_code")
   totalAmount       Decimal             @default(0) @map("total_amount") @db.Decimal(19, 4)
+  paidAmount        Decimal             @default(0) @map("paid_amount") @db.Decimal(19, 4)
   currency          String              @default("AZN")
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
@@ -1048,6 +1237,7 @@ model Invoice {
   matchedBankLines  BankStatementLine[] @relation("InvoiceBankMatch")
   cashOrders        CashOrder[]
   items             InvoiceItem[]
+  paymentAllocations PaymentAllocation[]
   payments          InvoicePayment[]
   counterparty      Counterparty        @relation(fields: [counterpartyId], references: [id])
   organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1059,6 +1249,41 @@ model Invoice {
   @@index([organizationId, createdAt])
   @@index([organizationId, counterpartyId])
   @@map("invoices")
+}
+
+model PaymentAllocation {
+  id              String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  transactionId   String       @map("transaction_id") @db.Uuid
+  invoiceId       String       @map("invoice_id") @db.Uuid
+  allocatedAmount Decimal      @map("allocated_amount") @db.Decimal(19, 4)
+  date            DateTime     @db.Date
+  createdAt       DateTime     @default(now()) @map("created_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transaction     Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  invoice         Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, invoiceId], map: "payment_alloc_org_invoice_idx")
+  @@index([organizationId, transactionId], map: "payment_alloc_org_tx_idx")
+  @@index([organizationId, date], map: "payment_alloc_org_date_idx")
+  @@map("payment_allocations")
+}
+
+model TaxDeclarationExport {
+  id               String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId   String                     @map("organization_id") @db.Uuid
+  taxType          TaxDeclarationType         @map("tax_type")
+  period           String
+  generatedFileUrl String                     @map("generated_file_url")
+  receiptFileUrl   String?                    @map("receipt_file_url")
+  status           TaxDeclarationExportStatus @default(GENERATED)
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+  organization     Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, period], map: "tax_decl_org_period_idx")
+  @@index([organizationId, status], map: "tax_decl_org_status_idx")
+  @@map("tax_declaration_exports")
 }
 
 /// *
@@ -1337,8 +1562,11 @@ model CashFlowItem {
 
 model ChartOfAccountsEntry {
   id           String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  code         String      @unique
-  name         String
+  templateGroup TemplateGroup @default(COMMERCIAL) @map("template_group")
+  code         String
+  nameAz       String      @map("name_az")
+  nameRu       String      @map("name_ru")
+  nameEn       String      @map("name_en")
   accountType  AccountType @map("account_type")
   /// Код родителя в том же справочнике (иерархия NAS); null — корень.
   parentCode   String?     @map("parent_code")
@@ -1348,6 +1576,7 @@ model ChartOfAccountsEntry {
   createdAt    DateTime    @default(now()) @map("created_at")
   accounts     Account[]
 
+  @@unique([templateGroup, code])
   @@map("chart_of_accounts_entries")
 }
 
@@ -1417,6 +1646,45 @@ model InventoryAuditLine {
 }
 
 /// *
+///  * Документ физической инвентаризации / списания / оприходования (черновик → проведение).
+model InventoryAdjustment {
+  id             String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String                     @map("organization_id") @db.Uuid
+  warehouseId    String                     @map("warehouse_id") @db.Uuid
+  date           DateTime                   @db.Date
+  status         InventoryAdjustmentStatus  @default(DRAFT)
+  reason         String                     @default("")
+  docType        InventoryAdjustmentDocType @map("doc_type")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+  lines          InventoryAdjustmentLine[]
+  organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse      Warehouse                  @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, warehouseId, date])
+  @@index([organizationId, status])
+  @@map("inventory_adjustments")
+}
+
+model InventoryAdjustmentLine {
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  adjustmentId     String   @map("adjustment_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  expectedQuantity Decimal  @map("expected_quantity") @db.Decimal(19, 4)
+  actualQuantity   Decimal  @map("actual_quantity") @db.Decimal(19, 4)
+  deltaQuantity    Decimal  @map("delta_quantity") @db.Decimal(19, 4)
+  unitCost         Decimal  @default(0) @map("unit_cost") @db.Decimal(19, 4)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  adjustment       InventoryAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product          Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([adjustmentId, productId])
+  @@index([productId])
+  @@map("inventory_adjustment_lines")
+}
+
+/// *
 ///  * Оценка себестоимости списания запасов (см. PRD §11.0, TZ §14.0).
 enum InventoryValuationMethod {
   AVCO
@@ -1436,6 +1704,12 @@ enum UserRole {
   ADMIN
   ACCOUNTANT
   USER
+  PROCUREMENT
+  AUDITOR
+  WAREHOUSE_KEEPER
+  HR_OFFICER
+  HR_MANAGER
+  DEPARTMENT_HEAD
 }
 
 enum AccountType {
@@ -1522,6 +1796,24 @@ enum PayrollRunStatus {
   POSTED
 }
 
+enum SalaryRegistryStatus {
+  DRAFT
+  SENT
+  PAID
+}
+
+enum BankPaymentDraftStatus {
+  PENDING
+  SENT
+  REJECTED
+  COMPLETED
+}
+
+enum SalaryPayoutFormat {
+  ABB_XML
+  UNIVERSAL_XLSX
+}
+
 /// *
 ///  * Штатный сотрудник или ГПХ (xidmət müqaviləsi, физлицо с VÖEN).
 enum EmployeeKind {
@@ -1567,6 +1859,21 @@ enum InventoryAuditStatus {
 }
 
 /// *
+///  * Физическая инвентаризация / акты списания и оприходования (M9).
+enum InventoryAdjustmentStatus {
+  DRAFT
+  POSTED
+}
+
+/// *
+///  * Тип документа корректировки остатков.
+enum InventoryAdjustmentDocType {
+  WRITE_OFF
+  SURPLUS
+  INVENTORY_COUNT
+}
+
+/// *
 ///  * Книга учёта: национальный план (NAS) или параллельный IFRS.
 enum LedgerType {
   NAS
@@ -1591,6 +1898,12 @@ enum SubscriptionInvoiceStatus {
   CANCELLED
 }
 
+enum BillingStatus {
+  ACTIVE
+  SOFT_BLOCK
+  HARD_BLOCK
+}
+
 /// *
 ///  * Тип строки прайса v10.2: модуль, база Foundation, пакет квоты.
 enum PricingKind {
@@ -1609,6 +1922,25 @@ enum InviteStatus {
   PENDING
   ACCEPTED
   DECLINED
+}
+
+enum FixedAssetDepreciationMethod {
+  STRAIGHT_LINE
+}
+
+enum FixedAssetStatus {
+  ACTIVE
+  DISPOSED
+}
+
+enum TaxDeclarationType {
+  SIMPLIFIED_TAX
+}
+
+enum TaxDeclarationExportStatus {
+  GENERATED
+  UPLOADED
+  CONFIRMED_BY_TAX
 }
 
 enum PaymentOrderStatus {
@@ -1662,4 +1994,11 @@ enum HoldingAccessRole {
   ADMIN
   ACCOUNTANT
   VIEWER
+}
+
+enum TemplateGroup {
+  COMMERCIAL
+  GOVERNMENT
+  /// Упрощённый план для малого бизнеса (подмножество NAS / MMÜS).
+  SMALL_BUSINESS
 }

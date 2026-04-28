@@ -117,4 +117,28 @@ export class TeamController {
       user.userId,
     );
   }
+
+  @Get("invites")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @ApiOperation({ summary: "Список активных приглашений организации" })
+  invites(@OrganizationId() organizationId: string) {
+    return this.auth.listOrganizationInvites(organizationId);
+  }
+
+  @Post("invites/:id/revoke")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN)
+  @ApiOperation({ summary: "Отозвать приглашение" })
+  revokeInvite(
+    @CurrentUser() user: AuthUser,
+    @OrganizationId() organizationId: string,
+    @Param("id") inviteId: string,
+  ) {
+    return this.auth.revokeInvite(
+      organizationId,
+      inviteId,
+      requireOrgRole(user),
+    );
+  }
 }

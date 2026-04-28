@@ -74,7 +74,8 @@ describe("InventoryService (stock / adjust)", () => {
     const stock = {
       computeIssueUnitCost: jest.fn().mockResolvedValue(new Decimal(5)),
     } as unknown as StockService;
-    const svc = new InventoryService(prisma, accounting, stock);
+    const access = { assertMayPostAccounting: jest.fn() } as any;
+    const svc = new InventoryService(prisma, accounting, stock, access);
 
     await svc.adjustStock(orgId, {
       warehouseId: whId,

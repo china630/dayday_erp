@@ -12,6 +12,9 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
+import { UserRole } from "@dayday/database";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { requireOrgRole } from "../auth/require-org-role";
 import type { AuthUser } from "../auth/types/auth-user";
@@ -20,6 +23,7 @@ import { QuotaGuard } from "../common/guards/quota.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { QuotaResource } from "../quota/quota-resource";
 import { CreateInvoiceDto } from "./dto/create-invoice.dto";
+import { AllocatePaymentDto } from "./dto/allocate-payment.dto";
 import { RecordInvoicePaymentDto } from "./dto/record-invoice-payment.dto";
 import { UpdateInvoiceStatusDto } from "./dto/update-invoice-status.dto";
 import { InvoicesService } from "./invoices.service";
@@ -27,6 +31,7 @@ import { InvoicesService } from "./invoices.service";
 @ApiTags("invoices")
 @ApiBearerAuth("bearer")
 @Controller("invoices")
+@UseGuards(RolesGuard)
 export class InvoicesController {
   constructor(private readonly invoices: InvoicesService) {}
 
@@ -37,6 +42,7 @@ export class InvoicesController {
   }
 
   @Post(":id/payments")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "Записать оплату (частичную или полную). Статус PAID только при полной выплате.",
@@ -59,6 +65,24 @@ export class InvoicesController {
     );
   }
 
+  @Post("payments/allocate")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({
+    summary:
+      "Распределить один транш оплаты на несколько инвойсов контрагента (FIFO по дате счёта)",
+  })
+  allocatePayment(
+    @OrganizationId() orgId: string,
+    @Body() dto: AllocatePaymentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.invoices.allocatePaymentAcrossInvoices(
+      orgId,
+      dto,
+      requireOrgRole(user),
+    );
+  }
+
   @Get(":id/portal-link")
   @ApiOperation({
     summary:
@@ -75,7 +99,8 @@ export class InvoicesController {
   }
 
   @Post()
-  @UseGuards(QuotaGuard)
+  @UseGuards(QuotaGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @CheckQuota(QuotaResource.INVOICES_PER_MONTH)
   @ApiOperation({ summary: "Создать инвойс (DRAFT), поставить PDF в очередь" })
   create(@OrganizationId() orgId: string, @Body() dto: CreateInvoiceDto) {
@@ -83,6 +108,7 @@ export class InvoicesController {
   }
 
   @Patch(":id/status")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "SENT: Дт 211 Кт 601 (+ склад). PAID: оплата остатка целиком (части — POST …/payments). Статус PARTIALLY_PAID только через платежи.",
@@ -97,6 +123,7 @@ export class InvoicesController {
   }
 
   @Post(":id/send-email")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: "Отправить PDF инвойса на email контрагента (counterparty.email)" })
   sendEmail(
     @OrganizationId() orgId: string,

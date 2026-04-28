@@ -1,15 +1,18 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsNumber, IsUUID, Min } from "class-validator";
+import { IsNumber, IsOptional, IsUUID, Min } from "class-validator";
 
 export class ReleaseProductionDto {
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsUUID()
-  warehouseId!: string;
+  warehouseId?: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: "BOM/recipe ID used for manufacturing release",
+  })
   @IsUUID()
-  finishedProductId!: string;
+  recipeId!: string;
 
   @ApiProperty({ example: 1 })
   @Type(() => Number)

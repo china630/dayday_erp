@@ -1,10 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
+import { UserRole } from "@dayday/database";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import { requireOrgRole } from "../auth/require-org-role";
 import type { AuthUser } from "../auth/types/auth-user";
 import { OrganizationId } from "../common/org-id.decorator";
@@ -24,6 +27,8 @@ export class InventoryAuditController {
   }
 
   @Patch("lines/:lineId")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "Обновить строку описи (DRAFT): factQty и costPrice (запрещено в APPROVED/закрытом периоде)",
@@ -47,6 +52,8 @@ export class InventoryAuditController {
   }
 
   @Post(":id/approve")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "Провести черновик опись: adjustStock + journal в одной prisma.$transaction (TZ §10.1)",
@@ -59,11 +66,14 @@ export class InventoryAuditController {
     return this.audits.approveDraft(
       organizationId,
       id,
+      user.userId,
       requireOrgRole(user),
     );
   }
 
   @Post(":id/sync-system")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "Черновик описи: обновить systemQty по фактическим остаткам StockItem на складе документа",
@@ -90,6 +100,8 @@ export class InventoryAuditController {
   }
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
     summary:
       "Инвентаризационная опись: DRAFT — только запись; APPROVED — корректировки в одной транзакции (adjustStockInTransaction(tx)) по расхождениям",

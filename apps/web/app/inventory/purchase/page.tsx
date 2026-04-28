@@ -18,12 +18,14 @@ import {
 
 type Warehouse = { id: string; name: string };
 type Product = { id: string; name: string; sku: string };
+type Bin = { id: string; warehouseId: string; code: string; barcode?: string | null };
 
 type LineRow = {
   key: string;
   productId: string;
   quantity: string;
   unitPrice: string;
+  binId: string;
 };
 
 function newLine(): LineRow {
@@ -32,6 +34,7 @@ function newLine(): LineRow {
     productId: "",
     quantity: "",
     unitPrice: "",
+    binId: "",
   };
 }
 
@@ -41,16 +44,18 @@ export default function InventoryPurchasePage() {
   const router = useRouter();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [bins, setBins] = useState<Bin[]>([]);
   const [purWh, setPurWh] = useState("");
   const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
   const [busy, setBusy] = useState(false);
 
   const loadWh = useCallback(async () => {
     if (!token) return;
-    const [w, p, cfg] = await Promise.all([
+    const [w, p, cfg, b] = await Promise.all([
       apiFetch("/api/inventory/warehouses"),
       apiFetch("/api/products"),
       apiFetch("/api/inventory/settings"),
+      apiFetch("/api/inventory/bins"),
     ]);
     if (w.ok) {
       const list = (await w.json()) as Warehouse[];
@@ -69,6 +74,9 @@ export default function InventoryPurchasePage() {
         j.defaultWarehouseId ?? j.defaultWarehouseResolvedId ?? null;
       if (def) setPurWh((prev) => prev || def);
     }
+    if (b.ok) {
+      setBins((await b.json()) as Bin[]);
+    }
   }, [token]);
 
   useEffect(() => {
@@ -78,7 +86,7 @@ export default function InventoryPurchasePage() {
 
   async function submitPurchase(e: FormEvent) {
     e.preventDefault();
-    const parsed: { productId: string; quantity: number; unitPrice: number }[] =
+    const parsed: { productId: string; quantity: number; unitPrice: number; binId?: string }[] =
       [];
     for (const row of lines) {
       if (!row.productId.trim()) continue;
@@ -91,6 +99,7 @@ export default function InventoryPurchasePage() {
         productId: row.productId.trim(),
         quantity: q,
         unitPrice: u,
+        binId: row.binId.trim() || undefined,
       });
     }
     if (!purWh || parsed.length === 0) {
@@ -170,6 +179,7 @@ export default function InventoryPurchasePage() {
                 <th className="px-3 py-2 font-semibold">{t("inventory.purchaseColProduct")}</th>
                 <th className="px-3 py-2 font-semibold w-28">{t("inventory.purchaseColQty")}</th>
                 <th className="px-3 py-2 font-semibold w-32">{t("inventory.purchaseColPrice")}</th>
+                <th className="px-3 py-2 font-semibold">{t("inventory.purchaseColBin")}</th>
                 <th className="px-3 py-2 w-12" />
               </tr>
             </thead>
@@ -195,6 +205,29 @@ export default function InventoryPurchasePage() {
                           {p.name} ({p.sku})
                         </option>
                       ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2 align-middle">
+                    <select
+                      value={row.binId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLines((prev) =>
+                          prev.map((x, i) =>
+                            i === idx ? { ...x, binId: v } : x,
+                          ),
+                        );
+                      }}
+                      className={inputFieldWideClass}
+                    >
+                      <option value="">{t("inventory.purchaseBinAuto")}</option>
+                      {bins
+                        .filter((b) => !purWh || b.warehouseId === purWh)
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.code}
+                          </option>
+                        ))}
                     </select>
                   </td>
                   <td className="px-3 py-2 align-middle">

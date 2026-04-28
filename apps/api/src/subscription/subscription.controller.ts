@@ -1,10 +1,14 @@
-import { Body, Controller, Get, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { BillingStatus, UserRole } from "@dayday/database";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import type { AuthUser } from "../auth/types/auth-user";
 import { AccessControlService } from "../access/access-control.service";
 import { OrganizationId } from "../common/org-id.decorator";
 import { QuotaService } from "../quota/quota.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { SubscriptionAccessService } from "./subscription-access.service";
 import { SelectPlanDto } from "./dto/select-plan.dto";
 import { UpdateSubscriptionModulesDto } from "./dto/update-subscription-modules.dto";
@@ -17,6 +21,7 @@ export class SubscriptionController {
     private readonly access: SubscriptionAccessService,
     private readonly accessControl: AccessControlService,
     private readonly quota: QuotaService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get("me")
@@ -31,6 +36,10 @@ export class SubscriptionController {
       this.quota.getInvoiceMonthlyQuotaSnapshot(organizationId),
       this.quota.getStorageQuotaSnapshot(organizationId),
     ]);
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { billingStatus: true },
+    });
     const expiresAt = snapshot.expiresAt;
     const now = Date.now();
     const readOnly =
@@ -51,6 +60,7 @@ export class SubscriptionController {
       modules: snapshot.modules,
       expiresAt: expiresAt?.toISOString() ?? null,
       isTrial: snapshot.isTrial,
+      billingStatus: org?.billingStatus ?? BillingStatus.ACTIVE,
       readOnly,
       trialDaysLeft,
       quotas: { employees, invoicesThisMonth, storage },
@@ -58,6 +68,8 @@ export class SubscriptionController {
   }
 
   @Post("select-plan")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER)
   @ApiOperation({ summary: "Смена тарифа (мок, без оплаты)" })
   async selectPlan(
     @CurrentUser() user: AuthUser,
@@ -70,6 +82,8 @@ export class SubscriptionController {
   }
 
   @Patch("modules")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER)
   @ApiOperation({
     summary:
       "Включение/выключение модулей подписки (каталог + legacy production/ifrs)",

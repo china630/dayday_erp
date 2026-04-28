@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import {
   BankStatementChannel,
   BankStatementLineOrigin,
-  type BankStatementLineType,
+  BankStatementLineType,
   type Prisma,
   Prisma as DbPrisma,
 } from "@dayday/database";
@@ -61,6 +61,68 @@ export class BankIntegrationService {
       data: { bankWebhookSecret: secret },
     });
     return secret;
+  }
+
+  private async autoMatchOutgoingForLine(
+    organizationId: string,
+    lineId: string,
+  ): Promise<boolean> {
+    const line = await this.prisma.bankStatementLine.findFirst({
+      where: { id: lineId, organizationId },
+      select: { id: true, isMatched: true, type: true, amount: true },
+    });
+    if (!line || line.isMatched || line.type !== BankStatementLineType.OUTFLOW) {
+      return false;
+    }
+    const amount = new Decimal(line.amount);
+    const sentDrafts = await (this.prisma as any).bankPaymentDraft.findMany({
+      where: { organizationId, status: "SENT" },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+    });
+    const draftMatch = sentDrafts.filter((d: { amount: unknown }) =>
+      new Decimal(String(d.amount ?? "0")).equals(amount),
+    );
+    if (draftMatch.length === 1) {
+      await this.prisma.$transaction(async (tx) => {
+        await (tx as any).bankPaymentDraft.update({
+          where: { id: draftMatch[0].id },
+          data: { status: "COMPLETED", completedAt: new Date() },
+        });
+        await tx.bankStatementLine.update({
+          where: { id: line.id },
+          data: { isMatched: true },
+        });
+      });
+      return true;
+    }
+
+    const sentRegistries = await (this.prisma as any).salaryRegistry.findMany({
+      where: { organizationId, status: "SENT" },
+      include: { payrollRun: { include: { slips: { select: { net: true } } } } },
+      take: 100,
+    });
+    const salaryMatch = sentRegistries.filter((r: { payrollRun?: { slips?: Array<{ net: unknown }> } }) => {
+      const total = (r.payrollRun?.slips ?? []).reduce(
+        (sum, s) => sum.add(new Decimal(String(s.net ?? "0"))),
+        new Decimal(0),
+      );
+      return total.equals(amount);
+    });
+    if (salaryMatch.length === 1) {
+      await this.prisma.$transaction(async (tx) => {
+        await (tx as any).salaryRegistry.update({
+          where: { id: salaryMatch[0].id },
+          data: { status: "PAID" },
+        });
+        await tx.bankStatementLine.update({
+          where: { id: line.id },
+          data: { isMatched: true },
+        });
+      });
+      return true;
+    }
+    return false;
   }
 
   getPublicApiBaseUrl(): string {
@@ -233,6 +295,8 @@ export class BankIntegrationService {
     for (const lineId of created) {
       const m = await this.bankMatch.tryAutoMatchLine(organizationId, lineId);
       if (m.autoMatched) autoMatched += 1;
+      const outMatched = await this.autoMatchOutgoingForLine(organizationId, lineId);
+      if (outMatched) autoMatched += 1;
     }
 
     return {
@@ -338,6 +402,8 @@ export class BankIntegrationService {
     for (const lineId of createdLineIds) {
       const m = await this.bankMatch.tryAutoMatchLine(org.id, lineId);
       if (m.autoMatched) autoMatched += 1;
+      const outMatched = await this.autoMatchOutgoingForLine(org.id, lineId);
+      if (outMatched) autoMatched += 1;
     }
 
     await this.patchBankingDirectSettings(org.id, {

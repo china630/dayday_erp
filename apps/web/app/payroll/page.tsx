@@ -43,6 +43,23 @@ type RunRow = {
   _count: { slips: number };
 };
 
+type OrgBankAccount = {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  currency: string;
+  iban: string | null;
+  swift: string | null;
+};
+
+type SalaryRegistryRow = {
+  id: string;
+  status: "DRAFT" | "SENT" | "PAID";
+  payoutFormat: "ABB_XML" | "UNIVERSAL_XLSX";
+  externalId: string | null;
+  bankAccount?: { bankName: string; accountNumber: string; currency: string } | null;
+};
+
 type EmpOpt = { id: string; firstName: string; lastName: string };
 
 type AbsenceTypeOpt = { id: string; nameAz: string; code: string; formula: string };
@@ -157,6 +174,13 @@ function PayrollPageInner() {
   const [importTimesheet, setImportTimesheet] = useState(false);
   const [approvedTimesheetId, setApprovedTimesheetId] = useState<string | null>(null);
   const [postingRunId, setPostingRunId] = useState<string | null>(null);
+  const [payingRunId, setPayingRunId] = useState<string | null>(null);
+  const [payoutModalOpen, setPayoutModalOpen] = useState(false);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+  const [orgBankAccounts, setOrgBankAccounts] = useState<OrgBankAccount[]>([]);
+  const [registries, setRegistries] = useState<SalaryRegistryRow[]>([]);
+  const [markPaidBusyId, setMarkPaidBusyId] = useState<string | null>(null);
+  const [downloadBusyId, setDownloadBusyId] = useState<string | null>(null);
   const [taxDetailsSlipId, setTaxDetailsSlipId] = useState<string | null>(null);
   const [deletingAbsenceId, setDeletingAbsenceId] = useState<string | null>(null);
   const payrollBusy = payrollJob !== null;
@@ -266,6 +290,21 @@ function PayrollPageInner() {
     if (!ready || !token) return;
     void loadAbsencesBlock();
   }, [loadAbsencesBlock, ready, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    void (async () => {
+      const res = await apiFetch("/api/hr/payroll/bank-accounts");
+      if (!res.ok) {
+        setOrgBankAccounts([]);
+        setSelectedBankAccountId("");
+        return;
+      }
+      const rows = (await res.json()) as OrgBankAccount[];
+      setOrgBankAccounts(rows);
+      setSelectedBankAccountId(rows[0]?.id ?? "");
+    })();
+  }, [token]);
 
   useEffect(() => {
     if (employees.length === 0) return;
@@ -418,6 +457,82 @@ function PayrollPageInner() {
     setPostingRunId(null);
   }
 
+  async function payRun(id: string) {
+    if (!token || !selectedBankAccountId || payingRunId) return;
+    setPayingRunId(id);
+    const res = await apiFetch(`/api/hr/payroll/runs/${id}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bankAccountId: selectedBankAccountId }),
+    });
+    const raw = await res.text();
+    if (!res.ok) {
+      alert(raw);
+      setPayingRunId(null);
+      return;
+    }
+    setPayoutModalOpen(false);
+    await load();
+    const regsRes = await apiFetch(`/api/hr/payroll/runs/${id}/registries`);
+    if (regsRes.ok) setRegistries((await regsRes.json()) as SalaryRegistryRow[]);
+    if (detailId === id) {
+      const r = await apiFetch(`/api/hr/payroll/runs/${id}`);
+      if (r.ok) setDetail(await r.json());
+    }
+    setPayingRunId(null);
+    alert(t("payroll.payRunSuccess"));
+  }
+
+  async function loadRegistries(runId: string) {
+    const res = await apiFetch(`/api/hr/payroll/runs/${runId}/registries`);
+    if (res.ok) {
+      setRegistries((await res.json()) as SalaryRegistryRow[]);
+    } else {
+      setRegistries([]);
+    }
+  }
+
+  async function downloadRegistryExport(registryId: string) {
+    setDownloadBusyId(registryId);
+    const linkRes = await apiFetch(`/api/hr/payroll/registries/${registryId}/export-link`);
+    if (!linkRes.ok) {
+      alert(await linkRes.text());
+      setDownloadBusyId(null);
+      return;
+    }
+    const linkBody = (await linkRes.json()) as { url: string };
+    const fileRes = await apiFetch(linkBody.url);
+    if (!fileRes.ok) {
+      alert(await fileRes.text());
+      setDownloadBusyId(null);
+      return;
+    }
+    const blob = await fileRes.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `salary-registry-${registryId}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setDownloadBusyId(null);
+  }
+
+  async function markRegistryPaid(registryId: string, runId: string) {
+    setMarkPaidBusyId(registryId);
+    const res = await apiFetch(`/api/hr/payroll/registries/${registryId}/mark-paid`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      alert(await res.text());
+      setMarkPaidBusyId(null);
+      return;
+    }
+    await loadRegistries(runId);
+    setMarkPaidBusyId(null);
+  }
+
   async function openDetail(id: string) {
     if (!token) return;
     setDetailId(id);
@@ -495,6 +610,7 @@ function PayrollPageInner() {
     }
     if (detailId === currentRun.id) return;
     void openDetail(currentRun.id);
+    void loadRegistries(currentRun.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRun]);
 
@@ -620,6 +736,16 @@ function PayrollPageInner() {
                   onClick={() => void postRun(currentRun.id)}
                 >
                   {postingRunId === currentRun.id ? "…" : t("payroll.post")}
+                </button>
+              ) : null}
+              {currentRun.status === "POSTED" ? (
+                <button
+                  type="button"
+                  className={PRIMARY_BUTTON_CLASS}
+                  disabled={orgBankAccounts.length === 0 || payrollBusy}
+                  onClick={() => setPayoutModalOpen(true)}
+                >
+                  {t("payroll.payRun")}
                 </button>
               ) : null}
             </div>
@@ -858,6 +984,51 @@ function PayrollPageInner() {
       </section>
 
       <section className="space-y-3">
+        {currentRun ? (
+          <div className={`${CARD_CONTAINER_CLASS} p-4`}>
+            <h3 className="text-sm font-semibold text-[#34495E] mb-2">{t("payroll.salaryRegistries")}</h3>
+            {registries.length === 0 ? (
+              <p className="text-sm text-[#7F8C8D]">—</p>
+            ) : (
+              <div className="space-y-2">
+                {registries.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-2 border border-[#D5DADF] rounded-[2px] px-3 py-2"
+                  >
+                    <div className="text-sm text-[#34495E]">
+                      <span className="font-medium">{r.payoutFormat}</span> ·{" "}
+                      {r.bankAccount ? `${r.bankAccount.bankName} (${r.bankAccount.currency})` : "—"} ·{" "}
+                      <span className="uppercase">{r.status}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {r.payoutFormat === "UNIVERSAL_XLSX" && r.status !== "DRAFT" ? (
+                        <button
+                          type="button"
+                          className={SECONDARY_BUTTON_CLASS}
+                          disabled={downloadBusyId === r.id}
+                          onClick={() => void downloadRegistryExport(r.id)}
+                        >
+                          {downloadBusyId === r.id ? "…" : t("payroll.downloadRegistry")}
+                        </button>
+                      ) : null}
+                      {r.status === "SENT" ? (
+                        <button
+                          type="button"
+                          className={PRIMARY_BUTTON_CLASS}
+                          disabled={markPaidBusyId === r.id}
+                          onClick={() => currentRun && void markRegistryPaid(r.id, currentRun.id)}
+                        >
+                          {markPaidBusyId === r.id ? "…" : t("payroll.markRegistryPaid")}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {loading && <p className="text-gray-600">{t("common.loading")}</p>}
         {!loading && !error && !currentRun && (
@@ -983,6 +1154,47 @@ function PayrollPageInner() {
         year={year}
         month={month}
       />
+
+      {payoutModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className={`${CARD_CONTAINER_CLASS} w-full max-w-lg bg-white p-5`}>
+            <h3 className="text-base font-semibold text-[#34495E]">{t("payroll.payRun")}</h3>
+            <p className="mt-1 text-sm text-[#7F8C8D]">{t("payroll.payRunHint")}</p>
+            <label className="mt-4 block text-sm text-[#34495E]">
+              {t("payroll.bankAccount")}
+              <select
+                className="mt-1 block w-full rounded-[2px] border border-[#D5DADF] bg-white px-2 py-2"
+                value={selectedBankAccountId}
+                onChange={(e) => setSelectedBankAccountId(e.target.value)}
+              >
+                {orgBankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.bankName} • {a.accountNumber} ({a.currency})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                onClick={() => setPayoutModalOpen(false)}
+                disabled={Boolean(payingRunId)}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className={PRIMARY_BUTTON_CLASS}
+                onClick={() => currentRun && void payRun(currentRun.id)}
+                disabled={!currentRun || !selectedBankAccountId || Boolean(payingRunId)}
+              >
+                {payingRunId ? "…" : t("payroll.payRunConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

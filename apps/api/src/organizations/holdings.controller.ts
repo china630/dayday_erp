@@ -89,6 +89,36 @@ export class HoldingsController {
     });
   }
 
+  @Get(":id/balances-summary")
+  @ApiOperation({
+    summary:
+      "Holding cash & bank balances summary (bank sync data consolidated to holding base currency)",
+  })
+  async balancesSummary(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.holdingsReporting.getHoldingBalancesSummaryForUser(user.userId, id);
+  }
+
+  @Get(":id/tax-risk-monitor")
+  @ApiOperation({
+    summary:
+      "Holding tax risk monitor: counterparties marked as risky taxpayers from e-taxes lookup",
+  })
+  async taxRiskMonitor(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.holdingsReporting.getHoldingTaxRiskMonitor(user.userId, id);
+  }
+
+  @Post(":id/sync-bank-balances")
+  @ApiOperation({
+    summary:
+      "Force enqueue bank balances sync for all organizations in holding (BullMQ)",
+  })
+  async forceSyncBankBalances(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+  ) {
+    return this.holdingsReporting.triggerManualBankSync(user.userId, id);
+  }
+
   @Get(":id/members")
   @ApiOperation({ summary: "Участники холдинга (только владелец холдинга)" })
   async listMembers(

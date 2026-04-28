@@ -487,6 +487,11 @@ export class CashOrderService {
     const cash = order.cashAccountCode;
     assertValidCashDeskAccountCode(cash);
     const offset = order.offsetAccountCode.trim();
+    if (offset === "301" && order.kind !== CashOrderKind.KMO) {
+      throw new BadRequestException(
+        "Capital contribution to equity (301) in cash desk must be posted as KMO (Dr 101* / Cr 301)",
+      );
+    }
     const cashPaid = new Decimal(order.amount);
     const wht =
       order.withholdingTaxAmount != null

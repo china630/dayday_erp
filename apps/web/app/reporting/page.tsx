@@ -5,7 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api-client";
-import { canCloseAccountingPeriod } from "../../lib/role-utils";
+import {
+  canCloseAccountingPeriod,
+  canUsePlDepartmentFilter,
+} from "../../lib/role-utils";
 import { ledgerQueryParam, useLedger } from "../../lib/ledger-context";
 import { formatMoneyAzn } from "../../lib/format-money";
 import { CHART_ACCOUNT_NAMES_AZ } from "../../lib/i18n/chart-account-names-az";
@@ -108,8 +111,10 @@ export default function ReportingPage() {
   const [closing, setClosing] = useState(false);
   const [closeMsg, setCloseMsg] = useState<string | null>(null);
   const canClose = canCloseAccountingPeriod(user?.role ?? undefined);
+  const canFilterPlByDepartment = canUsePlDepartmentFilter(user?.role ?? undefined);
   const [plDepartments, setPlDepartments] = useState<{ id: string; name: string }[]>([]);
   const [plDepartmentId, setPlDepartmentId] = useState("");
+  const [exportBusy, setExportBusy] = useState<null | "tb-pdf" | "tb-xlsx" | "pl-pdf" | "pl-xlsx">(null);
 
   const loadTb = useCallback(async () => {
     if (!token) return;
@@ -174,7 +179,7 @@ export default function ReportingPage() {
     setLoading("pl");
     setErr(null);
     let path = `/api/reporting/pl?dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}&${ledgerQueryParam(ledgerType)}`;
-    if (plDepartmentId.trim()) {
+    if (canFilterPlByDepartment && plDepartmentId.trim()) {
       path += `&departmentId=${encodeURIComponent(plDepartmentId.trim())}`;
     }
     const res = await apiFetch(path);
@@ -186,7 +191,44 @@ export default function ReportingPage() {
     }
     setPl((await res.json()) as PlPayload);
     setActiveReport("pl");
-  }, [from, to, token, t, ledgerType, plDepartmentId]);
+  }, [from, to, token, t, ledgerType, plDepartmentId, canFilterPlByDepartment]);
+
+  async function exportReport(kind: "tb" | "pl", format: "pdf" | "xlsx") {
+    if (!token) return;
+    const key = `${kind}-${format}` as typeof exportBusy;
+    setExportBusy(key);
+    try {
+      const qs = new URLSearchParams({
+        dateFrom: from,
+        dateTo: to,
+        ledgerType,
+        format,
+      });
+      if (kind === "pl" && canFilterPlByDepartment && plDepartmentId.trim()) {
+        qs.set("departmentId", plDepartmentId.trim());
+      }
+      const path =
+        kind === "tb"
+          ? `/api/reporting/trial-balance/export?${qs.toString()}`
+          : `/api/reporting/pl/export?${qs.toString()}`;
+      const res = await apiFetch(path);
+      if (!res.ok) {
+        setErr(`${t("reporting.exportErr", { defaultValue: "Export failed" })}: ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${kind}-${from}-${to}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setExportBusy(null);
+    }
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -307,21 +349,23 @@ export default function ReportingPage() {
               className={`rounded-[2px] border bg-white px-2 py-1.5 text-sm text-[#34495E] ${BORDER_MUTED_CLASS}`}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-medium text-[#34495E]">
-            <span>{t("reporting.plDepartment")}</span>
-            <select
-              value={plDepartmentId}
-              onChange={(e) => setPlDepartmentId(e.target.value)}
-              className={`rounded-[2px] border bg-white px-2 py-1.5 text-sm font-normal min-w-[180px] text-[#34495E] ${BORDER_MUTED_CLASS}`}
-            >
-              <option value="">{t("reporting.plDepartmentAll")}</option>
-              {plDepartments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {canFilterPlByDepartment && (
+            <label className="flex flex-col gap-1 text-sm font-medium text-[#34495E]">
+              <span>{t("reporting.plDepartment")}</span>
+              <select
+                value={plDepartmentId}
+                onChange={(e) => setPlDepartmentId(e.target.value)}
+                className={`rounded-[2px] border bg-white px-2 py-1.5 text-sm font-normal min-w-[180px] text-[#34495E] ${BORDER_MUTED_CLASS}`}
+              >
+                <option value="">{t("reporting.plDepartmentAll")}</option>
+                {plDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <div
@@ -356,6 +400,14 @@ export default function ReportingPage() {
           <p className="text-sm text-slate-500">
             {tb.dateFrom} — {tb.dateTo}
           </p>
+          <div className="flex gap-2">
+            <button className={PRIMARY_BUTTON_CLASS} disabled={Boolean(exportBusy)} onClick={() => void exportReport("tb", "pdf")}>
+              {exportBusy === "tb-pdf" ? "…" : t("reporting.exportPdf", { defaultValue: "Экспорт PDF" })}
+            </button>
+            <button className={PRIMARY_BUTTON_CLASS} disabled={Boolean(exportBusy)} onClick={() => void exportReport("tb", "xlsx")}>
+              {exportBusy === "tb-xlsx" ? "…" : t("reporting.exportXlsx", { defaultValue: "Экспорт XLSX" })}
+            </button>
+          </div>
           {tb.rows.length === 0 ? (
             <EmptyState title={t("reporting.tbTitle")} description={t("reporting.emptyTb")} />
           ) : (
@@ -452,6 +504,14 @@ export default function ReportingPage() {
           <p className="text-[13px] text-[#7F8C8D]">
             {pl.dateFrom} — {pl.dateTo}
           </p>
+          <div className="flex gap-2">
+            <button className={PRIMARY_BUTTON_CLASS} disabled={Boolean(exportBusy)} onClick={() => void exportReport("pl", "pdf")}>
+              {exportBusy === "pl-pdf" ? "…" : t("reporting.exportPdf", { defaultValue: "Экспорт PDF" })}
+            </button>
+            <button className={PRIMARY_BUTTON_CLASS} disabled={Boolean(exportBusy)} onClick={() => void exportReport("pl", "xlsx")}>
+              {exportBusy === "pl-xlsx" ? "…" : t("reporting.exportXlsx", { defaultValue: "Экспорт XLSX" })}
+            </button>
+          </div>
           <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
             <table className="w-full text-sm">
               <thead>

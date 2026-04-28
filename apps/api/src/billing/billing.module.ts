@@ -13,6 +13,7 @@ import { BillingService } from "./billing.service";
 import { BillingMonthlyQueueService } from "./billing-monthly.queue";
 import { BillingMonthlyWorker } from "./billing-monthly.worker";
 import { BillingMonthlyService } from "./billing-monthly.service";
+import { BillingNotificationService } from "./billing-notification.service";
 import { BillingToggleService } from "./billing-toggle.service";
 import { OrganizationModuleService } from "./organization-module.service";
 import { PaymentProviderService } from "./payment-provider.service";
@@ -35,6 +36,7 @@ import { PashaBankPaymentProvider } from "./providers/pasha-bank-payment.provide
     PaymentProviderService,
     PashaBankPaymentProvider,
     BillingToggleService,
+    BillingNotificationService,
     BillingMonthlyService,
     BillingMonthlyQueueService,
     BillingMonthlyWorker,

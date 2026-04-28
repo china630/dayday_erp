@@ -17,6 +17,7 @@ import type { Request, Response } from "express";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { Public } from "./decorators/public.decorator";
 import { AuthService } from "./auth.service";
+import { AcceptInviteTokenDto } from "./dto/accept-invite-token.dto";
 import { CreateOrgDto } from "./dto/create-org.dto";
 import { JoinOrgDto } from "./dto/join-org.dto";
 import { LoginDto } from "./dto/login.dto";
@@ -170,5 +171,16 @@ export class AuthController {
   @ApiOperation({ summary: "Принять приглашение в организацию" })
   acceptInvite(@Param("id") inviteId: string, @CurrentUser() user: AuthUser) {
     return this.auth.acceptInvite(user.userId, user.email, inviteId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post("invites/accept-by-token")
+  @ApiOperation({ summary: "Принять приглашение по invite token" })
+  acceptInviteByToken(
+    @Body() dto: AcceptInviteTokenDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.auth.acceptInviteByToken(user.userId, user.email, dto.token);
   }
 }

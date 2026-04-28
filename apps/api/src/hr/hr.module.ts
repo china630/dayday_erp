@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AccountingModule } from "../accounting/accounting.module";
+import { BankingModule } from "../banking/banking.module";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { PrismaModule } from "../prisma/prisma.module";
 import { AbsenceTypesController } from "./absence-types.controller";
@@ -17,9 +18,10 @@ import { PayrollHeavyQueueService } from "./payroll-heavy.queue";
 import { PayrollHeavyWorker } from "./payroll-heavy.worker";
 import { PayrollService } from "./payroll.service";
 import { PayrollExportService } from "./payroll-export.service";
+import { DepartmentHeadScopeService } from "./department-head-scope.service";
 
 @Module({
-  imports: [PrismaModule, AccountingModule],
+  imports: [PrismaModule, AccountingModule, BankingModule],
   controllers: [
     EmployeesController,
     PayrollController,
@@ -38,6 +40,7 @@ import { PayrollExportService } from "./payroll-export.service";
     AbsencesService,
     OrgStructureService,
     TimesheetService,
+    DepartmentHeadScopeService,
     RolesGuard,
   ],
   exports: [OrgStructureService],

@@ -65,6 +65,7 @@ export default function HrTimesheetPage() {
   const [batchFrom, setBatchFrom] = useState(1);
   const [batchTo, setBatchTo] = useState(1);
   const [batchType, setBatchType] = useState<TsEntry["type"]>("VACATION");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
   const lastDay = useMemo(
     () => new Date(year, month, 0).getDate(),
@@ -104,6 +105,7 @@ export default function HrTimesheetPage() {
         setTimesheet(j.timesheet);
         setEmployees(j.employees);
         setEntries(j.entries);
+        setSelectedEmployeeIds((prev) => prev.filter((id) => j.employees.some((e) => e.id === id)));
         setBatchEmp((prev) =>
           prev && j.employees.some((e) => e.id === prev) ? prev : j.employees[0]?.id ?? "",
         );
@@ -124,6 +126,7 @@ export default function HrTimesheetPage() {
 
   const isLocked = timesheet?.status === "APPROVED";
   const canEdit = !readOnlyRole && !isLocked;
+  const canMassApprove = canEdit && selectedEmployeeIds.length > 0;
 
   function cellCode(type: TsEntry["type"]): string {
     switch (type) {
@@ -188,6 +191,22 @@ export default function HrTimesheetPage() {
     }
     const j = await res.json();
     setTimesheet(j.timesheet);
+  }
+
+  async function runMassApprove() {
+    if (!token || !timesheet || !canMassApprove) return;
+    setBusy(true);
+    const res = await apiFetch(`/api/hr/timesheets/${timesheet.id}/approve-mass`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employeeIds: selectedEmployeeIds }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      alert(await res.text());
+      return;
+    }
+    alert(t("timesheet.massApproveOk"));
   }
 
   async function runBatch() {
@@ -333,6 +352,14 @@ export default function HrTimesheetPage() {
             >
               {t("timesheet.confirmBtn")}
             </button>
+            <button
+              type="button"
+              disabled={busy || !canMassApprove}
+              onClick={() => void runMassApprove()}
+              className={SECONDARY_BUTTON_CLASS}
+            >
+              {t("timesheet.massApproveBtn", { defaultValue: "Массово утвердить" })}
+            </button>
             <Link href="/payroll/absences/new" className={SECONDARY_BUTTON_CLASS}>
               {t("hrTimesheet.newAbsence")}
             </Link>
@@ -434,7 +461,23 @@ export default function HrTimesheetPage() {
                 {employees.map((emp) => (
                   <tr key={emp.id} className="border-t border-slate-50">
                     <td className="sticky left-0 z-10 bg-white p-2 font-medium text-gray-900 whitespace-nowrap border-r border-slate-100">
-                      {emp.lastName} {emp.firstName}
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedEmployeeIds.includes(emp.id)}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            setSelectedEmployeeIds((prev) =>
+                              e.target.checked
+                                ? [...prev, emp.id]
+                                : prev.filter((id) => id !== emp.id),
+                            );
+                          }}
+                        />
+                        <span>
+                          {emp.lastName} {emp.firstName}
+                        </span>
+                      </label>
                     </td>
                     {Array.from({ length: lastDay }, (_, i) => i + 1).map((d) => {
                       const key = isoDay(year, month, d);

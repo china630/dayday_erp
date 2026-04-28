@@ -72,6 +72,18 @@ type SyncStatus = {
   webhookUrl: string | null;
 };
 
+type OutboundDraft = {
+  id: string;
+  amount: unknown;
+  currency: string;
+  recipientIban: string;
+  purpose: string;
+  status: "PENDING" | "SENT" | "REJECTED" | "COMPLETED";
+  provider?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+};
+
 function BankingQuickExpenseModal({
   onClose,
   onDone,
@@ -931,11 +943,168 @@ function BankingRegistry({
   );
 }
 
+function OutboundPaymentsSection({ refreshKey }: { refreshKey: number }) {
+  const { t } = useTranslation();
+  const { token, ready } = useRequireAuth();
+  const [rows, setRows] = useState<OutboundDraft[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [fromAccountIban, setFromAccountIban] = useState("");
+  const [recipientIban, setRecipientIban] = useState("");
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("AZN");
+  const [purpose, setPurpose] = useState("");
+  const [provider, setProvider] = useState("pasha");
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    const res = await apiFetch("/api/banking/payment-drafts");
+    if (res.ok) {
+      setRows((await res.json()) as OutboundDraft[]);
+    }
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => {
+    if (!ready || !token) return;
+    void load();
+  }, [ready, token, load, refreshKey]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    const normalizedAmount = Number(amount.replace(",", "."));
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      toast.error("Некорректная сумма");
+      return;
+    }
+    setBusy(true);
+    const res = await apiFetch("/api/banking/payment-drafts/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fromAccountIban: fromAccountIban.trim(),
+        recipientIban: recipientIban.trim(),
+        amount: normalizedAmount,
+        currency: currency.trim().toUpperCase(),
+        purpose: purpose.trim(),
+        provider: provider.trim(),
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const txt = await res.text();
+      toast.error("Не удалось отправить в банк", { description: `${res.status} ${txt}` });
+      return;
+    }
+    toast.success("Платеж отправлен в банк");
+    setRecipientIban("");
+    setAmount("");
+    setPurpose("");
+    await load();
+  }
+
+  if (!ready || !token) return null;
+
+  return (
+    <section className={`${CARD_CONTAINER_CLASS} p-6 space-y-5`}>
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-gray-900 m-0">Исходящие платежи</h3>
+      </div>
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={(e) => void submit(e)}>
+        <input
+          className={FORM_INPUT_CLASS}
+          placeholder="IBAN списания"
+          value={fromAccountIban}
+          onChange={(e) => setFromAccountIban(e.target.value)}
+          required
+        />
+        <input
+          className={FORM_INPUT_CLASS}
+          placeholder="IBAN получателя"
+          value={recipientIban}
+          onChange={(e) => setRecipientIban(e.target.value)}
+          required
+        />
+        <input
+          className={FORM_INPUT_CLASS}
+          placeholder="Сумма"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          required
+        />
+        <select className={FORM_INPUT_CLASS} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+          <option value="AZN">AZN</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
+        <input
+          className={`${FORM_INPUT_CLASS} md:col-span-2`}
+          placeholder="Назначение платежа"
+          value={purpose}
+          onChange={(e) => setPurpose(e.target.value)}
+          required
+        />
+        <select className={FORM_INPUT_CLASS} value={provider} onChange={(e) => setProvider(e.target.value)}>
+          <option value="pasha">Pasha</option>
+          <option value="abb">ABB</option>
+          <option value="birbank">Birbank</option>
+        </select>
+        <div className="flex items-center">
+          <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy}>
+            {busy ? t("common.loading") : "Отправить в банк"}
+          </button>
+        </div>
+      </form>
+      {loading ? <p className="text-sm text-slate-600 m-0">{t("common.loading")}</p> : null}
+      {!loading && (
+        <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/80 text-left">
+                <th className="py-2.5 px-3">Дата</th>
+                <th className="py-2.5 px-3">Получатель</th>
+                <th className="py-2.5 px-3">Назначение</th>
+                <th className="py-2.5 px-3">Провайдер</th>
+                <th className="py-2.5 px-3 text-right">Сумма</th>
+                <th className="py-2.5 px-3">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-slate-50">
+                  <td className="py-2.5 px-3">{String(r.createdAt).slice(0, 10)}</td>
+                  <td className="py-2.5 px-3 font-mono text-xs">{r.recipientIban}</td>
+                  <td className="py-2.5 px-3">{r.purpose}</td>
+                  <td className="py-2.5 px-3">{r.provider ?? "—"}</td>
+                  <td className="py-2.5 px-3 text-right tabular-nums">
+                    {formatMoneyAzn(Number(r.amount))} {r.currency}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs">
+                      {r.status}
+                    </span>
+                    {r.rejectionReason ? (
+                      <div className="text-xs text-rose-700 mt-1">{r.rejectionReason}</div>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function BankingPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [quickExpenseOpen, setQuickExpenseOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"registry" | "outbound">("registry");
 
   const bump = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -980,6 +1149,23 @@ export default function BankingPage() {
 
         <CashAccountCards refreshKey={refreshKey} segmentFilter="BANK" />
 
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={activeTab === "registry" ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}
+            onClick={() => setActiveTab("registry")}
+          >
+            Выписки и сверка
+          </button>
+          <button
+            type="button"
+            className={activeTab === "outbound" ? PRIMARY_BUTTON_CLASS : SECONDARY_BUTTON_CLASS}
+            onClick={() => setActiveTab("outbound")}
+          >
+            Исходящие платежи
+          </button>
+        </div>
+
         <section className={`${CARD_CONTAINER_CLASS} p-6`}>
           <BankingImportCenter
             onImported={() => {
@@ -988,10 +1174,11 @@ export default function BankingPage() {
           />
         </section>
 
-        <BankingRegistry
-          refreshKey={refreshKey}
-          onTreasuryChanged={bump}
-        />
+        {activeTab === "registry" ? (
+          <BankingRegistry refreshKey={refreshKey} onTreasuryChanged={bump} />
+        ) : (
+          <OutboundPaymentsSection refreshKey={refreshKey} />
+        )}
 
         {quickExpenseOpen && (
           <BankingQuickExpenseModal

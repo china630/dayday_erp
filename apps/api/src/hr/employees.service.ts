@@ -1,7 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -40,18 +41,19 @@ export class EmployeesService {
     });
   }
 
-  private async assertPositionSlotAvailable(
+  private async assertPositionSlotAvailableTx(
+    tx: Prisma.TransactionClient,
     organizationId: string,
     positionId: string,
     excludeEmployeeId?: string,
   ) {
-    const pos = await this.prisma.jobPosition.findFirst({
+    const pos = await tx.jobPosition.findFirst({
       where: { id: positionId, department: { organizationId } },
     });
     if (!pos) {
       throw new BadRequestException("Указанная должность не найдена в организации");
     }
-    const cnt = await this.prisma.employee.count({
+    const cnt = await tx.employee.count({
       where: {
         organizationId,
         positionId,
@@ -59,48 +61,72 @@ export class EmployeesService {
       },
     });
     if (cnt >= pos.totalSlots) {
-      throw new ForbiddenException({
-        message:
-          "Исчерпаны штатные единицы по выбранной должности (лимит ставок)",
+      throw new HttpException({
+        statusCode: HttpStatus.PAYMENT_REQUIRED,
         code: "QUOTA_EXCEEDED",
-      });
+        message: "Штатный лимит по этой должности исчерпан",
+        limit: pos.totalSlots,
+        current: cnt,
+      }, HttpStatus.PAYMENT_REQUIRED);
     }
   }
+
+  private static readonly hireGateTxOptions = {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5000,
+    timeout: 15000,
+  } as const;
 
   async create(organizationId: string, dto: CreateEmployeeDto) {
     const kind = dto.kind ?? EmployeeKind.EMPLOYEE;
     if (kind === EmployeeKind.CONTRACTOR && !dto.voen?.trim()) {
       throw new BadRequestException("Для подрядчика (CONTRACTOR) укажите VÖEN (10 цифр)");
     }
-    await this.assertPositionSlotAvailable(organizationId, dto.positionId);
     try {
-      return await this.prisma.employee.create({
-        data: {
-          organizationId,
-          kind,
-          finCode: dto.finCode.trim(),
-          voen:
-            kind === EmployeeKind.CONTRACTOR
-              ? dto.voen!.trim()
-              : (dto.voen?.trim() ?? null),
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          patronymic: dto.patronymic.trim(),
-          positionId: dto.positionId,
-          startDate: new Date(dto.startDate),
-          salary: new Decimal(dto.salary),
-          contractorMonthlySocialAzn:
-            kind === EmployeeKind.CONTRACTOR &&
-            dto.contractorMonthlySocialAzn != null
-              ? new Decimal(dto.contractorMonthlySocialAzn)
-              : null,
+      return await this.prisma.$transaction(
+        async (tx) => {
+          await this.assertPositionSlotAvailableTx(
+            tx,
+            organizationId,
+            dto.positionId,
+          );
+          return tx.employee.create({
+            data: {
+              organizationId,
+              kind,
+              finCode: dto.finCode.trim(),
+              voen:
+                kind === EmployeeKind.CONTRACTOR
+                  ? dto.voen!.trim()
+                  : (dto.voen?.trim() ?? null),
+              firstName: dto.firstName.trim(),
+              lastName: dto.lastName.trim(),
+              patronymic: dto.patronymic.trim(),
+              positionId: dto.positionId,
+              startDate: new Date(dto.startDate),
+              hireDate: new Date(dto.hireDate),
+              salary: new Decimal(dto.salary),
+              initialVacationDays: new Decimal(dto.initialVacationDays ?? 0),
+              avgMonthlySalaryLastYear:
+                dto.avgMonthlySalaryLastYear != null
+                  ? new Decimal(dto.avgMonthlySalaryLastYear)
+                  : null,
+              initialSalaryBalance: new Decimal(dto.initialSalaryBalance ?? 0),
+              contractorMonthlySocialAzn:
+                kind === EmployeeKind.CONTRACTOR &&
+                dto.contractorMonthlySocialAzn != null
+                  ? new Decimal(dto.contractorMonthlySocialAzn)
+                  : null,
+            },
+            include: {
+              jobPosition: {
+                include: { department: { select: { id: true, name: true } } },
+              },
+            },
+          });
         },
-        include: {
-          jobPosition: {
-            include: { department: { select: { id: true, name: true } } },
-          },
-        },
-      });
+        EmployeesService.hireGateTxOptions,
+      );
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         throw new ConflictException("ФИН уже занят в организации");
@@ -133,10 +159,6 @@ export class EmployeesService {
         throw new BadRequestException("Для подрядчика укажите VÖEN (10 цифр)");
       }
     }
-    if (dto.positionId != null && dto.positionId !== current.positionId) {
-      await this.assertPositionSlotAvailable(organizationId, dto.positionId, id);
-    }
-
     const data: Record<string, unknown> = {};
     if (dto.kind != null) data.kind = dto.kind;
     if (dto.finCode != null) data.finCode = dto.finCode.trim();
@@ -148,6 +170,7 @@ export class EmployeesService {
     }
     if (dto.positionId != null) data.positionId = dto.positionId;
     if (dto.startDate != null) data.startDate = new Date(dto.startDate);
+    if (dto.hireDate != null) data.hireDate = new Date(dto.hireDate);
     if (dto.salary != null) data.salary = new Decimal(dto.salary);
     if (dto.voen !== undefined) {
       data.voen = dto.voen.trim() || null;
@@ -157,6 +180,24 @@ export class EmployeesService {
         dto.contractorMonthlySocialAzn == null
           ? null
           : new Decimal(dto.contractorMonthlySocialAzn);
+    }
+    if (dto.initialSalaryBalance !== undefined) {
+      data.initialSalaryBalance =
+        dto.initialSalaryBalance == null
+          ? new Decimal(0)
+          : new Decimal(dto.initialSalaryBalance);
+    }
+    if (dto.initialVacationDays !== undefined) {
+      data.initialVacationDays =
+        dto.initialVacationDays == null
+          ? new Decimal(0)
+          : new Decimal(dto.initialVacationDays);
+    }
+    if (dto.avgMonthlySalaryLastYear !== undefined) {
+      data.avgMonthlySalaryLastYear =
+        dto.avgMonthlySalaryLastYear == null
+          ? null
+          : new Decimal(dto.avgMonthlySalaryLastYear);
     }
     if (dto.accountableAccountCode244 !== undefined) {
       const v = dto.accountableAccountCode244?.trim();
@@ -172,8 +213,13 @@ export class EmployeesService {
       data.voen =
         typeof v === "string" && v.trim() ? v.trim() : v;
     }
-    try {
-      return await this.prisma.employee.update({
+    const positionChanged =
+      dto.positionId != null && dto.positionId !== current.positionId;
+
+    const runUpdate = async (
+      client: Pick<typeof this.prisma, "employee">,
+    ) =>
+      client.employee.update({
         where: { id },
         data,
         include: {
@@ -182,6 +228,23 @@ export class EmployeesService {
           },
         },
       });
+
+    try {
+      if (positionChanged) {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            await this.assertPositionSlotAvailableTx(
+              tx,
+              organizationId,
+              dto.positionId!,
+              id,
+            );
+            return runUpdate(tx);
+          },
+          EmployeesService.hireGateTxOptions,
+        );
+      }
+      return await runUpdate(this.prisma);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         throw new ConflictException("ФИН уже занят в организации");

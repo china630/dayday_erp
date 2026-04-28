@@ -83,7 +83,27 @@ export function AbsenceModal({
       }),
     });
     if (!res.ok) {
-      toast.error(t("common.saveErr"), { description: await res.text() });
+      let message = await res.text();
+      try {
+        const body = JSON.parse(message) as {
+          code?: string;
+          conflict?: {
+            absenceTypeName?: string;
+            startDate?: string;
+            endDate?: string;
+          };
+        };
+        if (body.code === "ABSENCE_OVERLAP" && body.conflict) {
+          message = t("payroll.absenceOverlapConflict", {
+            type: body.conflict.absenceTypeName ?? "absence",
+            from: body.conflict.startDate ?? "—",
+            to: body.conflict.endDate ?? "—",
+          });
+        }
+      } catch {
+        /* keep raw text */
+      }
+      toast.error(t("common.saveErr"), { description: message });
       setBusy(false);
       return;
     }

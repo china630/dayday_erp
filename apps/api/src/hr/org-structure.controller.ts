@@ -42,6 +42,8 @@ export class OrgStructureController {
   }
 
   @Post("departments")
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: "Создать подразделение" })
   createDepartment(
     @OrganizationId() organizationId: string,

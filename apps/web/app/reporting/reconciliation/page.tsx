@@ -213,12 +213,20 @@ export default function ReconciliationPage() {
     }
     setNettingBusy(true);
     setNettingErr(null);
+    const suggested =
+      nettingPreview != null ? Number(nettingPreview.suggestedAmount) : undefined;
     const res = await apiFetch(
       `/api/reporting/netting?${ledgerQueryParam(ledgerType)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ counterpartyId: cpId, amount: amt }),
+        body: JSON.stringify({
+          counterpartyId: cpId,
+          amount: amt,
+          ...(suggested != null && Number.isFinite(suggested)
+            ? { previewSuggestedAmount: suggested }
+            : {}),
+        }),
       },
     );
     setNettingBusy(false);
@@ -363,6 +371,9 @@ export default function ReconciliationPage() {
           ) : (
             <>
               <span className="block">{t("reconciliation.nettingFormBtn")}</span>
+              <span className="block text-[11px] font-semibold opacity-95 mt-0.5">
+                {t("invoiceView.payByNetting")}
+              </span>
               <span className="block text-[11px] font-normal opacity-90 mt-0.5">
                 {t("reconciliation.nettingFormBtnAz")}
               </span>

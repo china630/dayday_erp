@@ -1,23 +1,34 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import {
+  FixedAssetStatus,
   LedgerType,
+  InvoiceStatus,
   Prisma,
   UserRole,
-  type Account,
 } from "@dayday/database";
 import { assertMayPostManualJournal } from "../auth/policies/invoice-finance.policy";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   getClosedPeriodKeys,
+  getLockedPeriodUntil,
+  monthRangeUtc,
   monthKeyUtc,
 } from "../reporting/reporting-period.util";
+import { IfrsAutoMappingService } from "./ifrs-auto-mapping.service";
 
 type Decimal = Prisma.Decimal;
 const Decimal = Prisma.Decimal;
+function asCount(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "string") return Number(v) || 0;
+  return 0;
+}
 
 export type PostTransactionLine = {
   accountCode: string;
@@ -27,9 +38,12 @@ export type PostTransactionLine = {
 
 @Injectable()
 export class AccountingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ifrsAutoMapping: IfrsAutoMappingService,
+  ) {}
 
-  private validateLines(lines: PostTransactionLine[]): void {
+  validateBalance(lines: PostTransactionLine[]): void {
     if (!lines?.length) {
       throw new BadRequestException("lines required");
     }
@@ -69,6 +83,7 @@ export class AccountingService {
       counterpartyId?: string | null;
       /** ЦФО: фильтр P&L по департаменту для расходных/прочих проводок. */
       departmentId?: string | null;
+      ledgerType?: LedgerType;
       lines: PostTransactionLine[];
     },
   ): Promise<{ transactionId: string }> {
@@ -80,9 +95,10 @@ export class AccountingService {
       isFinal,
       counterpartyId,
       departmentId,
+      ledgerType = LedgerType.NAS,
       lines,
     } = params;
-    this.validateLines(lines);
+    this.validateBalance(lines);
 
     const org = await tx.organization.findUnique({
       where: { id: organizationId },
@@ -95,16 +111,20 @@ export class AccountingService {
         `Период ${key} закрыт: новые проводки на эту дату недоступны`,
       );
     }
+    const lockedPeriodUntil = getLockedPeriodUntil(org?.settings);
+    if (lockedPeriodUntil && date.getTime() <= lockedPeriodUntil.getTime()) {
+      throw new HttpException("Период закрыт для изменений", 423);
+    }
 
     const codes = [...new Set(lines.map((l) => l.accountCode))];
     const accounts = await tx.account.findMany({
       where: {
         organizationId,
         code: { in: codes },
-        ledgerType: LedgerType.NAS,
+        ledgerType,
       },
     });
-    const byCode = new Map<string, Account>();
+    const byCode = new Map<string, { id: string; code: string }>();
     for (const acc of accounts) {
       byCode.set(acc.code, acc);
     }
@@ -137,6 +157,7 @@ export class AccountingService {
     });
 
     const nasLines: Array<{
+      accountCode: string;
       accountId: string;
       debit: Decimal;
       credit: Decimal;
@@ -156,63 +177,27 @@ export class AccountingService {
           accountId: account.id,
           debit,
           credit,
-          ledgerType: LedgerType.NAS,
+          ledgerType,
         },
       });
-      nasLines.push({ accountId: account.id, debit, credit });
+      nasLines.push({
+        accountCode: line.accountCode,
+        accountId: account.id,
+        debit,
+        credit,
+      });
     }
 
-    await this.translateToIFRS(tx, organizationId, transaction.id, nasLines);
+    if (ledgerType === LedgerType.NAS) {
+      await this.ifrsAutoMapping.mirrorFromNas({
+        tx,
+        organizationId,
+        transactionId: transaction.id,
+        nasLines,
+      });
+    }
 
     return { transactionId: transaction.id };
-  }
-
-  /**
-   * Теневые проводки IFRS для той же транзакции: только если у всех задействованных
-   * NAS-счетов есть маппинг и после коэффициентов сумма Дт = Кт.
-   */
-  private async translateToIFRS(
-    tx: Prisma.TransactionClient,
-    organizationId: string,
-    transactionId: string,
-    nasLines: Array<{ accountId: string; debit: Decimal; credit: Decimal }>,
-  ): Promise<void> {
-    if (nasLines.length === 0) return;
-    const nasIds = [...new Set(nasLines.map((l) => l.accountId))];
-    const mappings = await tx.accountMapping.findMany({
-      where: { organizationId, nasAccountId: { in: nasIds } },
-    });
-    const mapByNas = new Map(mappings.map((m) => [m.nasAccountId, m]));
-    for (const id of nasIds) {
-      if (!mapByNas.has(id)) return;
-    }
-    let sumDr = new Decimal(0);
-    let sumCr = new Decimal(0);
-    for (const line of nasLines) {
-      const m = mapByNas.get(line.accountId)!;
-      const ratio = new Decimal(m.ratio);
-      sumDr = sumDr.add(line.debit.mul(ratio));
-      sumCr = sumCr.add(line.credit.mul(ratio));
-    }
-    if (!sumDr.equals(sumCr)) return;
-
-    for (const line of nasLines) {
-      const m = mapByNas.get(line.accountId)!;
-      const ratio = new Decimal(m.ratio);
-      const d = line.debit.mul(ratio);
-      const c = line.credit.mul(ratio);
-      if (d.isZero() && c.isZero()) continue;
-      await tx.journalEntry.create({
-        data: {
-          organizationId,
-          transactionId,
-          accountId: m.ifrsAccountId,
-          debit: d,
-          credit: c,
-          ledgerType: LedgerType.IFRS,
-        },
-      });
-    }
   }
 
   async postTransaction(params: {
@@ -223,6 +208,7 @@ export class AccountingService {
     isFinal?: boolean;
     counterpartyId?: string | null;
     departmentId?: string | null;
+    ledgerType?: LedgerType;
     lines: PostTransactionLine[];
     /** Ручная проводка (UI): проверка политики USER. */
     actingUserRole?: UserRole;
@@ -234,5 +220,167 @@ export class AccountingService {
     return this.prisma.$transaction((tx) =>
       this.postJournalInTransaction(tx, journalParams),
     );
+  }
+
+  async getPeriodCloseChecklist(
+    organizationId: string,
+    month: string,
+  ): Promise<{
+    month: string;
+    allPassed: boolean;
+    checks: {
+      noDraftInvoices: { ok: boolean; draftCount: number };
+      noNegativeStock: { ok: boolean; affectedCount: number };
+      noNegativeCash: { ok: boolean; affectedAccounts: string[] };
+      depreciationAccruedIfNeeded: {
+        ok: boolean;
+        activeAssets: number;
+        depreciationMonthsFound: number;
+      };
+      noUnfinishedManufacturingCycles: {
+        ok: boolean;
+        unresolvedCount: number;
+      };
+      noBrokenJournalLinks: {
+        ok: boolean;
+        brokenLinksCount: number;
+      };
+    };
+  }> {
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      throw new BadRequestException("month must be YYYY-MM");
+    }
+    const year = Number(month.slice(0, 4));
+    const mon = Number(month.slice(5, 7));
+    const { start, end } = monthRangeUtc(year, mon);
+
+    const draftCount = await this.prisma.invoice.count({
+      where: {
+        organizationId,
+        status: InvoiceStatus.DRAFT,
+        createdAt: { gte: start, lte: end },
+      },
+    });
+
+    const negativeStockItems = await this.prisma.stockItem.count({
+      where: {
+        organizationId,
+        quantity: { lt: 0 },
+      },
+    });
+
+    const cashAccounts = await this.prisma.account.findMany({
+      where: {
+        organizationId,
+        ledgerType: LedgerType.NAS,
+        OR: [
+          { code: { startsWith: "101" } },
+          { code: { startsWith: "221" } },
+          { code: { startsWith: "222" } },
+          { code: { startsWith: "223" } },
+          { code: { startsWith: "224" } },
+        ],
+      },
+      select: { id: true, code: true },
+    });
+    const cashAgg = cashAccounts.length
+      ? await this.prisma.journalEntry.groupBy({
+          by: ["accountId"],
+          where: {
+            organizationId,
+            ledgerType: LedgerType.NAS,
+            accountId: { in: cashAccounts.map((a) => a.id) },
+            transaction: { isFinal: true, date: { lte: end } },
+          },
+          _sum: { debit: true, credit: true },
+        })
+      : [];
+    const cashById = new Map(cashAccounts.map((a) => [a.id, a.code]));
+    const negativeCashAccounts = cashAgg
+      .filter((row) => {
+        const dr = row._sum.debit ?? new Decimal(0);
+        const cr = row._sum.credit ?? new Decimal(0);
+        return dr.sub(cr).lt(0);
+      })
+      .map((row) => cashById.get(row.accountId))
+      .filter((x): x is string => Boolean(x));
+
+    const activeAssets = await this.prisma.fixedAsset.count({
+      where: { organizationId, status: FixedAssetStatus.ACTIVE },
+    });
+    const depreciationMonthsFound =
+      activeAssets > 0
+        ? await this.prisma.fixedAssetDepreciationMonth.count({
+            where: { organizationId, year, month: mon },
+          })
+        : 0;
+    const depreciationOk =
+      activeAssets === 0 || depreciationMonthsFound > 0;
+
+    const unresolvedManufacturingRows = await this.prisma.$queryRaw<
+      Array<{ count: unknown }>
+    >(Prisma.sql`
+      SELECT COUNT(*)::bigint AS count
+      FROM stock_movements sm
+      WHERE sm.organization_id = ${organizationId}::uuid
+        AND sm.reason = 'MANUFACTURING'
+        AND sm.document_date >= ${start}
+        AND sm.document_date <= ${end}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM transactions t
+          WHERE t.organization_id = sm.organization_id
+            AND t.is_final = true
+            AND t.reference LIKE 'MFG-%'
+            AND t.date >= ${start}
+            AND t.date <= ${end}
+        )
+    `);
+    const unresolvedManufacturing = asCount(unresolvedManufacturingRows[0]?.count);
+
+    const brokenJournalRows = await this.prisma.$queryRaw<
+      Array<{ count: unknown }>
+    >(Prisma.sql`
+      SELECT COUNT(*)::bigint AS count
+      FROM journal_entries je
+      LEFT JOIN transactions t ON t.id = je.transaction_id
+      WHERE je.organization_id = ${organizationId}::uuid
+        AND t.id IS NULL
+    `);
+    const brokenJournalLinks = asCount(brokenJournalRows[0]?.count);
+
+    const checks = {
+      noDraftInvoices: { ok: draftCount === 0, draftCount },
+      noNegativeStock: {
+        ok: negativeStockItems === 0,
+        affectedCount: negativeStockItems,
+      },
+      noNegativeCash: {
+        ok: negativeCashAccounts.length === 0,
+        affectedAccounts: negativeCashAccounts,
+      },
+      depreciationAccruedIfNeeded: {
+        ok: depreciationOk,
+        activeAssets,
+        depreciationMonthsFound,
+      },
+      noUnfinishedManufacturingCycles: {
+        ok: unresolvedManufacturing === 0,
+        unresolvedCount: unresolvedManufacturing,
+      },
+      noBrokenJournalLinks: {
+        ok: brokenJournalLinks === 0,
+        brokenLinksCount: brokenJournalLinks,
+      },
+    };
+    const allPassed =
+      checks.noDraftInvoices.ok &&
+      checks.noNegativeStock.ok &&
+      checks.noNegativeCash.ok &&
+      checks.depreciationAccruedIfNeeded.ok &&
+      checks.noUnfinishedManufacturingCycles.ok &&
+      checks.noBrokenJournalLinks.ok;
+
+    return { month, allPassed, checks };
   }
 }
