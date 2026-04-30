@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { cookies, headers } from "next/headers";
 import { Providers } from "./providers";
@@ -36,7 +37,9 @@ export default async function RootLayout({
           ) : portalPath ? (
             children
           ) : (
-            <AppShell>{children}</AppShell>
+            <Suspense fallback={<div className="min-h-screen bg-[#EBEDF0]" />}>
+              <AppShell>{children}</AppShell>
+            </Suspense>
           )}
         </Providers>
       </body>

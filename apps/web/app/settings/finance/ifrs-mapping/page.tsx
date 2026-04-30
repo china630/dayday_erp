@@ -10,6 +10,7 @@ import {
   INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../../../../lib/design-system";
+import { PageHeader } from "../../../../components/layout/page-header";
 
 type Rule = {
   id: string;
@@ -108,17 +109,13 @@ export default function IfrsMappingRulesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">
-          {t("mapping.rulesTitle", { defaultValue: "IFRS Mapping Rules" })}
-        </h1>
-        <p className="text-sm text-slate-600 mt-1">
-          {t("mapping.rulesSubtitle", {
-            defaultValue:
-              "Define NAS account code to IFRS account code rules for automatic IFRS mirror entries.",
-          })}
-        </p>
-      </div>
+      <PageHeader
+        title={t("mapping.rulesTitle", { defaultValue: "IFRS Mapping Rules" })}
+        subtitle={t("mapping.rulesSubtitle", {
+          defaultValue:
+            "Define NAS account code to IFRS account code rules for automatic IFRS mirror entries.",
+        })}
+      />
 
       {canEdit && (
         <form onSubmit={createRule} className={`${CARD_CONTAINER_CLASS} p-4 space-y-4`}>

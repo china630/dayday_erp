@@ -1,7 +1,7 @@
 /**
  * Регенерация снимка дефолтных переводов из web/lib/i18n/resources.ts
  * в src/admin/i18n-default-catalog-data.json.
- * Запуск из каталога apps/api: npx tsx scripts/gen-i18n-defaults.ts
+ * Запуск: из корня монорепо **`npm run i18n:catalog`**, либо из каталога apps/api: **`npm run gen:i18n-catalog`** / `npx tsx scripts/gen-i18n-defaults.ts`.
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

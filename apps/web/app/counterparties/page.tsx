@@ -8,9 +8,9 @@ import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../lib/api-client";
 import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { useRequireAuth } from "../../lib/use-require-auth";
-import { ModulePageLinks } from "../../components/module-page-links";
 import { EmptyState } from "../../components/empty-state";
-import { CreateCounterpartyModal } from "../../components/sales/modals";
+import { PageHeader } from "../../components/layout/page-header";
+import { CreateCounterpartyModal, EditCounterpartyModal } from "../../components/sales/modals";
 
 type Row = {
   id: string;
@@ -31,6 +31,7 @@ export default function CounterpartiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const filtered = useCallback(() => {
     const term = q.trim().toLowerCase();
@@ -81,26 +82,19 @@ export default function CounterpartiesPage() {
 
   return (
     <div className="space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/invoices", labelKey: "nav.invoices" },
-          { href: "/products", labelKey: "nav.products" },
-        ]}
+      <PageHeader
+        title={t("counterparties.title")}
+        subtitle={t("counterparties.subtitle")}
+        actions={
+          <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
+            + {t("counterparties.newBtn")}
+          </button>
+        }
       />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t("counterparties.title")}</h1>
-          <p className="text-sm text-slate-600 mt-1">{t("counterparties.subtitle")}</p>
-        </div>
-        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
-          + {t("counterparties.newBtn")}
-        </button>
-      </div>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">{t("counterparties.list")}</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">{t("counterparties.list")}</h2>
         <div className="mb-3">
           <input
             value={q}
@@ -114,13 +108,11 @@ export default function CounterpartiesPage() {
           <EmptyState
             title={t("counterparties.none")}
             description={t("counterparties.emptyHint")}
-            icon={
-              <Users2 className="h-12 w-12 mx-auto stroke-[1.5] text-[#7F8C8D]" aria-hidden />
-            }
+            icon={<Users2 className="mx-auto h-12 w-12 stroke-[1.5] text-[#7F8C8D]" aria-hidden />}
             action={
-            <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
+              <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
                 + {t("counterparties.newBtn")}
-            </button>
+              </button>
             }
           />
         )}
@@ -128,9 +120,7 @@ export default function CounterpartiesPage() {
           <EmptyState
             title={t("counterparties.none", { defaultValue: "Нет контрагентов" })}
             description={t("counterparties.emptyHint", { defaultValue: "Попробуйте изменить запрос поиска." })}
-            icon={
-              <Users2 className="h-12 w-12 mx-auto stroke-[1.5] text-[#7F8C8D]" aria-hidden />
-            }
+            icon={<Users2 className="mx-auto h-12 w-12 stroke-[1.5] text-[#7F8C8D]" aria-hidden />}
           />
         )}
         {!loading && filtered().length > 0 && (
@@ -138,12 +128,12 @@ export default function CounterpartiesPage() {
             <table className="text-sm">
               <thead>
                 <tr>
-                  <th className="text-left p-2">{t("counterparties.thName")}</th>
-                  <th className="text-left p-2">{t("counterparties.thTaxId")}</th>
-                  <th className="text-left p-2">{t("counterparties.vatStatus")}</th>
-                  <th className="text-left p-2">{t("counterparties.thKind")}</th>
-                  <th className="text-left p-2">{t("counterparties.thRole")}</th>
-                  <th className="text-left p-2">{t("counterparties.thEmail")}</th>
+                  <th className="p-2 text-left">{t("counterparties.thName")}</th>
+                  <th className="p-2 text-left">{t("counterparties.thTaxId")}</th>
+                  <th className="p-2 text-left">{t("counterparties.vatStatus")}</th>
+                  <th className="p-2 text-left">{t("counterparties.thKind")}</th>
+                  <th className="p-2 text-left">{t("counterparties.thRole")}</th>
+                  <th className="p-2 text-left">{t("counterparties.thEmail")}</th>
                   <th className="p-2" />
                 </tr>
               </thead>
@@ -163,12 +153,21 @@ export default function CounterpartiesPage() {
                     <td className="p-2">{r.role}</td>
                     <td className="p-2">{r.email ?? "—"}</td>
                     <td className="p-2">
-                      <Link
-                        href={`/counterparties/${r.id}/edit`}
-                        className="text-action text-sm hover:underline"
-                      >
-                        {t("counterparties.edit")}
-                      </Link>
+                      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                        <button
+                          type="button"
+                          className="text-sm text-action hover:underline"
+                          onClick={() => setEditId(r.id)}
+                        >
+                          {t("counterparties.edit")}
+                        </button>
+                        <Link
+                          href={`/counterparties/${r.id}/reconciliation`}
+                          className="text-sm text-action hover:underline"
+                        >
+                          {t("counterparties.tabReconciliation")}
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -179,6 +178,12 @@ export default function CounterpartiesPage() {
       </section>
 
       <CreateCounterpartyModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <EditCounterpartyModal
+        open={Boolean(editId)}
+        counterpartyId={editId}
+        onClose={() => setEditId(null)}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

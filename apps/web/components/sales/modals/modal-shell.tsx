@@ -4,8 +4,8 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   CARD_CONTAINER_CLASS,
+  GHOST_BUTTON_CLASS,
   PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 
 export const SALES_MODAL_CANCEL_AZ = "Ləğv et";
@@ -47,7 +47,7 @@ export function SalesModalShell({
           </div>
           <button
             type="button"
-            className={SECONDARY_BUTTON_CLASS}
+            className={GHOST_BUTTON_CLASS}
             onClick={onClose}
             aria-label={SALES_MODAL_CANCEL_AZ}
           >
@@ -79,20 +79,15 @@ export function SalesModalFooter({
   formId?: string;
 }) {
   return (
-    <div className="flex w-full flex-col-reverse gap-2 lg:flex-row lg:w-auto lg:justify-between">
-      <button
-        type="button"
-        className={`${SECONDARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
-        onClick={onCancel}
-        disabled={!!busy}
-      >
+    <div className="flex w-full flex-row flex-wrap items-center justify-end gap-2">
+      <button type="button" className={GHOST_BUTTON_CLASS} onClick={onCancel} disabled={!!busy}>
         {SALES_MODAL_CANCEL_AZ}
       </button>
       {formId ? (
         <button
           type="submit"
           form={formId}
-          className={`${PRIMARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
+          className={PRIMARY_BUTTON_CLASS}
           disabled={!!busy || !!saveDisabled}
         >
           {busy ? "…" : SALES_MODAL_SAVE_AZ}
@@ -100,7 +95,7 @@ export function SalesModalFooter({
       ) : (
         <button
           type="button"
-          className={`${PRIMARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
+          className={PRIMARY_BUTTON_CLASS}
           disabled={!!busy || !!saveDisabled}
           onClick={() => void onSave?.()}
         >

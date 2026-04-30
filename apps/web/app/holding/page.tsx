@@ -9,7 +9,7 @@ import { apiFetch } from "../../lib/api-client";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { CARD_CONTAINER_CLASS, LINK_ACCENT_CLASS, PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { EmptyState } from "../../components/empty-state";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import { ledgerQueryParam, useLedger } from "../../lib/ledger-context";
 
 type HoldingListItem = {
@@ -115,46 +115,40 @@ export default function HoldingDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks items={[{ href: "/", labelKey: "nav.home" }]} />
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-[#34495E]">
-            {t("nav.holdingConsolidated", { defaultValue: "Holding" })}
-          </h1>
-          <p className="mt-1 text-[13px] text-[#7F8C8D]">
-            {t("holdingReport.subtitle", {
-              defaultValue: "Konsolidasiya: şirkətlər üzrə ümumi göstəricilər.",
-            })}
-          </p>
-        </div>
-        <div className="flex items-end gap-3">
-          <label className="flex flex-col gap-1 text-[13px]">
-            <span className="text-[#7F8C8D]">
-              {t("holdingReport.holding", { defaultValue: "Holding" })}
-            </span>
-            <select
-              className="rounded border border-[#E0E6ED] px-2 py-1.5 text-[13px] min-w-[220px]"
-              value={holdingId}
-              onChange={(e) => setHoldingId(e.target.value)}
+      <PageHeader
+        title={t("nav.holdingConsolidated", { defaultValue: "Holding" })}
+        subtitle={t("holdingReport.subtitle", {
+          defaultValue: "Konsolidasiya: şirkətlər üzrə ümumi göstəricilər.",
+        })}
+        actions={
+          <div className="flex flex-wrap items-end justify-end gap-3">
+            <label className="flex flex-col gap-1 text-[13px]">
+              <span className="text-[#7F8C8D]">
+                {t("holdingReport.holding", { defaultValue: "Holding" })}
+              </span>
+              <select
+                className="min-w-[220px] rounded border border-[#E0E6ED] px-2 py-1.5 text-[13px]"
+                value={holdingId}
+                onChange={(e) => setHoldingId(e.target.value)}
+              >
+                {holdings.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name} ({h.organizations?.length ?? 0})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-primary hover:bg-action/10"
+              onClick={() => void load()}
+              disabled={!holdingId || loading}
             >
-              {holdings.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name} ({h.organizations?.length ?? 0})
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-primary hover:bg-action/10"
-            onClick={() => void load()}
-            disabled={!holdingId || loading}
-          >
-            {loading ? t("common.loading") : t("common.refresh", { defaultValue: "Yenilə" })}
-          </button>
-        </div>
-      </div>
+              {loading ? t("common.loading") : t("common.refresh", { defaultValue: "Yenilə" })}
+            </button>
+          </div>
+        }
+      />
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
 

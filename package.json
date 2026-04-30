@@ -40,6 +40,7 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "i18n:audit": "npx tsx scripts/i18n-audit.ts",
+    "i18n:catalog": "npm run gen:i18n-catalog -w @dayday/api",
     "platform:billing-reconcile": "dotenv -e .env -o -- npx tsx scripts/billing-reconciliation.ts",
     "platform:dr-validate": "dotenv -e .env -o -- npx tsx scripts/dr-drill-validate.ts",
     "screenshots:erp": "dotenv -e .env -o -- npm run capture --prefix tools/playwright-screenshots --"

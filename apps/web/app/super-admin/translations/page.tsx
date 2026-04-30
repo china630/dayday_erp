@@ -11,6 +11,7 @@ import {
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type Item = {
   id: string | null;
@@ -92,22 +93,18 @@ export default function SuperAdminTranslationsPage() {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#34495E]">
-            {t("superAdminTranslations.title")}
-          </h1>
-          <p className="text-[13px] text-[#7F8C8D] mt-1">
-            {t("superAdminTranslations.subtitle")}
-          </p>
-        </div>
-        <Link
-          href="/super-admin"
-          className="text-[13px] text-[#2980B9] hover:underline"
-        >
-          ← Super-Admin
-        </Link>
-      </div>
+      <PageHeader
+        title={t("superAdminTranslations.title")}
+        subtitle={t("superAdminTranslations.subtitle")}
+        actions={
+          <Link
+            href="/super-admin"
+            className="text-[13px] text-[#2980B9] hover:underline"
+          >
+            ← Super-Admin
+          </Link>
+        }
+      />
 
       <div className={`${CARD_CONTAINER_CLASS} p-4 flex flex-wrap gap-3 items-end`}>
         <label className="text-[13px] text-[#34495E]">

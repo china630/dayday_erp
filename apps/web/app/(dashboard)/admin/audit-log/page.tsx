@@ -11,7 +11,7 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../../../lib/design-system";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../../components/module-page-links";
+import { PageHeader } from "../../../../components/layout/page-header";
 import { AuditActionChip } from "../../../../components/admin/audit-action-chip";
 import { AuditDiffModal } from "../../../../components/admin/audit-diff-modal";
 
@@ -131,32 +131,18 @@ export default function AdminSecurityAuditLogPage() {
 
   if (!isOwner) {
     return (
-      <div className="space-y-4 max-w-3xl">
-        <ModulePageLinks
-          items={[
-            { href: "/", labelKey: "nav.home" },
-            { href: "/settings/team", labelKey: "nav.team" },
-          ]}
+      <div className="max-w-3xl space-y-4">
+        <PageHeader
+          title={t("securityAuditPage.title")}
+          subtitle={t("securityAuditPage.ownerOnly")}
         />
-        <p className="text-sm text-[#7F8C8D]">{t("securityAuditPage.ownerOnly")}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/admin/billing", labelKey: "nav.settingsSubscription" },
-        ]}
-      />
-      <div>
-        <h1 className="text-2xl font-semibold text-[#34495E]">
-          {t("securityAuditPage.title")}
-        </h1>
-        <p className="text-[#7F8C8D] mt-2 text-sm">{t("securityAuditPage.subtitle")}</p>
-      </div>
+      <PageHeader title={t("securityAuditPage.title")} subtitle={t("securityAuditPage.subtitle")} />
 
       <section className={`${CARD_CONTAINER_CLASS} p-4 space-y-3`}>
         <h2 className="text-[13px] font-semibold text-[#34495E]">

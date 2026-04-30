@@ -18,6 +18,7 @@ import { FORM_INPUT_CLASS, FORM_TEXTAREA_CLASS } from "../../../../lib/form-styl
 import { ledgerQueryParam, useLedger } from "../../../../lib/ledger-context";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
 import { SubscriptionPaywall } from "../../../../components/subscription-paywall";
+import { PageHeader } from "../../../../components/layout/page-header";
 
 type CashOrderKind = "KMO" | "KXO";
 type CashOrderStatus = "DRAFT" | "POSTED" | "CANCELLED";
@@ -546,47 +547,49 @@ export default function BankingCashPage() {
         </div>
 
         <section className="space-y-6 max-w-7xl mx-auto">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="m-0 text-xl font-semibold text-[#34495E]">{t("banking.cash.pageTitle")}</h1>
+        <PageHeader
+          title={t("banking.cash.pageTitle")}
+          subtitle={
             <Link
               href="/banking"
-              className="text-[13px] text-action hover:opacity-90 mt-2 inline-block"
+              className="text-[13px] text-action hover:opacity-90 inline-block"
             >
               {t("banking.cash.backLink")}
             </Link>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPkoOpen(true)}
-              className={PRIMARY_BUTTON_CLASS}
-            >
-              {t("banking.cash.btnPko")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setRkoOpen(true)}
-              className={SECONDARY_BUTTON_CLASS}
-            >
-              {t("banking.cash.btnRko")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdvOpen(true)}
-              className={SECONDARY_BUTTON_CLASS}
-            >
-              {t("banking.cash.btnAdvanceTop")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setQuickOpen(true)}
-              className={SECONDARY_BUTTON_CLASS}
-            >
-              {t("banking.cash.quickCashOutTitle")}
-            </button>
-          </div>
-        </div>
+          }
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => setPkoOpen(true)}
+                className={PRIMARY_BUTTON_CLASS}
+              >
+                {t("banking.cash.btnPko")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRkoOpen(true)}
+                className={SECONDARY_BUTTON_CLASS}
+              >
+                {t("banking.cash.btnRko")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdvOpen(true)}
+                className={SECONDARY_BUTTON_CLASS}
+              >
+                {t("banking.cash.btnAdvanceTop")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickOpen(true)}
+                className={SECONDARY_BUTTON_CLASS}
+              >
+                {t("banking.cash.quickCashOutTitle")}
+              </button>
+            </>
+          }
+        />
 
         {err && !loading ? (
           <EmptyState

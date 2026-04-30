@@ -6,7 +6,7 @@ import { apiFetch } from "../../../lib/api-client";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { BORDER_MUTED_CLASS, PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
 
 type Cp = { id: string; name: string; taxId: string };
@@ -258,18 +258,7 @@ export default function ReconciliationPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-          { href: "/counterparties", labelKey: "nav.counterparties" },
-          { href: "/banking", labelKey: "nav.banking" },
-        ]}
-      />
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t("reconciliation.title")}</h1>
-        <p className="text-sm text-slate-600 mt-1 max-w-2xl">{t("reconciliation.subtitle")}</p>
-      </div>
+      <PageHeader title={t("reconciliation.title")} subtitle={t("reconciliation.subtitle")} />
 
       {cpId && (
         <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-sm max-w-3xl">

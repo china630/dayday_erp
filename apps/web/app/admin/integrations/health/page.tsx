@@ -6,6 +6,7 @@ import { EmptyState } from "../../../../components/empty-state";
 import { apiFetch } from "../../../../lib/api-client";
 import { useAuth } from "../../../../lib/auth-context";
 import { CARD_CONTAINER_CLASS } from "../../../../lib/design-system";
+import { PageHeader } from "../../../../components/layout/page-header";
 
 type HealthProviderRow = {
   provider: string;
@@ -70,12 +71,10 @@ export default function IntegrationsHealthPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-[#34495E]">Integration Health</h1>
-        <p className="text-sm text-[#7F8C8D] mt-1">
-          Last Sync, Latency, Provider Status and cache hit-rate for IBAN / Tax.
-        </p>
-      </div>
+      <PageHeader
+        title="Integration Health"
+        subtitle="Last Sync, Latency, Provider Status and cache hit-rate for IBAN / Tax."
+      />
       {err ? (
         <p className="text-sm text-red-600">{err}</p>
       ) : null}

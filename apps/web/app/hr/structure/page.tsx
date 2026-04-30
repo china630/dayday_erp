@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { inputFieldClass } from "../../../lib/form-classes";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
 import { parseHrEmployeesResponse } from "../../../lib/hr-employees-list";
 import {
@@ -52,12 +52,14 @@ function TreeRows({
   depth,
   t,
   onManagerChange,
+  onEditDepartment,
   employees,
 }: {
   nodes: TreeNode[];
   depth: number;
   t: (k: string, o?: { defaultValue?: string }) => string;
   onManagerChange: (deptId: string, managerId: string) => void;
+  onEditDepartment: (node: TreeNode) => void;
   employees: EmployeeOpt[];
 }) {
   return (
@@ -87,6 +89,13 @@ function TreeRows({
                 ))}
               </select>
             </label>
+            <button
+              type="button"
+              className="rounded border border-[#D5DADF] bg-white px-2 py-1 text-xs font-medium text-[#34495E] hover:bg-[#F4F5F7]"
+              onClick={() => onEditDepartment(n)}
+            >
+              {t("counterparties.edit")}
+            </button>
           </div>
           {n.children.length > 0 && (
             <TreeRows
@@ -94,6 +103,7 @@ function TreeRows({
               depth={depth + 1}
               t={t}
               onManagerChange={onManagerChange}
+              onEditDepartment={onEditDepartment}
               employees={employees}
             />
           )}
@@ -113,6 +123,7 @@ export default function HrStructurePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editDept, setEditDept] = useState<TreeNode | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -167,21 +178,22 @@ export default function HrStructurePage() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/employees", labelKey: "nav.employees" },
-        ]}
+      <PageHeader
+        title={t("hrStructure.title")}
+        subtitle={t("hrStructure.subtitle")}
+        actions={
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            onClick={() => {
+              setEditDept(null);
+              setCreateOpen(true);
+            }}
+          >
+            + {t("hrStructure.addDept")}
+          </button>
+        }
       />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t("hrStructure.title")}</h1>
-          <p className="text-sm text-slate-500 mt-1">{t("hrStructure.subtitle")}</p>
-        </div>
-        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
-          {t("hrStructure.newDeptButton")}
-        </button>
-      </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       <section className="bg-white p-6 shadow-sm rounded-xl border border-slate-100">
@@ -199,6 +211,10 @@ export default function HrStructurePage() {
             depth={0}
             t={t}
             onManagerChange={(id, m) => void onManagerChange(id, m)}
+            onEditDepartment={(n) => {
+              setEditDept(n);
+              setCreateOpen(true);
+            }}
             employees={employees}
           />
         )}
@@ -206,10 +222,23 @@ export default function HrStructurePage() {
 
       <DepartmentModal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditDept(null);
+        }}
         departments={flat}
         employees={employees}
         onCreated={() => void load()}
+        editingDepartment={
+          editDept
+            ? {
+                id: editDept.id,
+                name: editDept.name,
+                parentId: editDept.parentId,
+                managerId: editDept.managerId,
+              }
+            : null
+        }
       />
     </div>
   );

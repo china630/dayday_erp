@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileDown, ScrollText } from "lucide-react";
+import { FileDown } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmptyState } from "../../../components/empty-state";
@@ -13,6 +13,7 @@ import {
 } from "../../../lib/design-system";
 import { canAccessBilling } from "../../../lib/role-utils";
 import { useRequireAuth } from "../../../lib/use-require-auth";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type PlatformInvoiceLine = {
   organizationId: string;
@@ -142,45 +143,40 @@ export default function PaymentHistoryPage() {
       <div
         className={`max-w-3xl ${CARD_CONTAINER_CLASS} p-8 space-y-4 border-[#D5DADF]`}
       >
-        <h1 className="text-xl font-semibold text-[#34495E]">
-          {t("subscriptionSettings.ownerOnlyTitle")}
-        </h1>
-        <p className="text-[13px] text-[#7F8C8D]">
-          {t("subscriptionSettings.ownerOnlyBody")}
-        </p>
-        <Link href="/" className={LINK_ACCENT_CLASS}>
-          {t("common.backHome")}
-        </Link>
+        <PageHeader
+          title={t("subscriptionSettings.ownerOnlyTitle")}
+          subtitle={t("subscriptionSettings.ownerOnlyBody")}
+          actions={
+            <Link href="/" className={LINK_ACCENT_CLASS}>
+              {t("common.backHome")}
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   return (
     <div className="max-w-5xl space-y-6">
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="rounded-[2px] border border-[#D5DADF] bg-white p-2 shadow-sm">
-          <ScrollText className="h-7 w-7 text-[#2980B9]" aria-hidden />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-[#34495E]">
-            {t("paymentHistory.title")}
-          </h1>
-          <p className="text-[13px] text-[#7F8C8D] mt-1">
-            {t("paymentHistory.subtitle")}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[13px] items-center">
-            <Link href="/" className={LINK_ACCENT_CLASS}>
-              {t("nav.home")}
-            </Link>
-            <span className="text-[#D5DADF]">/</span>
-            <Link href="/admin/billing" className={LINK_ACCENT_CLASS}>
-              {t("nav.settingsSubscription")}
-            </Link>
-            <span className="text-[#D5DADF]">/</span>
-            <span className="text-[#34495E]">{t("paymentHistory.title")}</span>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={t("paymentHistory.title")}
+        subtitle={
+          <>
+            <p className="text-[13px] text-[#7F8C8D]">{t("paymentHistory.subtitle")}</p>
+            <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[13px] items-center">
+              <Link href="/" className={LINK_ACCENT_CLASS}>
+                {t("nav.home")}
+              </Link>
+              <span className="text-[#D5DADF]">/</span>
+              <Link href="/admin/billing" className={LINK_ACCENT_CLASS}>
+                {t("nav.settingsSubscription")}
+              </Link>
+              <span className="text-[#D5DADF]">/</span>
+              <span className="text-[#34495E]">{t("paymentHistory.title")}</span>
+            </div>
+          </>
+        }
+      />
 
       {loadErr && (
         <p className="text-[13px] text-[#B71C1C] bg-[#FFEBEE] border border-[#EF9A9A] rounded-[2px] px-3 py-2">

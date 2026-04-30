@@ -11,8 +11,10 @@
 5. Сохраняет сессию в `tools/playwright-screenshots/.auth/`:
    - `session.json` — ключи `sessionStorage` (токен DayDay хранится там; стандартный `storageState` Playwright этого не сохраняет);
    - `playwright-storage.json` — cookies для Playwright.
-6. Обходит маршруты из `src/config.ts` (`pagesToScreenshot`), ждёт `networkidle` и исчезновение спиннеров/скелетонов, делает PNG **на всю высоту страницы** (`fullPage: true`), viewport **1920×1080**.
-7. Сохраняет файлы в **`screens/<locale>/`** в корне репозитория (например `screens/az/`, `screens/ru/`).
+6. Обходит маршруты из `src/config.ts` (`pagesToScreenshot`), ждёт стабильную загрузку UI/API (включая догрузку переводов), делает PNG **на всю высоту страницы** (`fullPage: true`), viewport **1920×1080**.
+7. Публичные экраны (`/login`, `/register`, `/register-org`) снимаются в отдельном неавторизованном контексте и не пропускаются из-за активной сессии.
+8. Для `admin/*` скрипт пытается раскрыть секцию Admin в sidebar перед скрином.
+9. Сохраняет файлы в **`screens/<locale>/`** в корне репозитория (например `screens/az/`, `screens/ru/`).
 
 Если в логах «редирект на /login — сессия истекла», запустите с **`--fresh`** или удалите `tools/playwright-screenshots/.auth/session.json`. Скрипт также не использует протухший JWT из `session.json` (автовход заново при необходимости).
 
@@ -53,6 +55,16 @@ npx dotenv-cli -e ../../.env -- npm run capture
 npx dotenv-cli -e ../../.env -- npm run capture -- --fresh
 ```
 
+**Явно задать аккаунт и компанию через CLI** (без правки `.env`):
+
+```bash
+npm run screenshots:erp -- --fresh --email shirinov.chingiz@gmail.com --password 12345678
+npm run screenshots:erp -- --fresh --email shirinov.chingiz@gmail.com --password 12345678 --org-name "TiVi Media MMC"
+npm run screenshots:erp -- --fresh --email shirinov.chingiz@gmail.com --password 12345678 --org-id 3700543341
+```
+
+Можно задавать только `--email` (если пароль уже в `.env`) и отдельно `--org-name`/`--org-id` для переключения компании.
+
 **Только один экран** (без обхода всего списка) — по `fileName` или пути из `src/config.ts`:
 
 ```bash
@@ -64,6 +76,23 @@ npm run screenshots:erp -- --only /banking/cash
 Если вложенный `npm` съедает флаги (в логе `npm warn invalid config only`), задайте в **`.env`**: `E2E_ONLY=03-banking-cash` и запустите `npm run screenshots:erp` без аргументов.
 
 Сессия из `.auth/session.json` переиспользуется; полный логин не нужен, пока JWT не истёк.
+
+## Скриншоты модалок
+
+Есть 2 режима:
+
+1) **Разово через CLI** (удобно для одного экрана):
+
+```bash
+npm run screenshots:erp -- --only /counterparties --modal-open "button:has-text('New')" --modal-wait "[role='dialog']"
+```
+
+2) **Через конфиг страницы** в `src/config.ts`:
+- `modalOpenSelector` — что кликнуть перед снимком;
+- `modalVisibleSelector` — что дождаться (обычно контейнер модалки).
+- `sourceSlug` — реестр формы (из вашего CSV), по нему включаются встроенные preset-селекторы для типовых модалок.
+
+Если preset не сработал для конкретной модалки, передайте `--modal-open`/`--modal-wait` в CLI для точечного оверрайда.
 
 ## Настройка списка страниц
 

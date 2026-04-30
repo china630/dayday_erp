@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import { apiFetch } from "../../../../lib/api-client";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
 import { CARD_CONTAINER_CLASS } from "../../../../lib/design-system";
+import { PageHeader } from "../../../../components/layout/page-header";
 
 type HoldingBalancesSummary = {
   holdingId: string;
@@ -117,41 +118,39 @@ export default function HoldingDetailsDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#34495E]">
-            {summary?.holdingName ?? t("nav.holdingConsolidated", { defaultValue: "Holding" })}
-          </h1>
-          <p className="text-[13px] text-[#7F8C8D] mt-1">
-            {t("holdingReport.subtitle", {
-              defaultValue: "Consolidated holding-level treasury and tax risk monitoring.",
-            })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="rounded-lg border border-[#D5DADF] px-3 py-2 text-sm font-semibold text-[#34495E] hover:bg-[#F8F9FA]"
-            disabled={loading}
-          >
-            {loading ? t("common.loading") : t("common.refresh", { defaultValue: "Refresh" })}
-          </button>
-          <button
-            type="button"
-            onClick={() => void onForceSync()}
-            className="inline-flex items-center gap-2 rounded-lg bg-action px-3 py-2 text-sm font-semibold text-white hover:bg-action-hover disabled:opacity-70"
-            disabled={syncing}
-          >
-            {syncing ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <RefreshCw className="h-4 w-4" aria-hidden />
-            )}
-            {t("holdingDashboard.syncBanks", { defaultValue: "Синхронизировать банки" })}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={
+          summary?.holdingName ?? t("nav.holdingConsolidated", { defaultValue: "Holding" })
+        }
+        subtitle={t("holdingReport.subtitle", {
+          defaultValue: "Consolidated holding-level treasury and tax risk monitoring.",
+        })}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="rounded-lg border border-[#D5DADF] px-3 py-2 text-sm font-semibold text-[#34495E] hover:bg-[#F8F9FA]"
+              disabled={loading}
+            >
+              {loading ? t("common.loading") : t("common.refresh", { defaultValue: "Refresh" })}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onForceSync()}
+              className="inline-flex items-center gap-2 rounded-lg bg-action px-3 py-2 text-sm font-semibold text-white hover:bg-action-hover disabled:opacity-70"
+              disabled={syncing}
+            >
+              {syncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <RefreshCw className="h-4 w-4" aria-hidden />
+              )}
+              {t("holdingDashboard.syncBanks", { defaultValue: "Синхронизировать банки" })}
+            </button>
+          </>
+        }
+      />
 
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useLedger } from "../../../lib/ledger-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import {
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
@@ -145,21 +145,16 @@ export default function CashFlowPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks items={[{ href: "/", labelKey: "nav.home" }]} />
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#34495E]">
-            {t("reports.cashFlow.title")}
-          </h1>
-          <p className="mt-1 text-[13px] text-[#7F8C8D]">
-            {t("reports.cashFlow.hint")}
-          </p>
-          <p className="mt-1 text-[12px] text-[#7F8C8D]">
-            {t("reporting.activeLedger", { ledger: ledgerType })}
-          </p>
-        </div>
-        <div className={`${CARD_CONTAINER_CLASS} p-4 flex flex-wrap items-end gap-3`}>
+      <PageHeader
+        title={t("reports.cashFlow.title")}
+        subtitle={
+          <Fragment>
+            <p className="m-0">{t("reports.cashFlow.hint")}</p>
+            <p className="m-0 text-[12px]">{t("reporting.activeLedger", { ledger: ledgerType })}</p>
+          </Fragment>
+        }
+        actions={
+          <div className={`${CARD_CONTAINER_CLASS} flex flex-wrap items-end gap-3 p-4`}>
           <label className="flex flex-col gap-1">
             <span className={FORM_LABEL_CLASS}>{t("reports.cashFlow.dateFrom")}</span>
             <input
@@ -239,7 +234,8 @@ export default function CashFlowPage() {
               : t("reporting.exportXlsx", { defaultValue: "Экспорт XLSX" })}
           </button>
         </div>
-      </div>
+        }
+      />
 
       {err ? <div className="text-sm text-red-600">{err}</div> : null}
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Building2, Landmark, Plus, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import { EmptyState } from "../../components/empty-state";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -1121,31 +1121,26 @@ export default function BankingPage() {
   return (
     <SubscriptionPaywall module="bankingPro">
       <div className="space-y-10 max-w-6xl mx-auto">
-        <ModulePageLinks
-          items={[
-            { href: "/", labelKey: "nav.home" },
-            { href: "/invoices", labelKey: "nav.invoices" },
-            { href: "/reporting", labelKey: "nav.reportingHub" },
-          ]}
+        <PageHeader
+          title={t("banking.title")}
+          actions={
+            <>
+              <Link href="/invoices?pay=1" className={SECONDARY_BUTTON_CLASS}>
+                {t("banking.quickPay")}
+              </Link>
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                onClick={() => setQuickExpenseOpen(true)}
+              >
+                {t("banking.quickExpense")}
+              </button>
+              <Link href="/settings/mapping" className={PRIMARY_BUTTON_CLASS}>
+                {t("banking.addAccount")}
+              </Link>
+            </>
+          }
         />
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-[#34495E] m-0">{t("banking.title")}</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/invoices?pay=1" className={SECONDARY_BUTTON_CLASS}>
-              {t("banking.quickPay")}
-            </Link>
-            <button
-              type="button"
-              className={SECONDARY_BUTTON_CLASS}
-              onClick={() => setQuickExpenseOpen(true)}
-            >
-              {t("banking.quickExpense")}
-            </button>
-            <Link href="/settings/mapping" className={PRIMARY_BUTTON_CLASS}>
-              {t("banking.addAccount")}
-            </Link>
-          </div>
-        </div>
 
         <CashAccountCards refreshKey={refreshKey} segmentFilter="BANK" />
 

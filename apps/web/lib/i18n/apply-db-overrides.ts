@@ -67,6 +67,22 @@ export function dropFlatRootStringNamespaceKeys(
   );
 }
 
+/**
+ * Если в БД значение равно самому ключу (`auth.registerOrgLink` -> `auth.registerOrgLink`),
+ * это не перевод, а «сырой» placeholder. Такие записи игнорируем, чтобы не затирать bundle.
+ */
+export function dropIdentityValueOverrides(
+  flat: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(flat).filter(([k, v]) => {
+      const key = k.trim();
+      const value = String(v ?? "").trim();
+      return value.length > 0 && value !== key;
+    }),
+  );
+}
+
 /** Плоские ключи вида `nav.home` → вложенный объект для addResourceBundle. */
 export function flatOverridesToNested(
   flat: Record<string, string>,
@@ -126,7 +142,9 @@ export async function applyTranslationOverrides(
   if (!data) return;
   const flat = dropFlatRootStringNamespaceKeys(
     dropFlatKeysThatShadowNestedObjects(
-      dropFlatKeysShadowedByLongerKeys(data.overrides ?? {}),
+      dropIdentityValueOverrides(
+        dropFlatKeysShadowedByLongerKeys(data.overrides ?? {}),
+      ),
     ),
   );
   if (Object.keys(flat).length === 0) return;

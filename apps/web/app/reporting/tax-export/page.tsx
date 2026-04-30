@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiBaseUrl, apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
 
 type ExportStatus = "GENERATED" | "UPLOADED" | "CONFIRMED_BY_TAX";
@@ -181,20 +181,7 @@ export default function TaxExportPage() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-          { href: "/invoices", labelKey: "nav.invoices" },
-          { href: "/products", labelKey: "nav.products" },
-        ]}
-      />
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 mt-2">
-          {t("reporting.taxExportTitle")}
-        </h1>
-        <p className="text-sm text-slate-600 mt-2">{t("reporting.taxExportSubtitle")}</p>
-      </div>
+      <PageHeader title={t("reporting.taxExportTitle")} subtitle={t("reporting.taxExportSubtitle")} />
 
       {err && <p className="text-red-600 text-sm">{err}</p>}
 

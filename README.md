@@ -10,4 +10,4 @@ Monorepo: `apps/web`, `apps/api`, `packages/database`. See `.cursor/rules` and `
 
 ## Testing
 
-- **i18n (RU + AZ):** `npm run i18n:audit` — scans `apps/web/app` for `t('…')` / `i18nKey` usage and fails the process if any key is missing or empty in `resources.ts` for Russian or Azerbaijani (TZ §17).
+- **i18n (RU + AZ):** `npm run i18n:audit` — scans `apps/web/app` + `apps/web/components` for `t('…')` usage and fails if any key is missing or empty in `apps/web/lib/i18n/resources.ts` (TZ §17). After editing `resources.ts`, run **`npm run i18n:catalog`** from the repo root to regenerate `apps/api/src/admin/i18n-default-catalog-data.json` for the API / Super-Admin translation defaults, and commit the JSON if it changed (PRD §7.6.1).

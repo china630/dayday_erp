@@ -2,7 +2,7 @@
 
 Единый документ для разработки: объединяет ядро Core MVP, расширения v2, интеграции v3 и слой монетизации v4. Сводные продуктовые решения — **[PRD.md](./PRD.md)** (§12 и др.). Детализация REST — **§0.0** ниже и Swagger API.
 
-**Оглавление (верхний уровень):** **§0.0** — реестр ключевых REST; §0 — статус синхронизации; §1 — инфраструктура; §2–§10 — модули **1–9**; **§6.0** — Treasury + касса/банк; **§7.0** — HR, табель, payroll, ЦФО; §11 — паттерн разработки; §12–§14 — дорожные карты; §15 — Super-Admin; §16–§17 — hardening.
+**Оглавление (верхний уровень):** **§0.0** — реестр ключевых REST; §0 — статус синхронизации; §1 — инфраструктура; §2–§10 — модули **1–9**; **§6.0** — Treasury + касса/банк; **§7.0** — HR, табель, payroll, ЦФО; §11 — паттерн разработки (**§11.1** — web: `PageHeader`, сайдбар-only); §12–§14 — дорожные карты; §15 — Super-Admin; §16–§17 — hardening.
 
 **Стандарт статусов (глобально для PRD/TZ):**
 - [x] **COMPLETED (scope):** задача реализована и зафиксирована.
@@ -275,7 +275,7 @@
 
 #### UI (модуль 7 / отчёты)
 
-- **Акт сверки (Üzləşmə aktı):** `GET /api/reports/reconciliation/:counterpartyId` (`startDate`, `endDate`, опционально `currency`, `ledgerType`; алиасы `dateFrom`/`dateTo`); экспорт **`/pdf`**, **`/xlsx`**; **`POST …/email`** — PDF на `counterparty.email` при настроенном SMTP. Вкладка **«Акт сверки»** в UI редактирования контрагента (`/counterparties/[id]/edit`). Устаревший JSON-эндпоинт **`GET /api/reporting/reconciliation?counterpartyId=…`** сохранён для совместимости.
+- **Акт сверки (Üzləşmə aktı):** `GET /api/reports/reconciliation/:counterpartyId` (`startDate`, `endDate`, опционально `currency`, `ledgerType`; алиасы `dateFrom`/`dateTo`); экспорт **`/pdf`**, **`/xlsx`**; **`POST …/email`** — PDF на `counterparty.email` при настроенном SMTP. Вкладка **«Акт сверки»** в UI редактирования контрагента (**модальное окно** на странице списка `/counterparties`; отдельный маршрут карточки — **`/counterparties/[id]/reconciliation`**). Устаревший JSON-эндпоинт **`GET /api/reporting/reconciliation?counterpartyId=…`** сохранён для совместимости.
 - **Встречные требования / взаимозачёт** (`GET /api/reporting/netting/preview`, UI отчётов): блок остатков **211 / 531** и лимит зачёта; кнопка **«Оплатить зачётом / Pay by netting»** на странице `/reporting/reconciliation` доступна только при `canNet`.
 - **Карточка инвойса:** при непогашенном остатке и `canNet` — действие **«Оплатить зачётом»** (сумма по умолчанию ≤ min(остаток инвойса, suggestedAmount)).
 
@@ -308,13 +308,17 @@
 
 Автоматизация выставления документов и признания выручки.
 
-### UI (реализация vX.Y): создание через модальные окна
+### UI (реализация vX.Y): создание и обновление через модальные компоненты
 
-- Создание **инвойса** выполняется через модальное окно **CreateInvoiceModal** на странице `/invoices` (без отдельной страницы создания).
-- Создание **контрагента** выполняется через модальное окно **CreateCounterpartyModal** на странице `/counterparties` (без отдельной страницы создания).
-- Legacy-маршруты:
-  - `/invoices/new` → редирект на `/invoices` (создание через модалку).
-  - `/counterparties/new` → редирект на `/counterparties` (создание через модалку).
+- Клиент (`apps/web`) для операций **create/update** по REST вызывает **модальные компоненты** с формами на страницах списков (паттерн «таблица + модалка»), а не отдельные полноэкранные страницы форм.
+- Примеры: **CreateInvoiceModal** / редактирование на `/invoices`; **CreateCounterpartyModal** и форма редактирования на `/counterparties`; инвентаризация — **`InventoryAuditCreateFlow`** в модалке на `/inventory/audits`; основные средства — **`FixedAssetModal`** на `/fixed-assets`; склад — модалки в хабе `/inventory` (в т.ч. **`NewWarehouseModal`**).
+- Устаревшие маршруты (только редиректы на список, иногда с `?modal=…` или `?newAudit=1` для автозапуска UI):
+  - `/invoices/new` → `/invoices`
+  - `/counterparties/new` → `/counterparties`
+  - `/inventory/warehouses/new` → `/inventory?modal=newWh`
+  - `/inventory/audit/new` → `/inventory/audits?newAudit=1`
+  - `/fixed-assets/new` → `/fixed-assets?modal=fixedAsset`
+  - `/payroll/absences/new` → `/payroll`
 
 ### Контрагенты (VÖEN / MDM lookup) — UI/REST
 
@@ -816,7 +820,7 @@
   - Если \( \Delta > 0 \): сумма \( amount = \Delta \times costPrice \) → проводка **Дт invAcc / Кт 611**, складское движение **IN**.
   - Если \( \Delta < 0 \): сумма \( amount = |\Delta| \times costPrice \) → проводка **Дт 731 / Кт invAcc**, складское движение **OUT**.
   - Все складские изменения (`StockItem.quantity`, `StockItem.averageCost` при оприходовании) и `StockMovement` (reason=ADJUSTMENT), а также создание `Transaction`/`JournalEntry` выполняются внутри одной транзакции.
-- **i18n (RU/AZ) для UI инвентаризации:** ключи `inventory.audit*` используются на страницах `/inventory/audit/new`, `/inventory/audits`, `/inventory/audits/[id]` и должны проходить `npm run i18n:audit` (см. §17). Ключи включают, например: `inventory.auditTitle`, `inventory.auditSubtitle`, `inventory.auditThSystem`, `inventory.auditThFact`, `inventory.auditThDiff`, `inventory.auditThCost`, `inventory.auditThAmountDiff`, `inventory.auditTotalDiff`, `inventory.auditStatusDraft`, `inventory.auditStatusApproved`.
+- **i18n (RU/AZ) для UI инвентаризации:** ключи `inventory.audit*` используются в **`InventoryAuditCreateFlow`** (модалка на `/inventory/audits`), на `/inventory/audits`, `/inventory/audits/[id]` и должны проходить `npm run i18n:audit` (см. §17). Ключи включают, например: `inventory.auditTitle`, `inventory.auditSubtitle`, `inventory.auditThSystem`, `inventory.auditThFact`, `inventory.auditThDiff`, `inventory.auditThCost`, `inventory.auditThAmountDiff`, `inventory.auditTotalDiff`, `inventory.auditStatusDraft`, `inventory.auditStatusApproved`.
 
 #### §10.1.1 Документы физической инвентаризации (`InventoryAdjustment`)
 
@@ -980,6 +984,14 @@ Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: 
 - Документация: **Swagger (OpenAPI)** — см. PRD.
 - **Secure payroll export storage (v2026.04.16):** универсальные зарплатные реестры сохраняются как файл через `STORAGE_SERVICE` (S3/local), а не inline `data:` payload.
 - **Temporary links (TTL):** скачивание зарплатного файла доступно только по временной подписанной ссылке и только ролям `OWNER`/`ACCOUNTANT` в пределах текущего `organizationId`.
+
+### 11.1. Web UI: шапка страницы (`PageHeader`)
+
+- **Назначение:** единообразная «шапка» контентной области в `apps/web` (Next.js App Router): заголовок страницы, опционально пояснение, опционально блок действий (кнопки, ссылки «назад», фильтры периода и т.д.) — в соответствии с **PRD §10.1** (две строки: заголовок слева; действия справа).
+- **Компонент:** `PageHeader` в `apps/web/components/layout/page-header.tsx` (props: `title`, `subtitle?`, `actions?`). Подзаголовок рендерится во вложенном `div`, допускающем несколько абзацев или вспомогательных блоков (например, отчётный период + ссылки на подотчёты).
+- **Навигация:** переходы между модулями — через **сайдбар**; отдельная горизонтальная полоса «хлебных» ссылок между разделами **не применяется** (исторический `ModulePageLinks` из репозитория удалён).
+- **Синхронизация с визуальным гайдом:** типографика и цвета заголовков/кнопок — [DESIGN.md](./DESIGN.md).
+- **Прочие UX-стандарты web** (модалки Create/Edit, `max-w-screen-xl`, collapse сайдбара, контраст, empty state): таблица **PRD §10.1**.
 
 ---
 
@@ -1697,9 +1709,25 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 
 - Таблицы без строк: компонент **Empty State**; мутации с ошибкой **4xx/5xx** — **toast** (Sonner); кнопки подтверждения — **disabled** и состояние загрузки на время запроса.
 
+### Локализация (i18n): источники правды, каталог API и деплой
+
+| Артефакт | Назначение |
+|-----------|------------|
+| **`apps/web/lib/i18n/resources.ts`** | Канонические строки **RU/AZ** для бандла Next.js; вложенная структура (`translation.nav.home`, …). Любой новый ключ `t("…")` в `apps/web/app` или `apps/web/components` должен быть добавлен сюда для **обеих** локалей. |
+| **`apps/api/src/admin/i18n-default-catalog-data.json`** | Плоский снимок тех же строк (`nav.home`, …), **автогенерация** из `resources.ts` скриптом `apps/api/scripts/gen-i18n-defaults.ts`. Читает API при работе с **`TranslationOverride`** и в ответах, где нужны «дефолты» рядом с оверрайдами. **Не редактировать вручную** — только через регенерацию. |
+| **`TranslationOverride` (БД)** | Патчи поверх бандла; выдача клиенту через **`GET /public/translations`** с последующим безопасным merge на фронте (`apply-db-overrides.ts`). Ошибки после деплоя чаще всего из-за «коротких» ключей, затирающих целые ветви, или пустых значений — см. фильтры в `apply-db-overrides.ts`. |
+
+**Команды (корень монорепо):**
+
+- **`npm run i18n:audit`** — обязателен в CI перед сборкой: сверка `t("…")` с `resources.ts` для **RU** и **AZ**.
+- **`npm run i18n:catalog`** — пересборка `i18n-default-catalog-data.json` из `resources.ts`; выполнять **в том же PR**, что и правки переводов, и коммитить обновлённый JSON, иначе Super-Admin / сравнение дефолтов на сервере увидят устаревший снимок.
+
+**Вне репозитория / не для прод:** произвольные файлы вида `_i18n-default-catalog-data.new.json` в корне **не** подключаются к Nest и **не** заменяют `i18n-default-catalog-data.json`; хранить их в git не следует — это источник путаницы и рассинхрона с п.2.
+
 ### i18n CI (v14.0)
 
-- CI pipeline **обязан** включать шаг **`npm run i18n:audit`**, гарантирующий полноту ключей локализации для **RU** и **AZ** локалей. Сборка должна **завершаться ошибкой** при обнаружении пропущенных ключей. Скрипт сканирует **все** страницы и компоненты web-приложения (`apps/web`) на предмет обращений к `t(...)` / `useTranslation` и сверяет с `resources.ts` (или эквивалентным источником статических переводов). EN — рекомендуется, но не блокирует сборку на текущем этапе.
+- CI pipeline **обязан** включать шаг **`npm run i18n:audit`**, гарантирующий полноту ключей локализации для **RU** и **AZ** локалей. Сборка должна **завершаться ошибкой** при обнаружении пропущенных ключей. Скрипт сканирует страницы и компоненты под `apps/web/app` и `apps/web/components` на предмет обращений к `t(...)` / `useTranslation` и сверяет с **`resources.ts`**. EN — рекомендуется, но не блокирует сборку на текущем этапе.
+- Практика мержа: при изменении `resources.ts` в одном PR выполнять также **`npm run i18n:catalog`** и включать дифф **`i18n-default-catalog-data.json`** (см. выше).
 
 ---
 
@@ -1795,6 +1823,8 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 | **2026.05.16** | Архив | QA & SRE (M1/M6): Invite security edge-cases and Hire-gate concurrency protection. |
 | **2026.05.17** | Архив | QA & SRE (M3/M4/M9): CRM integrity checks and Manufacturing batch release stress-tests. |
 | **2026.05.18** | Текущая | Final QA (Platform): Billing reconciliation and automated DR validation. Horizons v1/v2 reached 100%. |
+| **2026.05.19** | Текущая | Web UI: зафиксирован `PageHeader`, сайдбар-only навигация (без горизонтальных межмодульных ссылок); добавлены §11.1, строка истории в PRD §13; перекрёстные ссылки на PRD §10.1 и DESIGN.md. |
+| **2026.05.20** | Текущая | i18n: таблица источников правды и деплой в §17 (`resources.ts` → `i18n-default-catalog-data.json` → БД); команда **`npm run i18n:catalog`**; PRD §7.6.1; уточнён охват `i18n:audit`. |
 
 ### Принцип ведения истории (дальше)
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
 import { apiFetch } from "../../../lib/api-client";
 import { parseHrEmployeesResponse } from "../../../lib/hr-employees-list";
@@ -143,30 +143,21 @@ export default function HrAnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/payroll", labelKey: "nav.payroll" },
-        ]}
+      <PageHeader
+        title="İnfoqrafika"
+        subtitle="Məzuniyyət və xəstəlik təqvimi"
+        actions={
+          <label className="block shrink-0 text-[13px] font-medium text-[#34495E]">
+            Ay
+            <input
+              type="month"
+              value={monthValue}
+              onChange={(e) => setMonthValue(e.target.value)}
+              className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
+            />
+          </label>
+        }
       />
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-[#34495E]">İnfoqrafika</h1>
-          <p className="mt-1 text-[13px] text-[#7F8C8D]">
-            Məzuniyyət və xəstəlik təqvimi
-          </p>
-        </div>
-        <label className="block shrink-0 text-[13px] font-medium text-[#34495E]">
-          Ay
-          <input
-            type="month"
-            value={monthValue}
-            onChange={(e) => setMonthValue(e.target.value)}
-            className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
-          />
-        </label>
-      </div>
 
       {err ? <p className="text-red-600 text-sm">{err}</p> : null}
       {loading && <p className="text-gray-600">{t("common.loading")}</p>}

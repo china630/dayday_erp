@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import {
@@ -38,6 +38,7 @@ export default function HrPositionsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editPosition, setEditPosition] = useState<JobPositionRow | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -78,26 +79,23 @@ export default function HrPositionsPage() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/employees", labelKey: "nav.employees" },
-        ]}
+      <PageHeader
+        title={t("hrPositions.title")}
+        subtitle={t("hrPositions.subtitle")}
+        actions={
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            onClick={() => {
+              setEditPosition(null);
+              setCreateOpen(true);
+            }}
+            disabled={flat.length === 0}
+          >
+            + {t("hrStructure.addPosition")}
+          </button>
+        }
       />
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#34495E]">{t("hrPositions.title")}</h1>
-          <p className="mt-1 text-sm text-[#7F8C8D]">{t("hrPositions.subtitle")}</p>
-        </div>
-        <button
-          type="button"
-          className={PRIMARY_BUTTON_CLASS}
-          onClick={() => setCreateOpen(true)}
-          disabled={flat.length === 0}
-        >
-          + {t("hrStructure.addPosition")}
-        </button>
-      </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       <section className={`${CARD_CONTAINER_CLASS} p-6`}>
@@ -116,6 +114,7 @@ export default function HrPositionsPage() {
                   <th className="text-right p-2">{t("hrStructure.slots")}</th>
                   <th className="text-right p-2">{t("hrPositions.salaryFork")}</th>
                   <th className="text-right p-2">{t("hrStructure.positionsEmployees")}</th>
+                  <th className="p-2" />
                 </tr>
               </thead>
               <tbody>
@@ -128,6 +127,18 @@ export default function HrPositionsPage() {
                       {formatMoneyAzn(p.minSalary)} — {formatMoneyAzn(p.maxSalary)}
                     </td>
                     <td className="p-2 text-right tabular-nums">{p._count.employees}</td>
+                    <td className="p-2 text-right">
+                      <button
+                        type="button"
+                        className="text-sm text-action hover:underline"
+                        onClick={() => {
+                          setEditPosition(p);
+                          setCreateOpen(true);
+                        }}
+                      >
+                        {t("counterparties.edit")}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -138,9 +149,24 @@ export default function HrPositionsPage() {
 
       <JobPositionModal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditPosition(null);
+        }}
         departments={flat}
         onCreated={() => void load()}
+        editingPosition={
+          editPosition
+            ? {
+                id: editPosition.id,
+                departmentId: editPosition.department.id,
+                name: editPosition.name,
+                totalSlots: editPosition.totalSlots,
+                minSalary: Number(editPosition.minSalary),
+                maxSalary: Number(editPosition.maxSalary),
+              }
+            : null
+        }
       />
     </div>
   );

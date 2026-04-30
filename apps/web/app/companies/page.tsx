@@ -20,6 +20,7 @@ import { Badge } from "../../components/ui/badge";
 import { VoenRequestModal } from "../../components/companies/voen-request-modal";
 import { CreateCompanyModal } from "../../components/companies/create-company-modal";
 import { CreateHoldingModal } from "../../components/holding/create-holding-modal";
+import { PageHeader } from "../../components/layout/page-header";
 
 type OrganizationsTree = {
   holdings: Array<{
@@ -185,41 +186,39 @@ export default function CompaniesPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {t("companiesPage.title")}
-          </h1>
-          <p className="text-gray-600 mt-2">{t("companiesPage.subtitle")}</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => setVoenModalOpen(true)}
-          >
-            <Send className="h-4 w-4" aria-hidden />
-            {t("companiesPage.joinTitle")}
-          </button>
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => setCreateHoldingOpen(true)}
-          >
-            <Building2 className="h-4 w-4" aria-hidden />
-            {t("holdingCreate.openBtn")}
-          </button>
-          <button
-            type="button"
-            className={PRIMARY_BUTTON_CLASS}
-            onClick={() => setCreateModalOpen(true)}
-            aria-label={t("companiesPage.addCompanyAria")}
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            {t("companiesPage.modals.createCompanyTitle")}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={t("companiesPage.title")}
+        subtitle={t("companiesPage.subtitle")}
+        actions={
+          <>
+            <button
+              type="button"
+              className={SECONDARY_BUTTON_CLASS}
+              onClick={() => setVoenModalOpen(true)}
+            >
+              <Send className="h-4 w-4" aria-hidden />
+              {t("companiesPage.joinTitle")}
+            </button>
+            <button
+              type="button"
+              className={SECONDARY_BUTTON_CLASS}
+              onClick={() => setCreateHoldingOpen(true)}
+            >
+              <Building2 className="h-4 w-4" aria-hidden />
+              {t("holdingCreate.openBtn")}
+            </button>
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => setCreateModalOpen(true)}
+              aria-label={t("companiesPage.addCompanyAria")}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              {t("companiesPage.modals.createCompanyTitle")}
+            </button>
+          </>
+        }
+      />
 
       {holdingUiErr ? (
         <div className={`${CARD_CONTAINER_CLASS} p-3 text-sm text-red-600`}>

@@ -13,7 +13,7 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { validateAzIban } from "../../../lib/iban";
 
 type BankRow = {
@@ -340,27 +340,15 @@ export default function OrganizationSettingsPage() {
 
   if (!canOpenPage) {
     return (
-      <div className="space-y-4 max-w-3xl">
-        <ModulePageLinks
-          items={[{ href: "/", labelKey: "nav.home" }, { href: "/settings/team", labelKey: "nav.team" }]}
-        />
-        <p className="text-sm text-[#7F8C8D]">{t("orgSettings.noAccess")}</p>
+      <div className="max-w-3xl space-y-4">
+        <PageHeader title={title} subtitle={t("orgSettings.noAccess")} />
       </div>
     );
   }
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/settings/team", labelKey: "nav.team" },
-        ]}
-      />
-      <div>
-        <h1 className="text-2xl font-semibold text-[#34495E]">{title}</h1>
-        <p className="text-sm text-[#7F8C8D] mt-1">{t("orgSettings.subtitle")}</p>
-      </div>
+      <PageHeader title={title} subtitle={t("orgSettings.subtitle")} />
 
       <div className="flex flex-wrap gap-2 border-b border-[#D5DADF] pb-2">
         {tabBtn("general", t("orgSettings.tabGeneral"))}

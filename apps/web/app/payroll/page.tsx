@@ -2,7 +2,7 @@
 
 import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import {
   Fragment,
   Suspense,
@@ -629,66 +629,63 @@ function PayrollPageInner() {
 
   return (
     <div className="space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/employees", labelKey: "nav.employees" },
-        ]}
+      <PageHeader
+        title="Məzuniyyət və Əmək haqqı"
+        actions={
+          <div className="flex w-full flex-wrap items-end justify-between gap-x-4 gap-y-3">
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="block shrink-0 text-[13px] font-medium text-[#34495E]">
+                Ay
+                <input
+                  type="month"
+                  value={monthValue}
+                  onChange={(e) => setMonthValue(e.target.value)}
+                  className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
+                />
+              </label>
+              <DepartmentSelect
+                value={departmentId}
+                onChange={setDepartmentId}
+                className="mt-1 block h-8 min-w-[200px] rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px] sm:min-w-[220px]"
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                onClick={() => setAbsenceModalOpen(true)}
+                disabled={employees.length === 0 || absenceTypes.length === 0}
+              >
+                Yeni qeyd
+              </button>
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                onClick={() => setVacModalOpen(true)}
+                disabled={employees.length === 0}
+              >
+                {t("payroll.vacationCalc")}
+              </button>
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                onClick={() => setSickModalOpen(true)}
+                disabled={employees.length === 0}
+              >
+                {t("payroll.sickCalcTitle")}
+              </button>
+              <button
+                type="button"
+                className={PRIMARY_BUTTON_CLASS}
+                onClick={() => setRunModalOpen(true)}
+                disabled={payrollBusy}
+              >
+                Yeni hesab
+              </button>
+            </div>
+          </div>
+        }
       />
-      <h1 className="text-xl font-semibold text-[#34495E]">Məzuniyyət və Əmək haqqı</h1>
-
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="block shrink-0 text-[13px] font-medium text-[#34495E]">
-            Ay
-            <input
-              type="month"
-              value={monthValue}
-              onChange={(e) => setMonthValue(e.target.value)}
-              className="mt-1 block h-8 rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px]"
-            />
-          </label>
-          <DepartmentSelect
-            value={departmentId}
-            onChange={setDepartmentId}
-            className="mt-1 block h-8 min-w-[200px] rounded-[2px] border border-[#D5DADF] bg-white px-2 text-[13px] sm:min-w-[220px]"
-          />
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => setAbsenceModalOpen(true)}
-            disabled={employees.length === 0 || absenceTypes.length === 0}
-          >
-            Yeni qeyd
-          </button>
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => setVacModalOpen(true)}
-            disabled={employees.length === 0}
-          >
-            {t("payroll.vacationCalc")}
-          </button>
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={() => setSickModalOpen(true)}
-            disabled={employees.length === 0}
-          >
-            {t("payroll.sickCalcTitle")}
-          </button>
-          <button
-            type="button"
-            className={PRIMARY_BUTTON_CLASS}
-            onClick={() => setRunModalOpen(true)}
-            disabled={payrollBusy}
-          >
-            Yeni hesab
-          </button>
-        </div>
-      </div>
 
       {payrollJob && (
         <div className={`${CARD_CONTAINER_CLASS} border-l-4 border-l-[#2980B9] p-4`}>

@@ -6,7 +6,7 @@ import { apiFetch } from "../../../lib/api-client";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { TrendingDown } from "lucide-react";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
 
 type Row = {
@@ -72,18 +72,7 @@ export default function AgingPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-          { href: "/reporting/receivables", labelKey: "nav.receivables" },
-          { href: "/invoices", labelKey: "nav.invoices" },
-        ]}
-      />
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t("aging.title")}</h1>
-        <p className="text-sm text-slate-600 mt-1 max-w-2xl">{t("aging.subtitle")}</p>
-      </div>
+      <PageHeader title={t("aging.title")} subtitle={t("aging.subtitle")} />
 
       {data && (
         <p className="text-sm text-slate-600">

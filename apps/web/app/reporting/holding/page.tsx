@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { CARD_CONTAINER_CLASS, PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
 import { EmptyState } from "../../../components/empty-state";
 import { Building2 } from "lucide-react";
@@ -119,25 +119,15 @@ export default function HoldingConsolidatedReportingPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-        ]}
+      <PageHeader
+        title={t("holdingReport.title", {
+          defaultValue: "Сводный отчёт по холдингу (P&L)",
+        })}
+        subtitle={t("holdingReport.subtitle", {
+          defaultValue:
+            "Чистая прибыль по каждой организации холдинга за период и итоги по валютам.",
+        })}
       />
-      <div>
-        <h1 className="text-xl font-semibold text-[#34495E]">
-          {t("holdingReport.title", {
-            defaultValue: "Сводный отчёт по холдингу (P&L)",
-          })}
-        </h1>
-        <p className="mt-1 max-w-2xl text-[13px] text-[#7F8C8D]">
-          {t("holdingReport.subtitle", {
-            defaultValue:
-              "Чистая прибыль по каждой организации холдинга за период и итоги по валютам.",
-          })}
-        </p>
-      </div>
 
       <div className={`${CARD_CONTAINER_CLASS} space-y-4 p-4`}>
         <div className="flex flex-wrap items-end gap-3">

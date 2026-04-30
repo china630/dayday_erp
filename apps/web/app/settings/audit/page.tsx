@@ -10,6 +10,7 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type AuditRow = {
   id: string;
@@ -108,10 +109,7 @@ export default function AuditSettingsPage() {
 
   return (
     <div className="space-y-8 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t("auditPage.title")}</h1>
-        <p className="text-gray-600 mt-2">{t("auditPage.subtitle")}</p>
-      </div>
+      <PageHeader title={t("auditPage.title")} subtitle={t("auditPage.subtitle")} />
 
       <section className={`${CARD_CONTAINER_CLASS} p-4 space-y-3`}>
         <h2 className="text-[13px] font-semibold text-[#34495E]">{t("auditPage.filters")}</h2>

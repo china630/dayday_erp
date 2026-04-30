@@ -7,23 +7,34 @@ import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
+  GHOST_BUTTON_CLASS,
   PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
 
 type DeptFlat = { id: string; name: string; parentId: string | null };
+
+export type JobPositionEditPayload = {
+  id: string;
+  departmentId: string;
+  name: string;
+  totalSlots: number;
+  minSalary: number;
+  maxSalary: number;
+};
 
 export function JobPositionModal({
   open,
   onClose,
   departments,
   onCreated,
+  editingPosition,
 }: {
   open: boolean;
   onClose: () => void;
   departments: DeptFlat[];
   onCreated: () => void;
+  editingPosition?: JobPositionEditPayload | null;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
@@ -33,16 +44,30 @@ export function JobPositionModal({
   const [minSalary, setMinSalary] = useState("0");
   const [maxSalary, setMaxSalary] = useState("0");
 
-  const title = useMemo(() => t("hrStructure.addPosition"), [t]);
+  const isEdit = Boolean(editingPosition?.id);
+  const title = useMemo(
+    () => (isEdit ? t("counterparties.edit") : t("hrStructure.addPosition")),
+    [isEdit, t],
+  );
 
   useEffect(() => {
     if (!open) return;
-    setDeptId((prev) => (prev && departments.some((d) => d.id === prev) ? prev : departments[0]?.id ?? ""));
-    setName("");
-    setSlots("1");
-    setMinSalary("0");
-    setMaxSalary("0");
-  }, [open, departments]);
+    if (editingPosition) {
+      setDeptId(editingPosition.departmentId);
+      setName(editingPosition.name);
+      setSlots(String(editingPosition.totalSlots));
+      setMinSalary(String(editingPosition.minSalary));
+      setMaxSalary(String(editingPosition.maxSalary));
+    } else {
+      setDeptId((prev) =>
+        prev && departments.some((d) => d.id === prev) ? prev : departments[0]?.id ?? "",
+      );
+      setName("");
+      setSlots("1");
+      setMinSalary("0");
+      setMaxSalary("0");
+    }
+  }, [open, editingPosition, departments]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,17 +85,24 @@ export function JobPositionModal({
     const totalSlots = Math.max(1, Number(slots) || 1);
 
     setBusy(true);
-    const res = await apiFetch("/api/hr/job-positions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        departmentId: deptId,
-        name: name.trim(),
-        totalSlots,
-        minSalary: minN,
-        maxSalary: maxN,
-      }),
-    });
+    const body = {
+      departmentId: deptId,
+      name: name.trim(),
+      totalSlots,
+      minSalary: minN,
+      maxSalary: maxN,
+    };
+    const res = isEdit
+      ? await apiFetch(`/api/hr/job-positions/${editingPosition!.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      : await apiFetch("/api/hr/job-positions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
     setBusy(false);
     if (!res.ok) {
       toast.error(t("common.saveErr"), { description: await res.text() });
@@ -85,13 +117,13 @@ export function JobPositionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
+      <div className={`${CARD_CONTAINER_CLASS} max-h-[90vh] w-full max-w-xl overflow-y-auto bg-white p-6`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("hrPositions.subtitle")}</p>
+            <h3 className="m-0 text-base font-semibold text-gray-900">{title}</h3>
+            <p className="mb-0 mt-1 text-sm text-slate-600">{t("hrPositions.subtitle")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
+          <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -100,7 +132,12 @@ export function JobPositionModal({
           <div className="grid gap-4">
             <div>
               <span className={FORM_LABEL_CLASS}>{t("hrStructure.department")}</span>
-              <select className={FORM_INPUT_CLASS} value={deptId} onChange={(e) => setDeptId(e.target.value)}>
+              <select
+                className={FORM_INPUT_CLASS}
+                value={deptId}
+                onChange={(e) => setDeptId(e.target.value)}
+                disabled={isEdit}
+              >
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
@@ -151,13 +188,17 @@ export function JobPositionModal({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
+          <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+            <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
             </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy || departments.length === 0}>
+            <button
+              type="submit"
+              className={PRIMARY_BUTTON_CLASS}
+              disabled={busy || departments.length === 0}
+            >
               <Save className="h-4 w-4 shrink-0" aria-hidden />
-              {busy ? "…" : t("hrStructure.savePosition")}
+              {busy ? "…" : isEdit ? t("common.save") : t("hrStructure.savePosition")}
             </button>
           </div>
         </form>
@@ -165,4 +206,3 @@ export function JobPositionModal({
     </div>
   );
 }
-

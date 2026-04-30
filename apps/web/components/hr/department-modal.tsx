@@ -7,13 +7,20 @@ import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
+  GHOST_BUTTON_CLASS,
   PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
 
 type DeptFlat = { id: string; name: string; parentId: string | null };
 type EmployeeOpt = { id: string; firstName: string; lastName: string };
+
+export type DepartmentEditPayload = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  managerId: string | null;
+};
 
 export function DepartmentModal({
   open,
@@ -21,12 +28,15 @@ export function DepartmentModal({
   departments,
   employees,
   onCreated,
+  editingDepartment,
 }: {
   open: boolean;
   onClose: () => void;
   departments: DeptFlat[];
   employees: EmployeeOpt[];
   onCreated: () => void;
+  /** Режим редактирования; при null — создание. */
+  editingDepartment?: DepartmentEditPayload | null;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
@@ -34,14 +44,24 @@ export function DepartmentModal({
   const [parentId, setParentId] = useState("");
   const [managerId, setManagerId] = useState("");
 
-  const title = useMemo(() => t("hrStructure.newDeptButton"), [t]);
+  const isEdit = Boolean(editingDepartment?.id);
+  const title = useMemo(
+    () => (isEdit ? t("counterparties.edit") : t("hrStructure.newDeptButton")),
+    [isEdit, t],
+  );
 
   useEffect(() => {
     if (!open) return;
-    setName("");
-    setParentId("");
-    setManagerId("");
-  }, [open]);
+    if (editingDepartment) {
+      setName(editingDepartment.name);
+      setParentId(editingDepartment.parentId ?? "");
+      setManagerId(editingDepartment.managerId ?? "");
+    } else {
+      setName("");
+      setParentId("");
+      setManagerId("");
+    }
+  }, [open, editingDepartment]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,15 +71,22 @@ export function DepartmentModal({
       return;
     }
     setBusy(true);
-    const res = await apiFetch("/api/hr/departments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim(),
-        parentId: parentId || null,
-        managerId: managerId || null,
-      }),
-    });
+    const body = {
+      name: name.trim(),
+      parentId: parentId || null,
+      managerId: managerId || null,
+    };
+    const res = isEdit
+      ? await apiFetch(`/api/hr/departments/${editingDepartment!.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      : await apiFetch("/api/hr/departments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
     setBusy(false);
     if (!res.ok) {
       toast.error(t("common.saveErr"), { description: await res.text() });
@@ -72,15 +99,17 @@ export function DepartmentModal({
 
   if (!open) return null;
 
+  const parentOptions = departments.filter((d) => !isEdit || d.id !== editingDepartment?.id);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
+      <div className={`${CARD_CONTAINER_CLASS} max-h-[90vh] w-full max-w-xl overflow-y-auto bg-white p-6`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("hrStructure.subtitle")}</p>
+            <h3 className="m-0 text-base font-semibold text-gray-900">{title}</h3>
+            <p className="mb-0 mt-1 text-sm text-slate-600">{t("hrStructure.subtitle")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
+          <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -95,7 +124,7 @@ export function DepartmentModal({
               <span className={FORM_LABEL_CLASS}>{t("hrStructure.parent")}</span>
               <select className={FORM_INPUT_CLASS} value={parentId} onChange={(e) => setParentId(e.target.value)}>
                 <option value="">{t("hrStructure.parentRoot")}</option>
-                {departments.map((d) => (
+                {parentOptions.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>
@@ -115,13 +144,13 @@ export function DepartmentModal({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
+          <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+            <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
             </button>
             <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy}>
               <Save className="h-4 w-4 shrink-0" aria-hidden />
-              {busy ? "…" : t("hrStructure.create")}
+              {busy ? "…" : isEdit ? t("common.save") : t("hrStructure.create")}
             </button>
           </div>
         </form>
@@ -129,4 +158,3 @@ export function DepartmentModal({
     </div>
   );
 }
-

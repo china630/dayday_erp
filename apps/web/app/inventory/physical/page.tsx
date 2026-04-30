@@ -7,12 +7,11 @@ import { apiFetch } from "../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
   INPUT_BORDERED_CLASS,
-  LINK_ACCENT_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type Warehouse = { id: string; name: string };
 type Product = { id: string; name: string; sku: string; isService?: boolean };
@@ -171,17 +170,15 @@ export default function InventoryPhysicalPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-6">
-      <ModulePageLinks
-        items={[
-          { href: "/inventory", labelKey: "nav.inventory" },
-          { href: "/inventory/physical", labelKey: "inventory.physicalNav" },
-        ]}
+      <PageHeader
+        title={t("inventory.physicalTitle")}
+        subtitle={t("inventory.physicalHint")}
+        actions={
+          <Link href="/inventory" className={SECONDARY_BUTTON_CLASS}>
+            ← {t("inventory.backList")}
+          </Link>
+        }
       />
-      <Link href="/inventory" className={`text-[13px] ${LINK_ACCENT_CLASS}`}>
-        ← {t("inventory.backList")}
-      </Link>
-      <h1 className="mt-4 text-xl font-semibold text-[#34495E]">{t("inventory.physicalTitle")}</h1>
-      <p className="mt-1 text-[13px] text-[#7F8C8D]">{t("inventory.physicalHint")}</p>
 
       <form onSubmit={onSaveDraft} className={`mt-6 ${CARD_CONTAINER_CLASS} p-4 md:p-5`}>
         <div className="grid gap-4 md:grid-cols-2">

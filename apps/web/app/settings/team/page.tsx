@@ -12,6 +12,7 @@ import {
 } from "../../../lib/design-system";
 import { useAuth } from "../../../lib/auth-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type MemberRow = {
   userId: string;
@@ -232,10 +233,7 @@ export default function TeamSettingsPage() {
 
   return (
     <div className="space-y-10 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t("teamPage.title")}</h1>
-        <p className="text-gray-600 mt-2">{t("teamPage.subtitle")}</p>
-      </div>
+      <PageHeader title={t("teamPage.title")} subtitle={t("teamPage.subtitle")} />
 
       {loadErr && (
         <p className="text-red-600 text-sm">{loadErr}</p>

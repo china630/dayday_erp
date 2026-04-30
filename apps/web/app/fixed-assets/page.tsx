@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,12 +10,14 @@ import { useRequireAuth } from "../../lib/use-require-auth";
 import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { EmptyState } from "../../components/empty-state";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import { SubscriptionPaywall } from "../../components/subscription-paywall";
+import { FixedAssetModal } from "../../components/fixed-assets/fixed-asset-modal";
 import {
   BORDER_MUTED_CLASS,
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 
 type Fa = {
@@ -32,12 +34,16 @@ type Fa = {
 
 function FixedAssetsPageContent() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { token, ready } = useRequireAuth();
   const { user } = useAuth();
   const hideDestructive = isRestrictedUserRole(user?.role ?? undefined);
   const [rows, setRows] = useState<Fa[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [faModalOpen, setFaModalOpen] = useState(false);
+  const [faModalMode, setFaModalMode] = useState<"create" | "edit">("create");
+  const [faEditId, setFaEditId] = useState<string | null>(null);
   const [depYear, setDepYear] = useState(String(new Date().getUTCFullYear()));
   const [depMonth, setDepMonth] = useState(String(new Date().getUTCMonth() + 1));
   const [runningDep, setRunningDep] = useState(false);
@@ -63,6 +69,17 @@ function FixedAssetsPageContent() {
     if (!ready || !token) return;
     void load();
   }, [load, ready, token]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("modal") === "fixedAsset") {
+      setFaModalMode("create");
+      setFaEditId(null);
+      setFaModalOpen(true);
+      router.replace("/fixed-assets", { scroll: false });
+    }
+  }, [router]);
 
   useEffect(() => {
     const onOnline = () => {
@@ -125,44 +142,48 @@ function FixedAssetsPageContent() {
 
   return (
     <div className="space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-        ]}
+      <PageHeader
+        title={t("fixedAssets.title")}
+        actions={
+          <>
+            <input
+              type="number"
+              min={1900}
+              max={2100}
+              value={depYear}
+              onChange={(e) => setDepYear(e.target.value)}
+              className="h-10 w-24 rounded-md border border-slate-300 px-2 text-sm"
+            />
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={depMonth}
+              onChange={(e) => setDepMonth(e.target.value)}
+              className="h-10 w-16 rounded-md border border-slate-300 px-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => void runDepreciation()}
+              disabled={runningDep}
+              className={PRIMARY_BUTTON_CLASS}
+            >
+              {runningDep ? "…" : t("fixedAssets.runDepreciation")}
+            </button>
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => {
+                setFaModalMode("create");
+                setFaEditId(null);
+                setFaModalOpen(true);
+              }}
+            >
+              + {t("fixedAssets.newBtn")}
+            </button>
+          </>
+        }
       />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-[#34495E]">{t("fixedAssets.title")}</h1>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={1900}
-            max={2100}
-            value={depYear}
-            onChange={(e) => setDepYear(e.target.value)}
-            className="h-10 w-24 rounded-md border border-slate-300 px-2 text-sm"
-          />
-          <input
-            type="number"
-            min={1}
-            max={12}
-            value={depMonth}
-            onChange={(e) => setDepMonth(e.target.value)}
-            className="h-10 w-16 rounded-md border border-slate-300 px-2 text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => void runDepreciation()}
-            disabled={runningDep}
-            className={PRIMARY_BUTTON_CLASS}
-          >
-            {runningDep ? "…" : t("fixedAssets.runDepreciation")}
-          </button>
-          <Link href="/fixed-assets/new" className={PRIMARY_BUTTON_CLASS}>
-            + {t("fixedAssets.newBtn")}
-          </Link>
-        </div>
-      </div>
       {err && (
         <div className="rounded-xl border border-red-100 bg-red-50/80 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-red-800 text-sm m-0">{err}</p>
@@ -189,6 +210,19 @@ function FixedAssetsPageContent() {
             }
             title={t("fixedAssets.emptyTitle")}
             description={t("fixedAssets.emptyHint")}
+            action={
+              <button
+                type="button"
+                className={PRIMARY_BUTTON_CLASS}
+                onClick={() => {
+                  setFaModalMode("create");
+                  setFaEditId(null);
+                  setFaModalOpen(true);
+                }}
+              >
+                + {t("fixedAssets.newBtn")}
+              </button>
+            }
           />
         </div>
       )}
@@ -217,15 +251,28 @@ function FixedAssetsPageContent() {
                     Number(r.purchasePrice) - Number(r.bookedDepreciation),
                   )}
                 </div>
-                {!hideDestructive && (
+                <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="text-red-700 text-xs mt-2 border border-red-200 px-2 py-1 rounded-md"
-                    onClick={() => void remove(r.id)}
+                    className={SECONDARY_BUTTON_CLASS}
+                    onClick={() => {
+                      setFaModalMode("edit");
+                      setFaEditId(r.id);
+                      setFaModalOpen(true);
+                    }}
                   >
-                    {t("fixedAssets.delete")}
+                    {t("products.edit")}
                   </button>
-                )}
+                  {!hideDestructive && (
+                    <button
+                      type="button"
+                      className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md"
+                      onClick={() => void remove(r.id)}
+                    >
+                      {t("fixedAssets.delete")}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -256,6 +303,9 @@ function FixedAssetsPageContent() {
                   <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
                     {t("fixedAssets.bookValue")}
                   </th>
+                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
+                    {t("products.edit")}
+                  </th>
                   {!hideDestructive ? (
                     <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" />
                   ) : null}
@@ -275,6 +325,19 @@ function FixedAssetsPageContent() {
                         Number(r.purchasePrice) - Number(r.bookedDepreciation),
                       )}
                     </td>
+                    <td className="p-2 text-right">
+                      <button
+                        type="button"
+                        className={SECONDARY_BUTTON_CLASS}
+                        onClick={() => {
+                          setFaModalMode("edit");
+                          setFaEditId(r.id);
+                          setFaModalOpen(true);
+                        }}
+                      >
+                        {t("products.edit")}
+                      </button>
+                    </td>
                     {!hideDestructive && (
                       <td>
                         <button
@@ -293,6 +356,14 @@ function FixedAssetsPageContent() {
           </div>
         </>
       )}
+
+      <FixedAssetModal
+        open={faModalOpen}
+        mode={faModalMode}
+        assetId={faEditId}
+        onClose={() => setFaModalOpen(false)}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

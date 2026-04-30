@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth-context";
 import { useOrgPermissions } from "../lib/use-org-permissions";
@@ -65,7 +65,7 @@ function QuickActionsMenuItems({
         </Link>
       ) : null}
       <Link
-        href="/employees/new"
+        href="/employees"
         className={quickActionItemClass}
         role="menuitem"
         onClick={onNavigate}
@@ -440,6 +440,7 @@ function LedgerToggle() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user, ready, logout } = useAuth();
@@ -508,7 +509,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const salesActive =
       pathname.startsWith("/invoices") ||
       pathname.startsWith("/counterparties");
-    const purchasesActive = pathname.startsWith("/inventory/purchase");
+    const purchasesActive =
+      pathname.startsWith("/inventory/purchase") ||
+      (pathname === "/inventory" && searchParams.get("modal") === "purchase");
     const warehouseActive =
       (pathname.startsWith("/inventory") &&
         !pathname.startsWith("/inventory/purchase")) ||
@@ -546,7 +549,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       reportingHubActive,
       inventoryMainActive,
     };
-  }, [pathname]);
+  }, [pathname, searchParams]);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem("dayday_sidebar_collapsed") === "1") {
+      setSidebarCollapsed(true);
+    }
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("dayday_sidebar_collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
@@ -655,9 +670,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         user={user}
         canPostAccounting={canPostAccounting}
         canViewHoldingReports={canViewHoldingReports}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebarCollapsed={() => setSidebarCollapsed((v) => !v)}
       />
 
-      <div className="min-w-0 pt-16 lg:pl-64">
+      <div
+        className={[
+          "min-w-0 pt-16 transition-[padding] duration-200 ease-out",
+          sidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-64",
+        ].join(" ")}
+      >
         <MainHeader
           onToggleMobileNav={toggleMobileNav}
           mobileNavOpen={mobileNavOpen}
@@ -677,7 +699,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onLogout={() => void logout()}
         />
 
-        <main className="app-shell-main mx-auto w-full min-w-0 max-w-[100vw] px-4 py-6 pb-24 sm:px-6 sm:py-8 lg:max-w-6xl lg:px-8 lg:pb-8">
+        <main className="app-shell-main mx-auto w-full min-w-0 max-w-screen-xl px-4 py-6 pb-24 sm:px-6 sm:py-8 lg:px-8 lg:pb-8">
           {ready && token ? <TrialBanner /> : null}
           {ready && token && billingBanner ? (
             <div

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Download } from "lucide-react";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { apiFetch } from "../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
@@ -327,28 +327,15 @@ export default function MigrationSettingsPage() {
 
   if (!canImport) {
     return (
-      <div className="space-y-4 max-w-3xl">
-        <ModulePageLinks
-          items={[{ href: "/", labelKey: "nav.home" }, { href: "/settings/organization", labelKey: "nav.orgCompany" }]}
-        />
-        <p className="text-sm text-[#7F8C8D]">{t("migrationWizard.noAccess")}</p>
+      <div className="max-w-3xl space-y-4">
+        <PageHeader title={t("migrationWizard.title")} subtitle={t("migrationWizard.noAccess")} />
       </div>
     );
   }
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/settings/organization", labelKey: "nav.orgCompany" },
-          { href: "/settings/migration", labelKey: "nav.settingsMigration" },
-        ]}
-      />
-      <div>
-        <h1 className="text-2xl font-semibold text-[#34495E]">{t("migrationWizard.title")}</h1>
-        <p className="text-sm text-[#7F8C8D] mt-1">{t("migrationWizard.subtitle")}</p>
-      </div>
+      <PageHeader title={t("migrationWizard.title")} subtitle={t("migrationWizard.subtitle")} />
 
       <section className={`${CARD_CONTAINER_CLASS} p-4 space-y-4`}>
         <div className="flex flex-wrap gap-2">

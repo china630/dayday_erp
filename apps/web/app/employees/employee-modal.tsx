@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
+  GHOST_BUTTON_CLASS,
   PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
 } from "../../lib/design-system";
 import { isValidFinCode, normalizeFinInput } from "../../lib/fin-code";
 import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
@@ -19,7 +19,7 @@ type JobPositionOpt = {
   department: { id: string; name: string };
 };
 
-export function EmployeeModal({
+export function CreateEmployeeModal({
   open,
   onClose,
   onCreated,
@@ -168,7 +168,7 @@ export function EmployeeModal({
             <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
             <p className="text-sm text-slate-600 mt-1 mb-0">{t("employees.newSection")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
+          <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -179,15 +179,20 @@ export function EmployeeModal({
         <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.kind")}</span>
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as "EMPLOYEE" | "CONTRACTOR")}
+              <span className={FORM_LABEL_CLASS}>{t("employees.firstName")}</span>
+              <input className={FORM_INPUT_CLASS} value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            </div>
+            <div>
+              <span className={FORM_LABEL_CLASS}>{t("employees.lastName")}</span>
+              <input className={FORM_INPUT_CLASS} value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            </div>
+            <div className="md:col-span-2">
+              <span className={FORM_LABEL_CLASS}>{t("employees.patronymic")}</span>
+              <input
                 className={FORM_INPUT_CLASS}
-              >
-                <option value="EMPLOYEE">{t("employees.kindEmployee")}</option>
-                <option value="CONTRACTOR">{t("employees.kindContractor")}</option>
-              </select>
+                value={patronymic}
+                onChange={(e) => setPatronymic(e.target.value)}
+              />
             </div>
 
             <div>
@@ -202,6 +207,18 @@ export function EmployeeModal({
                 onChange={(e) => setFinCode(normalizeFinInput(e.target.value))}
                 className={FORM_INPUT_CLASS}
               />
+            </div>
+
+            <div>
+              <span className={FORM_LABEL_CLASS}>{t("employees.kind")}</span>
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as "EMPLOYEE" | "CONTRACTOR")}
+                className={FORM_INPUT_CLASS}
+              >
+                <option value="EMPLOYEE">{t("employees.kindEmployee")}</option>
+                <option value="CONTRACTOR">{t("employees.kindContractor")}</option>
+              </select>
             </div>
 
             {kind === "CONTRACTOR" ? (
@@ -227,23 +244,6 @@ export function EmployeeModal({
                 </div>
               </>
             ) : null}
-
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.firstName")}</span>
-              <input className={FORM_INPUT_CLASS} value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.lastName")}</span>
-              <input className={FORM_INPUT_CLASS} value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("employees.patronymic")}</span>
-              <input
-                className={FORM_INPUT_CLASS}
-                value={patronymic}
-                onChange={(e) => setPatronymic(e.target.value)}
-              />
-            </div>
 
             <div className="md:col-span-2">
               <span className={FORM_LABEL_CLASS}>{t("employees.jobPositionSelect")}</span>
@@ -274,9 +274,9 @@ export function EmployeeModal({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
+          <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+            <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
             </button>
             <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy || loading || quotaAtLimit}>
               <Save className="h-4 w-4 shrink-0" aria-hidden />

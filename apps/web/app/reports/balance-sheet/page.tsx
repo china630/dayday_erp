@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import {
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
@@ -114,18 +114,11 @@ export default function BalanceSheetPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks items={[{ href: "/", labelKey: "nav.home" }]} />
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#34495E]">
-            {t("reports.balanceSheet.title")}
-          </h1>
-          <p className="mt-1 text-[13px] text-[#7F8C8D]">
-            {t("reports.balanceSheet.hint")}
-          </p>
-        </div>
-        <div className={`${CARD_CONTAINER_CLASS} p-4 flex flex-wrap items-end gap-3`}>
+      <PageHeader
+        title={t("reports.balanceSheet.title")}
+        subtitle={t("reports.balanceSheet.hint")}
+        actions={
+          <div className={`${CARD_CONTAINER_CLASS} flex flex-wrap items-end gap-3 p-4`}>
           <label className="flex flex-col gap-1">
             <span className={FORM_LABEL_CLASS}>{t("reports.balanceSheet.asOf")}</span>
             <input
@@ -152,7 +145,8 @@ export default function BalanceSheetPage() {
             {t("common.today")}
           </button>
         </div>
-      </div>
+        }
+      />
 
       {err ? <div className="text-sm text-red-600">{err}</div> : null}
 

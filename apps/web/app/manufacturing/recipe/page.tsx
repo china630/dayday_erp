@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { inputFieldClass, textareaFieldClass } from "../../../lib/form-classes";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
+import { SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
 import { SubscriptionPaywall } from "../../../components/subscription-paywall";
 
 type Product = { id: string; name: string; sku: string };
@@ -114,20 +115,14 @@ function ManufacturingRecipeContent() {
 
   return (
     <div className="space-y-8 w-full max-w-3xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/manufacturing", labelKey: "nav.manufacturing" },
-          { href: "/inventory", labelKey: "nav.inventory" },
-          { href: "/products", labelKey: "nav.products" },
-        ]}
+      <PageHeader
+        title={t("manufacturing.recipes")}
+        actions={
+          <Link href="/manufacturing" className={SECONDARY_BUTTON_CLASS}>
+            ← {t("manufacturing.backHub")}
+          </Link>
+        }
       />
-      <div>
-        <Link href="/manufacturing" className="text-sm text-action hover:text-primary">
-          ← {t("manufacturing.backHub")}
-        </Link>
-        <h1 className="text-2xl font-semibold text-gray-900 mt-4">{t("manufacturing.recipes")}</h1>
-      </div>
       {err && <p className="text-red-600 text-sm">{err}</p>}
 
       {products.length > 0 && (

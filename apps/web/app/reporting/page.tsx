@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api-client";
@@ -13,7 +13,7 @@ import { ledgerQueryParam, useLedger } from "../../lib/ledger-context";
 import { formatMoneyAzn } from "../../lib/format-money";
 import { CHART_ACCOUNT_NAMES_AZ } from "../../lib/i18n/chart-account-names-az";
 import { useRequireAuth } from "../../lib/use-require-auth";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import { EmptyState } from "../../components/empty-state";
 import {
   BORDER_MUTED_CLASS,
@@ -265,66 +265,62 @@ export default function ReportingPage() {
 
   return (
     <div className="space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/settings/mapping", labelKey: "nav.settingsMapping" },
-        ]}
+      <PageHeader
+        title={t("reporting.title")}
+        subtitle={
+          <Fragment>
+            <p className="m-0">{t("reporting.activeLedger", { ledger: ledgerType })}</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <Link href="/reporting/receivables" className="text-action hover:text-primary">
+                {t("reporting.receivablesLink")}
+              </Link>
+              <Link href="/reporting/reconciliation" className="text-action hover:text-primary">
+                {t("reporting.reconciliationLink")}
+              </Link>
+              <Link href="/reporting/aging" className="text-action hover:text-primary">
+                {t("reporting.agingLink")}
+              </Link>
+              <Link href="/reporting/tax-export" className="text-action hover:text-primary">
+                {t("reporting.taxExportLink")}
+              </Link>
+            </div>
+          </Fragment>
+        }
+        actions={
+          canClose ? (
+            <div className={`flex flex-wrap items-end gap-3 px-4 py-3 ${CARD_CONTAINER_CLASS}`}>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">{t("dashboard.year")}</span>
+                <input
+                  type="number"
+                  value={closeYear}
+                  onChange={(e) => setCloseYear(Number(e.target.value))}
+                  className="w-28 rounded-md border border-slate-200 px-2 py-1.5"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">{t("dashboard.month")}</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={closeMonth}
+                  onChange={(e) => setCloseMonth(Number(e.target.value))}
+                  className="w-24 rounded-md border border-slate-200 px-2 py-1.5"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void closePeriod()}
+                disabled={closing}
+                className={PRIMARY_BUTTON_CLASS}
+              >
+                {closing ? t("dashboard.closing") : t("reporting.closePeriodBtn")}
+              </button>
+            </div>
+          ) : undefined
+        }
       />
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex-1 min-w-[200px]">
-          <h1 className="text-xl font-semibold text-[#34495E]">{t("reporting.title")}</h1>
-          <p className="mt-1 text-[13px] text-[#7F8C8D]">
-            {t("reporting.activeLedger", { ledger: ledgerType })}
-          </p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
-            <Link href="/reporting/receivables" className="text-action hover:text-primary">
-              {t("reporting.receivablesLink")}
-            </Link>
-            <Link href="/reporting/reconciliation" className="text-action hover:text-primary">
-              {t("reporting.reconciliationLink")}
-            </Link>
-            <Link href="/reporting/aging" className="text-action hover:text-primary">
-              {t("reporting.agingLink")}
-            </Link>
-            <Link href="/reporting/tax-export" className="text-action hover:text-primary">
-              {t("reporting.taxExportLink")}
-            </Link>
-          </div>
-        </div>
-        {canClose && (
-          <div className={`flex flex-wrap items-end gap-3 px-4 py-3 ${CARD_CONTAINER_CLASS}`}>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">{t("dashboard.year")}</span>
-              <input
-                type="number"
-                value={closeYear}
-                onChange={(e) => setCloseYear(Number(e.target.value))}
-                className="w-28 rounded-md border border-slate-200 px-2 py-1.5"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">{t("dashboard.month")}</span>
-              <input
-                type="number"
-                min={1}
-                max={12}
-                value={closeMonth}
-                onChange={(e) => setCloseMonth(Number(e.target.value))}
-                className="w-24 rounded-md border border-slate-200 px-2 py-1.5"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => void closePeriod()}
-              disabled={closing}
-              className={PRIMARY_BUTTON_CLASS}
-            >
-              {closing ? t("dashboard.closing") : t("reporting.closePeriodBtn")}
-            </button>
-          </div>
-        )}
-      </div>
       {closeMsg && <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">{closeMsg}</p>}
 
       <div

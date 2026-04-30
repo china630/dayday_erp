@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeftRight,
@@ -38,6 +38,8 @@ import {
   Shield,
   ShieldCheck,
   ShoppingBag,
+  PanelLeftClose,
+  PanelRightClose,
   ShoppingCart,
   SlidersHorizontal,
   TrendingDown,
@@ -47,6 +49,23 @@ import {
   Wallet,
 } from "lucide-react";
 import type { AuthUser } from "../../lib/auth-context";
+
+type SidebarLayout = {
+  /** Collapsed rail только на lg+; на мобильном выезде — всегда полная ширина. */
+  layoutCollapsed: boolean;
+  openFlyoutKey: string | null;
+  setOpenFlyoutKey: (k: string | null) => void;
+};
+
+const SidebarLayoutContext = createContext<SidebarLayout | null>(null);
+
+function useSidebarLayout(): SidebarLayout {
+  const v = useContext(SidebarLayoutContext);
+  if (!v) {
+    throw new Error("useSidebarLayout: missing provider");
+  }
+  return v;
+}
 
 function LockGlyph({ className }: { className?: string }) {
   return (
@@ -66,10 +85,15 @@ function LockGlyph({ className }: { className?: string }) {
   );
 }
 
-function SidebarLogo() {
+function SidebarLogo({ layoutCollapsed }: { layoutCollapsed: boolean }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary flex items-center justify-center">
+    <div
+      className={[
+        "flex items-center gap-3",
+        layoutCollapsed ? "lg:justify-center lg:gap-0" : "",
+      ].join(" ")}
+    >
+      <div className="h-10 w-10 shrink-0 rounded-xl bg-primary/10 border border-primary flex items-center justify-center">
         <svg
           width="22"
           height="22"
@@ -102,7 +126,7 @@ function SidebarLogo() {
           />
         </svg>
       </div>
-      <div className="leading-tight">
+      <div className={["leading-tight", layoutCollapsed ? "lg:hidden" : ""].join(" ")}>
         <div className="text-[15px] font-semibold text-gray-900">DayDay ERP</div>
         <div className="text-[12px] text-gray-500">Budget & accounting</div>
       </div>
@@ -111,32 +135,58 @@ function SidebarLogo() {
 }
 
 function CollapsibleNavSection({
+  sectionKey,
   title,
   icon: Icon,
   sectionActive,
   sectionHeaderHighlighted,
   children,
 }: {
+  sectionKey: string;
   title: string;
   icon: LucideIcon;
   sectionActive: boolean;
   sectionHeaderHighlighted?: boolean;
   children: React.ReactNode;
 }) {
+  const { layoutCollapsed, openFlyoutKey, setOpenFlyoutKey } = useSidebarLayout();
   const [open, setOpen] = useState(sectionActive);
+  const rootRef = useRef<HTMLDivElement>(null);
   const headerOn = sectionHeaderHighlighted ?? sectionActive;
+  const flyoutOpen = openFlyoutKey === sectionKey;
+
   useEffect(() => {
     if (sectionActive) setOpen(true);
   }, [sectionActive]);
 
+  useEffect(() => {
+    if (!layoutCollapsed || !flyoutOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      setOpenFlyoutKey(null);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [layoutCollapsed, flyoutOpen, setOpenFlyoutKey]);
+
+  const expanded = layoutCollapsed ? flyoutOpen : open;
+
   return (
-    <div className="flex flex-col gap-0">
+    <div className="relative flex flex-col gap-0" ref={rootRef}>
       <button
         type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        aria-expanded={expanded}
+        aria-label={title}
+        onClick={() => {
+          if (layoutCollapsed) {
+            setOpenFlyoutKey(flyoutOpen ? null : sectionKey);
+          } else {
+            setOpen((v) => !v);
+          }
+        }}
         className={[
           "flex w-full items-center gap-2 px-3 py-2 rounded-lg border transition",
+          layoutCollapsed ? "lg:justify-center lg:px-2" : "",
           headerOn
             ? "bg-white border-primary text-gray-900 shadow-md"
             : "bg-transparent border-transparent text-gray-600 hover:border-gray-200 hover:bg-white/70",
@@ -151,16 +201,33 @@ function CollapsibleNavSection({
           ].join(" ")}
           aria-hidden
         />
-        <span className="text-sm font-semibold flex-1 text-left">{title}</span>
-        {open ? (
+        <span
+          className={[
+            "text-sm font-semibold flex-1 text-left",
+            layoutCollapsed ? "lg:sr-only" : "",
+          ].join(" ")}
+        >
+          {title}
+        </span>
+        {layoutCollapsed ? (
+          <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 lg:hidden" aria-hidden />
+        ) : expanded ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
         )}
       </button>
-      {open ? (
-        <div className="ml-2 mt-1 pl-4 border-l-2 border-gray-200 flex flex-col gap-0.5">
+      {layoutCollapsed && flyoutOpen ? (
+        <div className="absolute left-full top-0 z-[60] ml-1 hidden min-w-[13rem] flex-col gap-0.5 rounded-lg border border-[#D5DADF] bg-white p-2 shadow-lg lg:flex">
           {children}
+        </div>
+      ) : null}
+      {!layoutCollapsed && open ? (
+        <div className="ml-2 mt-1 flex flex-col gap-0.5 border-l-2 border-gray-200 pl-4">{children}</div>
+      ) : null}
+      {layoutCollapsed ? (
+        <div className="ml-2 mt-1 flex flex-col gap-0.5 border-l-2 border-gray-200 pl-4 lg:hidden">
+          {open ? children : null}
         </div>
       ) : null}
     </div>
@@ -177,15 +244,26 @@ function SideNavItem(props: {
   onNavClick?: () => void;
 }) {
   const { t } = useTranslation();
+  const { layoutCollapsed, setOpenFlyoutKey } = useSidebarLayout();
   const Icon = props.icon;
   return (
     <Link
       href={props.href}
-      title={props.locked ? t("subscription.navLockedTooltip") : undefined}
-      onClick={() => props.onNavClick?.()}
+      title={
+        props.locked
+          ? t("subscription.navLockedTooltip")
+          : layoutCollapsed
+            ? props.label
+            : undefined
+      }
+      onClick={() => {
+        if (layoutCollapsed) setOpenFlyoutKey(null);
+        props.onNavClick?.();
+      }}
       className={[
         "flex items-center rounded-lg border group",
         props.nested ? "gap-2 px-2 py-1.5 text-sm" : "gap-3 px-3 py-2",
+        layoutCollapsed && !props.nested ? "lg:justify-center lg:px-2 lg:gap-0" : "",
         props.isActive
           ? "bg-white border-primary text-gray-900 shadow-md"
           : "bg-transparent border-transparent text-gray-600 hover:border-gray-200 hover:bg-white/70",
@@ -205,9 +283,22 @@ function SideNavItem(props: {
       ) : (
         <span className="inline-block h-2 w-2 rounded-full bg-primary shrink-0" />
       )}
-      <span className="text-sm font-medium flex-1 min-w-0">{props.label}</span>
+      <span
+        className={[
+          "min-w-0 flex-1 text-sm font-medium",
+          layoutCollapsed && !props.nested ? "lg:sr-only" : "",
+        ].join(" ")}
+      >
+        {props.label}
+      </span>
       {props.locked ? (
-        <LockGlyph className="h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+        <LockGlyph
+          className={[
+            "h-4 w-4 shrink-0 text-amber-600",
+            layoutCollapsed && !props.nested ? "lg:sr-only" : "",
+          ].join(" ")}
+          aria-hidden
+        />
       ) : null}
     </Link>
   );
@@ -220,11 +311,16 @@ function SideNavSubItem(props: {
   icon?: LucideIcon;
   onNavClick?: () => void;
 }) {
+  const { layoutCollapsed, setOpenFlyoutKey } = useSidebarLayout();
   const Icon = props.icon;
   return (
     <Link
       href={props.href}
-      onClick={() => props.onNavClick?.()}
+      title={layoutCollapsed ? props.label : undefined}
+      onClick={() => {
+        if (layoutCollapsed) setOpenFlyoutKey(null);
+        props.onNavClick?.();
+      }}
       className={[
         "flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border text-sm ml-0.5",
         props.isActive
@@ -274,6 +370,8 @@ export function MainSidebar({
   user,
   canPostAccounting,
   canViewHoldingReports,
+  sidebarCollapsed,
+  onToggleSidebarCollapsed,
 }: {
   mobileNavOpen: boolean;
   /** Close mobile drawer after navigation */
@@ -287,25 +385,50 @@ export function MainSidebar({
   user: AuthUser | null;
   canPostAccounting: boolean;
   canViewHoldingReports: boolean;
+  sidebarCollapsed: boolean;
+  onToggleSidebarCollapsed: () => void;
 }) {
   const pathname = usePathname();
   const { t } = useTranslation();
+  const [layoutWide, setLayoutWide] = useState(false);
+  const [openFlyoutKey, setOpenFlyoutKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setLayoutWide(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const layoutCollapsed = Boolean(sidebarCollapsed && layoutWide);
 
   const panelClass = [
-    "fixed left-0 top-0 z-[50] flex h-screen w-64 flex-col border-r border-[#D5DADF] bg-white shadow-xl transition-transform duration-200 ease-out lg:z-40 lg:shadow-none",
+    "fixed left-0 top-0 z-[50] flex h-screen w-64 flex-col border-r border-[#D5DADF] bg-white shadow-xl transition-[transform,width] duration-200 ease-out lg:z-40 lg:shadow-none",
+    layoutWide && sidebarCollapsed ? "lg:w-[4.5rem]" : "lg:w-64",
     mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
   ].join(" ");
 
+  const sidebarLayout: SidebarLayout = {
+    layoutCollapsed,
+    openFlyoutKey,
+    setOpenFlyoutKey: setOpenFlyoutKey,
+  };
+
   return (
     <aside id="app-main-sidebar" className={panelClass}>
-      <div className="shrink-0 p-5">
-        <SidebarLogo />
+      <div className={["shrink-0 p-5", layoutCollapsed ? "lg:px-2 lg:py-4" : ""].join(" ")}>
+        <SidebarLogo layoutCollapsed={layoutCollapsed} />
       </div>
       <div className="mx-3 h-px shrink-0 bg-gray-200" />
-      <nav
-        className="dayday-sidebar-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3 pt-2 max-h-screen"
-        aria-label="Main navigation"
-      >
+      <SidebarLayoutContext.Provider value={sidebarLayout}>
+        <nav
+          className={[
+            "dayday-sidebar-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3 pt-2 max-h-screen",
+            layoutCollapsed ? "lg:px-2" : "",
+          ].join(" ")}
+          aria-label="Main navigation"
+        >
         <SideNavItem
           href="/"
           label={t("nav.home")}
@@ -315,6 +438,7 @@ export function MainSidebar({
         />
 
         <CollapsibleNavSection
+          sectionKey="treasury"
           title={t("nav.sectionTreasury")}
           icon={Landmark}
           sectionActive={navSections.bankCashActive}
@@ -351,6 +475,7 @@ export function MainSidebar({
         </CollapsibleNavSection>
 
         <CollapsibleNavSection
+          sectionKey="sales"
           title={t("nav.sectionSales")}
           icon={ShoppingCart}
           sectionActive={navSections.salesActive}
@@ -373,7 +498,7 @@ export function MainSidebar({
         </CollapsibleNavSection>
 
         <SideNavItem
-          href="/inventory/purchase"
+          href="/inventory?modal=purchase"
           label={t("nav.sectionPurchases")}
           isActive={navSections.purchasesActive}
           icon={ShoppingBag}
@@ -381,6 +506,7 @@ export function MainSidebar({
         />
 
         <CollapsibleNavSection
+          sectionKey="warehouse"
           title={t("nav.sectionWarehouse")}
           icon={Package}
           sectionActive={navSections.warehouseActive}
@@ -440,6 +566,7 @@ export function MainSidebar({
         </CollapsibleNavSection>
 
         <CollapsibleNavSection
+          sectionKey="payrollHr"
           title={t("nav.sectionPayrollHr")}
           icon={Users2}
           sectionActive={navSections.payrollHrActive}
@@ -495,6 +622,7 @@ export function MainSidebar({
         </CollapsibleNavSection>
 
         <CollapsibleNavSection
+          sectionKey="reports"
           title={t("nav.sectionReports")}
           icon={BarChart3}
           sectionActive={navSections.reportsActive}
@@ -564,6 +692,7 @@ export function MainSidebar({
 
         {(token || user?.isSuperAdmin) && (
           <CollapsibleNavSection
+            sectionKey="admin"
             title={t("nav.sectionAdmin")}
             icon={Settings}
             sectionActive={navSections.adminActive}
@@ -688,7 +817,26 @@ export function MainSidebar({
             ) : null}
           </CollapsibleNavSection>
         )}
-      </nav>
+        </nav>
+        <div className="mt-auto hidden shrink-0 border-t border-gray-200 p-2 lg:block">
+          <button
+            type="button"
+            className="flex w-full items-center justify-center rounded-lg border border-transparent p-2 text-gray-600 transition hover:border-gray-200 hover:bg-white/70"
+            onClick={onToggleSidebarCollapsed}
+            aria-label={
+              sidebarCollapsed
+                ? t("nav.sidebarExpandAria", { defaultValue: "Expand sidebar" })
+                : t("nav.sidebarCollapseAria", { defaultValue: "Collapse sidebar" })
+            }
+          >
+            {sidebarCollapsed ? (
+              <PanelRightClose className="h-5 w-5 shrink-0" aria-hidden />
+            ) : (
+              <PanelLeftClose className="h-5 w-5 shrink-0" aria-hidden />
+            )}
+          </button>
+        </div>
+      </SidebarLayoutContext.Provider>
     </aside>
   );
 }

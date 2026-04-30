@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Package } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +12,7 @@ import { useAuth } from "../../lib/auth-context";
 import { isRestrictedUserRole } from "../../lib/role-utils";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { subscribeListRefresh } from "../../lib/list-refresh-bus";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import { EmptyState } from "../../components/empty-state";
 import {
   AdjustmentsModal,
@@ -84,6 +85,7 @@ function fmtQty(v: unknown): string {
 
 export default function InventoryPage() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { token, ready } = useRequireAuth();
   const { user } = useAuth();
   const hideSettings = isRestrictedUserRole(user?.role ?? undefined);
@@ -101,6 +103,19 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [activeModal, setActiveModal] = useState<InventoryModalKey>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const modal = q.get("modal");
+    if (modal === "purchase") {
+      setActiveModal("purchase");
+      router.replace("/inventory", { scroll: false });
+    } else if (modal === "newWh") {
+      setActiveModal("newWh");
+      router.replace("/inventory", { scroll: false });
+    }
+  }, [router]);
 
   const [allowNeg, setAllowNeg] = useState(false);
   const [defWh, setDefWh] = useState("");
@@ -223,56 +238,48 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/products", labelKey: "nav.products" },
-          { href: "/manufacturing", labelKey: "nav.manufacturing" },
-          { href: "/invoices", labelKey: "nav.invoices" },
-        ]}
+      <PageHeader
+        title={t("inventory.title")}
+        actions={
+          <>
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => setActiveModal("newWh")}
+            >
+              + {t("inventory.newWhBtn")}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("purchase")}>
+              + {t("inventory.newPurchaseBtn")}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("transfer")}>
+              {t("inventory.transferNav")}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("adjustments")}>
+              {t("inventory.adjustNav")}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("surplus")}>
+              {t("inventory.surplusNav")}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("writeOff")}>
+              {t("inventory.writeOffNav")}
+            </button>
+            <button
+              type="button"
+              className={`${SECONDARY_BUTTON_CLASS} border-[#2980B9]/40 bg-[#2980B9]/10 text-[#34495E]`}
+              onClick={() => setActiveModal("audit")}
+            >
+              {t("inventory.auditNav")}
+            </button>
+            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("auditHistory")}>
+              {t("inventory.auditHistoryNav")}
+            </button>
+            <Link href="/inventory/physical" className={SECONDARY_BUTTON_CLASS}>
+              {t("inventory.physicalNav")}
+            </Link>
+          </>
+        }
       />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#34495E]">{t("inventory.title")}</h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={PRIMARY_BUTTON_CLASS}
-            onClick={() => setActiveModal("newWh")}
-          >
-            + {t("inventory.newWhBtn")}
-          </button>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("purchase")}>
-            + {t("inventory.newPurchaseBtn")}
-          </button>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("transfer")}>
-            {t("inventory.transferNav")}
-          </button>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("adjustments")}>
-            {t("inventory.adjustNav")}
-          </button>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("surplus")}>
-            {t("inventory.surplusNav")}
-          </button>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("writeOff")}>
-            {t("inventory.writeOffNav")}
-          </button>
-          <button
-            type="button"
-            className={`${SECONDARY_BUTTON_CLASS} border-[#2980B9]/40 bg-[#2980B9]/10 text-[#34495E]`}
-            onClick={() => setActiveModal("audit")}
-          >
-            {t("inventory.auditNav")}
-          </button>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setActiveModal("auditHistory")}>
-            {t("inventory.auditHistoryNav")}
-          </button>
-          <Link href="/inventory/physical" className={SECONDARY_BUTTON_CLASS}>
-            {t("inventory.physicalNav")}
-          </Link>
-        </div>
-      </div>
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
       {!hideSettings && (

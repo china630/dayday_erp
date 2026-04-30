@@ -8,11 +8,11 @@ import { apiFetch } from "../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
   INPUT_BORDERED_CLASS,
-  LINK_ACCENT_CLASS,
   PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type Warehouse = { id: string; name: string };
 type Product = { id: string; name: string; sku: string; isService?: boolean };
@@ -89,19 +89,15 @@ export default function InventoryWriteOffPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/inventory", labelKey: "nav.inventory" },
-        ]}
+      <PageHeader
+        title={t("inventory.writeOffDocTitle")}
+        subtitle={t("inventory.adjustHint")}
+        actions={
+          <Link href="/inventory" className={SECONDARY_BUTTON_CLASS}>
+            ← {t("inventory.backList")}
+          </Link>
+        }
       />
-      <div>
-        <Link href="/inventory" className={`text-[13px] ${LINK_ACCENT_CLASS}`}>
-          ← {t("inventory.backList")}
-        </Link>
-        <h1 className="mt-4 text-xl font-semibold text-[#34495E]">{t("inventory.writeOffDocTitle")}</h1>
-        <p className="mt-1 text-[13px] text-[#7F8C8D]">{t("inventory.adjustHint")}</p>
-      </div>
 
       <form onSubmit={(e) => void onSubmit(e)} className={`${CARD_CONTAINER_CLASS} p-6 space-y-4`}>
         <label className="block text-sm font-medium text-gray-700">

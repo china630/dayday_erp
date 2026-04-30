@@ -10,7 +10,7 @@ import { apiFetch } from "../../lib/api-client";
 import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
 import { formatMoneyAzn } from "../../lib/format-money";
 import { useRequireAuth } from "../../lib/use-require-auth";
-import { ModulePageLinks } from "../../components/module-page-links";
+import { PageHeader } from "../../components/layout/page-header";
 import { EmptyState } from "../../components/empty-state";
 import { CreateInvoiceModal } from "../../components/sales/modals";
 
@@ -149,22 +149,14 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/counterparties", labelKey: "nav.counterparties" },
-          { href: "/products", labelKey: "nav.products" },
-          { href: "/banking", labelKey: "nav.banking" },
-        ]}
+      <PageHeader
+        title={t("invoices.title")}
+        actions={
+          <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
+            + {t("invoices.new")}
+          </button>
+        }
       />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t("invoices.title")}</h1>
-        </div>
-        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setCreateOpen(true)}>
-          + {t("invoices.new")}
-        </button>
-      </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {loading && <p className="text-gray-600">{t("common.loading")}</p>}

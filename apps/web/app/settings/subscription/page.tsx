@@ -28,6 +28,7 @@ import { useAuth } from "../../../lib/auth-context";
 import { canAccessBilling } from "../../../lib/role-utils";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { EmptyState } from "../../../components/empty-state";
+import { PageHeader } from "../../../components/layout/page-header";
 import { toast } from "sonner";
 
 type PlatformInvoiceRow = {
@@ -457,21 +458,23 @@ export default function SubscriptionSettingsPage() {
 
   return (
     <div className="relative z-10 max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-[#34495E]">
-          {t("subscriptionSettings.title")}
-        </h1>
-        <p className="text-[13px] text-[#7F8C8D] mt-1">
-          {t("subscriptionSettings.subtitleV10")}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[13px] items-center">
-          <Link href="/" className={LINK_ACCENT_CLASS}>
-            {t("nav.home")}
-          </Link>
-          <span className="text-[#D5DADF]">/</span>
-          <span className="text-[#34495E]">{t("subscriptionSettings.title")}</span>
-        </div>
-      </div>
+      <PageHeader
+        title={t("subscriptionSettings.title")}
+        subtitle={
+          <>
+            <p className="text-[13px] text-[#7F8C8D]">
+              {t("subscriptionSettings.subtitleV10")}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[13px] items-center">
+              <Link href="/" className={LINK_ACCENT_CLASS}>
+                {t("nav.home")}
+              </Link>
+              <span className="text-[#D5DADF]">/</span>
+              <span className="text-[#34495E]">{t("subscriptionSettings.title")}</span>
+            </div>
+          </>
+        }
+      />
 
       {msg && (
         <p className="text-[13px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-[2px] px-3 py-2">

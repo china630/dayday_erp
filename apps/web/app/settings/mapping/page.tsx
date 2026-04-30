@@ -14,6 +14,7 @@ import {
   LINK_ACCENT_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type AccountRow = {
   id: string;
@@ -164,19 +165,23 @@ function AccountMappingContent() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t("mapping.title")}</h1>
-        <p className="text-sm text-slate-600 mt-1">{t("mapping.subtitle")}</p>
-        <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-sm items-center">
-          <Link href="/" className={LINK_ACCENT_CLASS}>
-            {t("nav.home")}
-          </Link>
-          <span className="text-slate-300">/</span>
-          <Link href="/reporting" className={LINK_ACCENT_CLASS}>
-            {t("nav.reportingHub")}
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title={t("mapping.title")}
+        subtitle={
+          <>
+            <p className="text-sm text-slate-600">{t("mapping.subtitle")}</p>
+            <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-sm items-center">
+              <Link href="/" className={LINK_ACCENT_CLASS}>
+                {t("nav.home")}
+              </Link>
+              <span className="text-slate-300">/</span>
+              <Link href="/reporting" className={LINK_ACCENT_CLASS}>
+                {t("nav.reportingHub")}
+              </Link>
+            </div>
+          </>
+        }
+      />
 
       {msg && <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{msg}</p>}
       {err && <p className="text-sm text-red-600">{err}</p>}

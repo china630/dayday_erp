@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AuditDetailConfirmModal } from "../../../../components/inventory/modals";
-import { ModulePageLinks } from "../../../../components/module-page-links";
+import { PageHeader } from "../../../../components/layout/page-header";
 import { apiFetch } from "../../../../lib/api-client";
 import { notifyListRefresh } from "../../../../lib/list-refresh-bus";
 import { useAuth } from "../../../../lib/auth-context";
@@ -181,18 +181,11 @@ export default function InventoryAuditDetailPage() {
 
   return (
     <div className="max-w-5xl space-y-8">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/inventory", labelKey: "nav.inventory" },
-          { href: "/inventory/audits", labelKey: "inventory.auditHistoryTitle" },
-        ]}
-      />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#34495E]">{t("inventory.auditDetailTitle")}</h1>
-          {row && (
-            <p className="mt-1 text-sm text-[#7F8C8D]">
+      <PageHeader
+        title={t("inventory.auditDetailTitle")}
+        subtitle={
+          row ? (
+            <span>
               {typeof row.date === "string" ? row.date.slice(0, 10) : "—"} ·{" "}
               {row.warehouse?.name ? `${row.warehouse.name} · ` : null}
               {row.status === "APPROVED"
@@ -200,25 +193,27 @@ export default function InventoryAuditDetailPage() {
                 : row.status === "DRAFT"
                   ? t("inventory.auditStatusDraft")
                   : row.status}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {mayPost && isDraft && (
-            <>
-              <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setSyncOpen(true)}>
-                {t("inventory.auditSyncSystem")}
-              </button>
-              <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setApproveOpen(true)}>
-                {t("inventory.auditPostDoc")}
-              </button>
-            </>
-          )}
-          <Link href="/inventory/audits" className={`text-[13px] font-medium text-[#2980B9] hover:text-[#34495E] hover:underline`}>
-            {t("inventory.auditHistoryBack")}
-          </Link>
-        </div>
-      </div>
+            </span>
+          ) : undefined
+        }
+        actions={
+          <>
+            {mayPost && isDraft && (
+              <>
+                <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setSyncOpen(true)}>
+                  {t("inventory.auditSyncSystem")}
+                </button>
+                <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setApproveOpen(true)}>
+                  {t("inventory.auditPostDoc")}
+                </button>
+              </>
+            )}
+            <Link href="/inventory/audits" className={SECONDARY_BUTTON_CLASS}>
+              {t("inventory.auditHistoryBack")}
+            </Link>
+          </>
+        }
+      />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {loading && <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p>}

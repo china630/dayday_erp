@@ -18,6 +18,10 @@ export const PRIMARY_BUTTON_CLASS =
 export const SECONDARY_BUTTON_CLASS =
   "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[2px] border border-[#D5DADF] bg-white px-4 text-[13px] font-medium text-[#34495E] shadow-sm transition hover:bg-[#F4F5F7] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9]/40";
 
+/** Ghost / text-style cancel in modals (same height) */
+export const GHOST_BUTTON_CLASS =
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[2px] border border-transparent bg-transparent px-4 text-[13px] font-medium text-[#34495E] transition hover:bg-[#F4F5F7] focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9]/30 disabled:opacity-50 disabled:pointer-events-none";
+
 /** Cards / panels — 2px radius, neutral border */
 export const CARD_CONTAINER_CLASS =
   "rounded-[2px] border border-[#D5DADF] bg-white shadow-sm";

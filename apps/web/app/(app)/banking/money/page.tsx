@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Landmark, Wallet } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../../lib/api-client";
 import {
@@ -11,7 +11,7 @@ import {
 } from "../../../../lib/design-system";
 import { ledgerQueryParam, useLedger } from "../../../../lib/ledger-context";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../../components/module-page-links";
+import { PageHeader } from "../../../../components/layout/page-header";
 
 type AccountCard = {
   segment: "CASH" | "BANK";
@@ -113,32 +113,24 @@ export default function TreasuryMoneyDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/banking", labelKey: "nav.banking" },
-          { href: "/banking/cash", labelKey: "nav.kassa" },
-        ]}
+      <PageHeader
+        title={t("treasury.moneyTitle")}
+        subtitle={
+          <Fragment>
+            <p className="m-0 max-w-2xl">{t("treasury.moneySubtitle")}</p>
+            {meta?.dateFrom && meta.dateTo ? (
+              <p className="m-0 mt-1 text-xs text-slate-500">
+                {meta.ledgerType} · {meta.dateFrom} → {meta.dateTo}
+              </p>
+            ) : null}
+          </Fragment>
+        }
+        actions={
+          <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => void load()} disabled={loading}>
+            {loading ? t("common.loading") : t("common.refresh")}
+          </button>
+        }
       />
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#34495E] m-0">
-            {t("treasury.moneyTitle")}
-          </h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-[#7F8C8D] m-0">
-            {t("treasury.moneySubtitle")}
-          </p>
-          {meta?.dateFrom && meta.dateTo ? (
-            <p className="text-xs text-slate-500 mt-1 m-0">
-              {meta.ledgerType} · {meta.dateFrom} → {meta.dateTo}
-            </p>
-          ) : null}
-        </div>
-        <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => void load()} disabled={loading}>
-          {loading ? t("common.loading") : t("common.refresh")}
-        </button>
-      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className={`${CARD_CONTAINER_CLASS} p-5`}>

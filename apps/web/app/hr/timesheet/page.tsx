@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import {
   CARD_CONTAINER_CLASS,
   INPUT_BORDERED_CLASS,
@@ -277,50 +277,44 @@ export default function HrTimesheetPage() {
 
   return (
     <div className="space-y-6 max-w-[100vw]">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/payroll", labelKey: "nav.payroll" },
-        ]}
+      <PageHeader
+        title={t("hrTimesheet.title")}
+        subtitle={t("timesheet.subtitle")}
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              {t("payroll.year")}
+              <input
+                type="number"
+                className={`w-24 ${INPUT_BORDERED_CLASS} py-1.5`}
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              {t("payroll.month")}
+              <input
+                type="number"
+                min={1}
+                max={12}
+                className={`w-20 ${INPUT_BORDERED_CLASS} py-1.5`}
+                value={month}
+                onChange={(e) => setMonth(Number(e.target.value))}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              {t("timesheet.status")}
+              <span className="font-medium text-gray-900">
+                {timesheet
+                  ? timesheet.status === "APPROVED"
+                    ? t("timesheet.statusApproved")
+                    : t("timesheet.statusDraft")
+                  : "—"}
+              </span>
+            </label>
+          </div>
+        }
       />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#34495E]">{t("hrTimesheet.title")}</h1>
-          <p className="mt-1 text-[13px] text-[#7F8C8D]">{t("timesheet.subtitle")}</p>
-        </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <label className="text-sm text-slate-600 flex items-center gap-2">
-            {t("payroll.year")}
-            <input
-              type="number"
-              className={`w-24 ${INPUT_BORDERED_CLASS} py-1.5`}
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-            />
-          </label>
-          <label className="text-sm text-slate-600 flex items-center gap-2">
-            {t("payroll.month")}
-            <input
-              type="number"
-              min={1}
-              max={12}
-              className={`w-20 ${INPUT_BORDERED_CLASS} py-1.5`}
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-            />
-          </label>
-          <label className="text-sm text-slate-600 flex items-center gap-2">
-            {t("timesheet.status")}
-            <span className="font-medium text-gray-900">
-              {timesheet
-                ? timesheet.status === "APPROVED"
-                  ? t("timesheet.statusApproved")
-                  : t("timesheet.statusDraft")
-                : "—"}
-            </span>
-          </label>
-        </div>
-      </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {loading && <p className="text-gray-600">{t("common.loading")}</p>}
@@ -360,7 +354,7 @@ export default function HrTimesheetPage() {
             >
               {t("timesheet.massApproveBtn", { defaultValue: "Массово утвердить" })}
             </button>
-            <Link href="/payroll/absences/new" className={SECONDARY_BUTTON_CLASS}>
+            <Link href="/payroll" className={SECONDARY_BUTTON_CLASS}>
               {t("hrTimesheet.newAbsence")}
             </Link>
           </div>

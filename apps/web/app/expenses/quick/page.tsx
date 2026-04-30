@@ -10,7 +10,7 @@ import {
   PRIMARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 
 export default function QuickExpensePage() {
   const { t } = useTranslation();
@@ -85,32 +85,17 @@ export default function QuickExpensePage() {
   if (!orgId) {
     return (
       <div className="mx-auto max-w-lg space-y-6">
-        <ModulePageLinks
-          items={[
-            { href: "/", labelKey: "nav.home" },
-            { href: "/companies", labelKey: "nav.companies" },
-          ]}
+        <PageHeader
+          title={t("quickExpense.title")}
+          subtitle={`${t("quickExpense.subtitle")} — выберите организацию в шапке или на странице «Мои компании».`}
         />
-        <p className="text-sm text-[#7F8C8D]">
-          {t("quickExpense.subtitle")} — выберите организацию в шапке или на странице «Мои компании».
-        </p>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-          { href: "/banking", labelKey: "nav.banking" },
-        ]}
-      />
-      <div>
-        <h1 className="text-xl font-semibold text-[#34495E]">{t("quickExpense.title")}</h1>
-        <p className="mt-1 text-[13px] text-[#7F8C8D]">{t("quickExpense.subtitle")}</p>
-      </div>
+      <PageHeader title={t("quickExpense.title")} subtitle={t("quickExpense.subtitle")} />
 
       {msg && <p className="text-sm text-emerald-700">{msg}</p>}
       {err && <p className="text-sm text-red-600">{err}</p>}

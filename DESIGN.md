@@ -13,6 +13,7 @@
 - **Border (muted)**: #D5DADF — единая чёткая обводка карточек и зон на фоне `#EBEDF0` (не бледный `slate-100` без контраста).
 
 ## UX / UI integrity (v8.9)
+- **Page chrome**: use the shared **`PageHeader`** component (`apps/web/components/layout/page-header.tsx`) for page title (line 1, left), optional subtitle under the title, and optional **actions** (line 2, right-aligned toolbar: buttons, back links, period filters). Do not add a horizontal strip of cross-module links above content — module navigation is **sidebar-only** (aligned with PRD §10.1).
 - **Headings**: page titles use **#34495E**; primary actions use **#2980B9** (`bg-[#2980B9]`, `PRIMARY_BUTTON_CLASS`).
 - **Contrast**: interactive controls (buttons, text links) must stay clearly visible on `#EBEDF0`; do not use washed-out grays for primary actions.
 - **Iconography**: every sidebar item has a **Lucide** icon; missing icon is a spec violation.

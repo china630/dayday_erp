@@ -12,6 +12,7 @@ import {
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type AccountRow = {
   id: string;
@@ -133,28 +134,29 @@ export default function NasChartSettingsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{t("chartPage.title")}</h1>
-        <p className="text-sm text-slate-600 mt-1">{t("chartPage.subtitle")}</p>
-      </div>
+      <PageHeader
+        title={t("chartPage.title")}
+        subtitle={t("chartPage.subtitle")}
+        actions={
+          canImport ? (
+            <button
+              type="button"
+              className={PRIMARY_BUTTON_CLASS}
+              onClick={() => {
+                setModalOpen(true);
+                setSearch("");
+                setDebouncedSearch("");
+              }}
+            >
+              {t("chartPage.addFromCatalog")}
+            </button>
+          ) : undefined
+        }
+      />
 
-      {canImport ? (
-        <div>
-          <button
-            type="button"
-            className={PRIMARY_BUTTON_CLASS}
-            onClick={() => {
-              setModalOpen(true);
-              setSearch("");
-              setDebouncedSearch("");
-            }}
-          >
-            {t("chartPage.addFromCatalog")}
-          </button>
-        </div>
-      ) : (
+      {!canImport ? (
         <p className="text-sm text-slate-600">{t("chartPage.readOnlyHint")}</p>
-      )}
+      ) : null}
 
       {err && <p className="text-sm text-red-600">{err}</p>}
       {loading ? (

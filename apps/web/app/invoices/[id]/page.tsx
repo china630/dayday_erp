@@ -10,7 +10,8 @@ import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import QRCode from "qrcode";
 import { SignatureProviderMark } from "../../../components/signature-provider-mark";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
+import { SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
 import { EntityAuditHistory } from "../../../components/admin/entity-audit-history";
 
 type SignatureLog = {
@@ -306,22 +307,15 @@ export default function InvoiceViewPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/invoices", labelKey: "nav.invoices" },
-          { href: "/counterparties", labelKey: "nav.counterparties" },
-          { href: "/banking", labelKey: "nav.banking" },
-        ]}
+      <PageHeader
+        title={inv?.number ?? t("invoices.title")}
+        subtitle={inv?.counterparty?.name}
+        actions={
+          <Link href="/invoices" className={SECONDARY_BUTTON_CLASS}>
+            ← {t("invoiceView.backList")}
+          </Link>
+        }
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/invoices"
-          className="text-sm text-action hover:text-primary"
-        >
-          ← {t("invoiceView.backList")}
-        </Link>
-      </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {shareFeedback && (
@@ -377,10 +371,8 @@ export default function InvoiceViewPage() {
             <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">
-                {inv.number}
-              </h1>
-              <p className="text-slate-600 mt-1">{inv.counterparty.name}</p>
+              <h2 className="m-0 text-2xl font-semibold text-gray-900">{inv.number}</h2>
+              <p className="mt-1 text-slate-600">{inv.counterparty.name}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {inv.status === "LOCKED_BY_SIGNATURE" && (

@@ -7,7 +7,7 @@ import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { ArrowUpRight } from "lucide-react";
-import { ModulePageLinks } from "../../../components/module-page-links";
+import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
 import { CARD_CONTAINER_CLASS } from "../../../lib/design-system";
 
@@ -69,18 +69,7 @@ export default function ReceivablesPage() {
 
   return (
     <div className="space-y-6">
-      <ModulePageLinks
-        items={[
-          { href: "/", labelKey: "nav.home" },
-          { href: "/reporting", labelKey: "nav.reportingHub" },
-          { href: "/invoices", labelKey: "nav.invoices" },
-          { href: "/reporting/aging", labelKey: "nav.aging" },
-        ]}
-      />
-      <div>
-        <h1 className="text-xl font-semibold text-[#34495E]">{t("receivables.title")}</h1>
-        <p className="mt-1 max-w-2xl text-[13px] text-[#7F8C8D]">{t("receivables.subtitle")}</p>
-      </div>
+      <PageHeader title={t("receivables.title")} subtitle={t("receivables.subtitle")} />
 
       {data && (
         <p className="text-[13px] text-[#7F8C8D]">
