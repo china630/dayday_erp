@@ -988,8 +988,9 @@ export class InvoicesService {
       }
 
       const vr = vatRate.toNumber();
-      if (vr !== 0 && vr !== 18) {
-        throw new BadRequestException("vatRate must be 0 or 18");
+      const vatForCalc = vr === -1 ? new Decimal(0) : vatRate;
+      if (vr !== -1 && vr !== 0 && vr !== 18) {
+        throw new BadRequestException("vatRate must be 0, 18, or -1 (VAT exempt)");
       }
 
       const qty = new Decimal(row.quantity);
@@ -998,15 +999,15 @@ export class InvoicesService {
       let lineTotal: Decimal;
 
       if (vatInclusive) {
-        const div = new Decimal(1).add(vatRate.div(100));
+        const div = new Decimal(1).add(vatForCalc.div(100));
         unitPriceNet = unitPriceInput.div(div);
         net = qty.mul(unitPriceNet);
-        const vatAmt = net.mul(vatRate).div(100);
+        const vatAmt = net.mul(vatForCalc).div(100);
         lineTotal = net.add(vatAmt);
       } else {
         unitPriceNet = unitPriceInput;
         net = qty.mul(unitPriceNet);
-        const vatAmt = net.mul(vatRate).div(100);
+        const vatAmt = net.mul(vatForCalc).div(100);
         lineTotal = net.add(vatAmt);
       }
 

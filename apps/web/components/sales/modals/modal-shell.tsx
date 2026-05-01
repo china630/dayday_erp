@@ -2,13 +2,13 @@
 
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
-import {
-  CARD_CONTAINER_CLASS,
-  GHOST_BUTTON_CLASS,
-  PRIMARY_BUTTON_CLASS,
-} from "../../../lib/design-system";
+import { useTranslation } from "react-i18next";
+import { CARD_CONTAINER_CLASS, GHOST_BUTTON_CLASS } from "../../../lib/design-system";
+import { Button } from "../../ui/button";
 
+/** @deprecated Используйте `t("common.cancel")` / `t("common.save")` — строки оставлены для обратной совместимости импортов. */
 export const SALES_MODAL_CANCEL_AZ = "Ləğv et";
+/** @deprecated см. SALES_MODAL_CANCEL_AZ */
 export const SALES_MODAL_SAVE_AZ = "Yadda saxla";
 
 export function SalesModalShell({
@@ -28,6 +28,7 @@ export function SalesModalShell({
   footer?: ReactNode;
   maxWidthClass?: string;
 }) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -71,36 +72,45 @@ export function SalesModalFooter({
   busy,
   saveDisabled,
   formId,
+  /** `ghost` — прозрачная отмена (стандарт модалок); `secondary` — контурная кнопка. */
+  cancelVariant = "ghost",
 }: {
   onCancel: () => void;
   onSave?: () => void | Promise<void>;
   busy?: boolean;
   saveDisabled?: boolean;
   formId?: string;
+  cancelVariant?: "ghost" | "secondary";
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex w-full flex-row flex-wrap items-center justify-end gap-2">
-      <button type="button" className={GHOST_BUTTON_CLASS} onClick={onCancel} disabled={!!busy}>
-        {SALES_MODAL_CANCEL_AZ}
-      </button>
+      <Button
+        type="button"
+        variant={cancelVariant === "secondary" ? "secondary" : "ghost"}
+        onClick={onCancel}
+        disabled={!!busy}
+      >
+        {t("common.cancel")}
+      </Button>
       {formId ? (
-        <button
+        <Button
           type="submit"
+          variant="primary"
           form={formId}
-          className={PRIMARY_BUTTON_CLASS}
           disabled={!!busy || !!saveDisabled}
         >
-          {busy ? "…" : SALES_MODAL_SAVE_AZ}
-        </button>
+          {busy ? "…" : t("common.save")}
+        </Button>
       ) : (
-        <button
+        <Button
           type="button"
-          className={PRIMARY_BUTTON_CLASS}
+          variant="primary"
           disabled={!!busy || !!saveDisabled}
           onClick={() => void onSave?.()}
         >
-          {busy ? "…" : SALES_MODAL_SAVE_AZ}
-        </button>
+          {busy ? "…" : t("common.save")}
+        </Button>
       )}
     </div>
   );

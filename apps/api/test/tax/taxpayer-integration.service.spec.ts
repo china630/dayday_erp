@@ -1,6 +1,6 @@
 import axios from "axios";
 import { ConfigService } from "@nestjs/config";
-import { ServiceUnavailableException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { TaxpayerIntegrationService } from "../../src/tax/taxpayer-integration.service";
 
 const redisMock = {
@@ -56,7 +56,7 @@ describe("TaxpayerIntegrationService fallback", () => {
     expect(axios.post).toHaveBeenCalled();
   });
 
-  it("throws service unavailable when all external attempts fail", async () => {
+  it("throws not found when all external attempts fail or payload is unusable", async () => {
     redisMock.get.mockResolvedValueOnce(null);
     jest.spyOn(axios, "post").mockResolvedValue({
       status: 500,
@@ -71,8 +71,29 @@ describe("TaxpayerIntegrationService fallback", () => {
 
     const { service, audit } = makeService();
     await expect(service.lookupTaxpayerByVoen("1234567890")).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
+      NotFoundException,
     );
     expect(audit.logOrganizationSystemEvent).toHaveBeenCalled();
+  });
+
+  it("rejects Cloudflare-style HTML body (200) as invalid lookup", async () => {
+    redisMock.get.mockResolvedValueOnce(null);
+    const html =
+      '<!DOCTYPE html><html><noscript>You need to enable JavaScript to run this app.</noscript></html>';
+    jest.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "text/html" },
+      data: html,
+    } as any);
+    jest.spyOn(axios, "get").mockResolvedValue({
+      status: 200,
+      headers: { "content-type": "text/html" },
+      data: html,
+    } as any);
+
+    const { service } = makeService();
+    await expect(service.lookupTaxpayerByVoen("1234567890")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

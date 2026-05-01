@@ -315,8 +315,9 @@ async function main(): Promise<void> {
         taxId,
         kind: CounterpartyKind.LEGAL_ENTITY,
         role: CounterpartyRole.SUPPLIER,
+        legalForm: "LLC",
+        isVatPayer: false,
         email: `supplier${i}@demo.tivi.local`,
-        bankAccounts: [],
       },
     });
     counterparties.push({ id: cp.id, role: CounterpartyRole.SUPPLIER, name });
@@ -331,8 +332,9 @@ async function main(): Promise<void> {
         taxId,
         kind: CounterpartyKind.LEGAL_ENTITY,
         role: CounterpartyRole.CUSTOMER,
+        legalForm: "LLC",
+        isVatPayer: false,
         email: `client${i}@demo.tivi.local`,
-        bankAccounts: [],
       },
     });
     counterparties.push({ id: cp.id, role: CounterpartyRole.CUSTOMER, name });

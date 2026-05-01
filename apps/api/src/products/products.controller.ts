@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -26,9 +29,16 @@ export class ProductsController {
 
   @Get()
   @ApiOperation({ summary: "Список товаров" })
-  list(@OrganizationId() orgId: string) {
+  list(
+    @OrganizationId() orgId: string,
+    @Query("isService") isService?: string,
+  ) {
     return this.prisma.product.findMany({
-      where: { organizationId: orgId },
+      where: {
+        organizationId: orgId,
+        ...(isService === "false" ? { isService: false } : {}),
+        ...(isService === "true" ? { isService: true } : {}),
+      },
       orderBy: { name: "asc" },
     });
   }
@@ -47,16 +57,39 @@ export class ProductsController {
 
   @Post()
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
-  @ApiOperation({ summary: "Создать товар" })
-  create(@OrganizationId() orgId: string, @Body() dto: CreateProductDto) {
+  @ApiOperation({ summary: "Создать товар или услугу" })
+  async create(@OrganizationId() orgId: string, @Body() dto: CreateProductDto) {
+    const isService = dto.isService ?? false;
+    let sku = (dto.sku ?? "").trim();
+    if (!isService) {
+      if (!sku) {
+        throw new BadRequestException("sku is required for goods");
+      }
+    } else if (!sku) {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const candidate = `SVC-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+        const clash = await this.prisma.product.findFirst({
+          where: { organizationId: orgId, sku: candidate },
+          select: { id: true },
+        });
+        if (!clash) {
+          sku = candidate;
+          break;
+        }
+      }
+      if (!sku) {
+        throw new BadRequestException("Could not allocate internal SKU for service");
+      }
+    }
+
     return this.prisma.product.create({
       data: {
         organizationId: orgId,
         name: dto.name,
-        sku: dto.sku,
+        sku,
         price: dto.price,
         vatRate: dto.vatRate,
-        isService: dto.isService ?? false,
+        isService,
       },
     });
   }

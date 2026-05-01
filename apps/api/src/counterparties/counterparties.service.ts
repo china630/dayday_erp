@@ -4,10 +4,16 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { CounterpartyRole, Prisma } from "@dayday/database";
+import {
+  CounterpartyKind,
+  CounterpartyLegalForm,
+  CounterpartyRole,
+  Prisma,
+} from "@dayday/database";
 import { GlobalCompanyDirectoryService } from "../global-directory/global-company-directory.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TaxpayerIntegrationService } from "../tax/taxpayer-integration.service";
+import { CreateCounterpartyBankAccountDto } from "./dto/create-counterparty-bank-account.dto";
 
 /**
  * Counterparties MDM adapter:
@@ -83,11 +89,12 @@ export class CounterpartiesService {
         globalId: global.id,
         taxId,
         name: global.name,
-        kind: "LEGAL_ENTITY",
-        role: "CUSTOMER",
+        kind: CounterpartyKind.LEGAL_ENTITY,
+        role: CounterpartyRole.CUSTOMER,
+        legalForm: CounterpartyLegalForm.LLC,
         address: null,
         email: null,
-        isVatPayer: global.vatStatus ?? null,
+        isVatPayer: global.vatStatus ?? false,
       },
     });
   }
@@ -187,6 +194,32 @@ export class CounterpartiesService {
     ]);
 
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const [srcBanks, tgtBanks] = await Promise.all([
+        tx.counterpartyBankAccount.findMany({ where: { counterpartyId: source.id } }),
+        tx.counterpartyBankAccount.findMany({ where: { counterpartyId: target.id } }),
+      ]);
+      const seen = new Set(
+        tgtBanks.map((b) => b.iban.trim().replace(/\s+/g, "").toUpperCase()),
+      );
+      for (const b of srcBanks) {
+        const k = b.iban.trim().replace(/\s+/g, "").toUpperCase();
+        if (!k || seen.has(k)) continue;
+        await tx.counterpartyBankAccount.create({
+          data: {
+            counterpartyId: target.id,
+            bankName: b.bankName,
+            iban: b.iban.trim().replace(/\s+/g, "").toUpperCase(),
+            swift: b.swift,
+            currency: b.currency,
+            isPrimary: false,
+          },
+        });
+        seen.add(k);
+      }
+      await tx.counterpartyBankAccount.deleteMany({
+        where: { counterpartyId: source.id },
+      });
+
       // Transfer all operational links to target (keep in sync with post-merge integrity scan).
       await tx.invoice.updateMany({
         where: { organizationId: params.organizationId, counterpartyId: source.id },
@@ -207,33 +240,15 @@ export class CounterpartiesService {
           ? target.role
           : CounterpartyRole.BOTH;
 
-      const mergedBankAccounts = (() => {
-        const src = Array.isArray(source.bankAccounts)
-          ? (source.bankAccounts as Array<{ iban?: string }>)
-          : [];
-        const tgt = Array.isArray(target.bankAccounts)
-          ? (target.bankAccounts as Array<{ iban?: string }>)
-          : [];
-        const seen = new Set<string>();
-        const out: Array<{ iban?: string }> = [];
-        for (const row of [...tgt, ...src]) {
-          const iban = String(row?.iban ?? "").trim();
-          if (!iban || seen.has(iban)) continue;
-          seen.add(iban);
-          out.push({ iban });
-        }
-        return out;
-      })();
-
       await tx.counterparty.update({
         where: { id: target.id },
         data: {
           role: mergedRole,
           email: target.email ?? source.email ?? null,
           address: target.address ?? source.address ?? null,
-          isVatPayer: target.isVatPayer ?? source.isVatPayer ?? null,
+          isVatPayer: target.isVatPayer ?? source.isVatPayer ?? false,
+          legalForm: target.legalForm ?? source.legalForm ?? CounterpartyLegalForm.LLC,
           globalId: target.globalId ?? source.globalId ?? null,
-          bankAccounts: mergedBankAccounts,
         },
       });
 
@@ -258,6 +273,66 @@ export class CounterpartiesService {
 
     await this.syncDirectoryAfterLocalSave(params.organizationId, target.id);
     return { mergedIntoId: target.id, sourceId: source.id, integrity };
+  }
+
+  async listBankAccounts(organizationId: string, counterpartyId: string) {
+    await this.assertLocal(organizationId, counterpartyId);
+    return this.prisma.counterpartyBankAccount.findMany({
+      where: { counterpartyId },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async createBankAccount(
+    organizationId: string,
+    counterpartyId: string,
+    dto: CreateCounterpartyBankAccountDto,
+  ) {
+    await this.assertLocal(organizationId, counterpartyId);
+    const iban = dto.iban.trim().replace(/\s+/g, "").toUpperCase();
+    if (!iban) {
+      throw new ConflictException("IBAN is required");
+    }
+    const currency = (dto.currency ?? "AZN").trim().toUpperCase() || "AZN";
+    const isPrimary = dto.isPrimary ?? false;
+    try {
+      if (isPrimary) {
+        await this.prisma.counterpartyBankAccount.updateMany({
+          where: { counterpartyId },
+          data: { isPrimary: false },
+        });
+      }
+      return await this.prisma.counterpartyBankAccount.create({
+        data: {
+          counterpartyId,
+          bankName: dto.bankName.trim(),
+          iban,
+          swift: dto.swift?.trim() || null,
+          currency,
+          isPrimary,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException("IBAN already exists for this counterparty");
+      }
+      throw e;
+    }
+  }
+
+  async deleteBankAccount(
+    organizationId: string,
+    counterpartyId: string,
+    accountId: string,
+  ): Promise<void> {
+    await this.assertLocal(organizationId, counterpartyId);
+    const row = await this.prisma.counterpartyBankAccount.findFirst({
+      where: { id: accountId, counterpartyId },
+    });
+    if (!row) {
+      throw new NotFoundException("Bank account not found");
+    }
+    await this.prisma.counterpartyBankAccount.delete({ where: { id: accountId } });
   }
 
   /**

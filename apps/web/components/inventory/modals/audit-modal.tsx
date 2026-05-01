@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
-import { notifyListRefresh } from "../../../lib/list-refresh-bus";
+import {
+  notifyInventoryListsRefresh,
+  notifyListRefresh,
+} from "../../../lib/list-refresh-bus";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { FORM_INPUT_CLASS } from "../../../lib/form-styles";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
@@ -136,7 +139,7 @@ export function AuditModal({
     if (updated.ok) setAudit((await updated.json()) as AuditDetail);
     toast.success(t("common.save"));
     notifyListRefresh("inventory-audits");
-    notifyListRefresh("inventory-hub");
+    notifyInventoryListsRefresh();
     onClose();
   }
 

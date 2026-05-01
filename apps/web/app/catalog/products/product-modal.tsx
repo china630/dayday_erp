@@ -4,13 +4,15 @@ import { Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { apiFetch } from "../../lib/api-client";
+import { apiFetch } from "../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
-} from "../../lib/design-system";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
+} from "../../../lib/design-system";
+import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../../lib/form-styles";
+
+export type ProductModalCreateAs = "product" | "service";
 
 type ProductDto = {
   id: string;
@@ -21,19 +23,38 @@ type ProductDto = {
   isService?: boolean;
 };
 
+type VatSelect = "18" | "0" | "exempt";
+
+function vatSelectFromDto(vatRate: unknown): VatSelect {
+  const n = Number(String(vatRate ?? 18));
+  if (n === -1) return "exempt";
+  if (n === 0) return "0";
+  return "18";
+}
+
+function vatSelectToApi(v: VatSelect): number {
+  if (v === "exempt") return -1;
+  if (v === "0") return 0;
+  return 18;
+}
+
 export function ProductModal({
   open,
   productId,
+  createAs = "product",
   onClose,
   onSaved,
 }: {
   open: boolean;
   productId: string | null;
+  /** Используется только при создании (`productId == null`). */
+  createAs?: ProductModalCreateAs;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
   const isEdit = !!productId;
+  const isServiceCreate = !isEdit && createAs === "service";
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -42,12 +63,16 @@ export function ProductModal({
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
   const [price, setPrice] = useState("");
-  const [vatRate, setVatRate] = useState("18");
-  const [isService, setIsService] = useState(false);
+  const [vatSelect, setVatSelect] = useState<VatSelect>("18");
+  const [loadedIsService, setLoadedIsService] = useState(false);
 
   const title = useMemo(() => {
-    return isEdit ? t("products.editTitle") : t("products.newTitle");
-  }, [isEdit, t]);
+    if (isEdit) return t("products.editTitle");
+    if (isServiceCreate) return t("products.newServiceTitle");
+    return t("products.newProductTitle");
+  }, [isEdit, isServiceCreate, t]);
+
+  const showSkuField = isEdit ? !loadedIsService : !isServiceCreate;
 
   useEffect(() => {
     if (!open) return;
@@ -56,8 +81,8 @@ export function ProductModal({
       setName("");
       setSku("");
       setPrice("");
-      setVatRate("18");
-      setIsService(false);
+      setVatSelect("18");
+      setLoadedIsService(false);
       return;
     }
     setLoading(true);
@@ -71,8 +96,8 @@ export function ProductModal({
         setName(r.name ?? "");
         setSku(r.sku ?? "");
         setPrice(String(r.price ?? ""));
-        setVatRate(String(r.vatRate ?? "18"));
-        setIsService(!!r.isService);
+        setVatSelect(vatSelectFromDto(r.vatRate));
+        setLoadedIsService(!!r.isService);
       })
       .catch(() => setLoadErr(t("products.loadErr")))
       .finally(() => setLoading(false));
@@ -84,23 +109,36 @@ export function ProductModal({
     setLoadErr(null);
 
     const p = Number(String(price).replace(",", "."));
-    const v = Number(String(vatRate).replace(",", "."));
-    if (!name.trim() || !sku.trim() || !Number.isFinite(p) || !Number.isFinite(v)) {
+    if (!name.trim() || !Number.isFinite(p)) {
       toast.error(t("common.fillRequired"));
       return;
     }
 
+    if (showSkuField && !sku.trim()) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
+
+    const vatRate = vatSelectToApi(vatSelect);
+    const isServicePayload = isEdit ? loadedIsService : isServiceCreate;
+
     setBusy(true);
+    const body: Record<string, unknown> = {
+      name: name.trim(),
+      price: p,
+      vatRate,
+    };
+    if (showSkuField) {
+      body.sku = sku.trim();
+    }
+    if (!isEdit) {
+      body.isService = isServicePayload;
+    }
+
     const res = await apiFetch(isEdit ? `/api/products/${productId}` : "/api/products", {
       method: isEdit ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim(),
-        sku: sku.trim(),
-        price: p,
-        vatRate: v,
-        isService,
-      }),
+      body: JSON.stringify(body),
     });
     setBusy(false);
 
@@ -141,23 +179,25 @@ export function ProductModal({
               <input className={FORM_INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
 
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("products.sku")}</span>
-              <input className={FORM_INPUT_CLASS} value={sku} onChange={(e) => setSku(e.target.value)} required />
-            </div>
+            {showSkuField ? (
+              <div>
+                <span className={FORM_LABEL_CLASS}>{t("products.sku")}</span>
+                <input className={FORM_INPUT_CLASS} value={sku} onChange={(e) => setSku(e.target.value)} required />
+              </div>
+            ) : null}
 
-            <div>
+            <div className={showSkuField ? "" : "md:col-span-2"}>
               <span className={FORM_LABEL_CLASS}>{t("products.vat")}</span>
-              <input
+              <select
                 className={FORM_INPUT_CLASS}
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={vatRate}
-                onChange={(e) => setVatRate(e.target.value)}
+                value={vatSelect}
+                onChange={(e) => setVatSelect(e.target.value as VatSelect)}
                 required
-              />
+              >
+                <option value="18">{t("products.vatOption18")}</option>
+                <option value="0">{t("products.vatOption0")}</option>
+                <option value="exempt">{t("products.vatOptionExempt")}</option>
+              </select>
             </div>
 
             <div className="md:col-span-2">
@@ -174,19 +214,6 @@ export function ProductModal({
             </div>
           </div>
 
-          <label className="flex items-start gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={isService}
-              onChange={(e) => setIsService(e.target.checked)}
-            />
-            <span>
-              <span className="font-medium block">{t("products.isService")}</span>
-              <span className="text-xs text-slate-500">{t("products.isServiceHint")}</span>
-            </span>
-          </label>
-
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
               {t("common.back")}
@@ -201,4 +228,3 @@ export function ProductModal({
     </div>
   );
 }
-

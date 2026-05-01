@@ -7,5 +7,5 @@ import { redirect } from "next/navigation";
  * Keep path for backward compatibility; hide old page by redirect.
  */
 export default function NewInvoicePage() {
-  redirect("/invoices");
+  redirect("/sales/invoices");
 }

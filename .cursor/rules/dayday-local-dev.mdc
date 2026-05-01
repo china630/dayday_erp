@@ -36,6 +36,19 @@ alwaysApply: true
 
 - Перед **`npm run build`** в корне автоматически выполняется **`npm run i18n:audit`**: пустые или отсутствующие строки перевода **RU/AZ** в **`apps/web/lib/i18n/resources.ts`** блокируют сборку (и CI, если билд идёт через тот же скрипт).
 - Если меняли **`resources.ts`**, в том же PR выполните **`npm run i18n:catalog`** и закоммитьте обновлённый **`apps/api/src/admin/i18n-default-catalog-data.json`** (иначе API и Super-Admin увидят устаревшие дефолты относительно веб-бандла). Произвольные копии каталога в корне репозитория (например `*_i18n-default-catalog*.new.json`) в пайплайн не входят — не использовать как источник правды.
+- **Прод после миграций:** из корня **`npm run db:deploy`** — `prisma migrate deploy` + синхронизация **`translation_overrides`** из `resources.ts` с удалением устаревших ключей **ru/az** и bump **`i18n.cacheVersion`**. Локально для мягкой подгрузки без prune: **`npm run db:sync-i18n`**.
+
+### Новые ключи перевода: три разных места (не путать)
+
+Один и тот же текст в коде проходит **три независимых канала**. Команда **`npm run i18n:catalog`** трогает только **один** из них.
+
+| Где живёт | Зачем | Что сделать при новых ключах |
+|-----------|--------|--------------------------------|
+| **`apps/web/lib/i18n/resources.ts`** | Единственный источник для **Next.js** (`t(...)`, бандл). Без правок здесь в UI не появится строка. | Добавить **и** `ru`, **и** `az` (сборка гоняет **`npm run i18n:audit`**). Динамические ключи (`counterparties.legalForm_LLC` и т.д.) скрипт аудита по `t("...")` не ищет — их всё равно нужно положить в дерево `resources` с тем же путём, что в `t(counterpartyLegalFormI18nKey(...))`. |
+| **`apps/api/src/admin/i18n-default-catalog-data.json`** | Снимок дефолтов для **Super-Admin → переводы** и прочих вызовов API с дефолтами из кода. **Не** влияет на сам по себе Postgres и **не** подменяет бандл веба. | **`npm run i18n:catalog`** из корня, затем **закоммитить** обновлённый JSON. Если команда не запускалась или артефакт не задеплоен, в админке «дефолт» по ключу будет пустым/старым, хотя в `resources.ts` всё есть. |
+| **Таблица `translation_overrides` (Postgres)** | Оверрайды поверх бандла; отдаёт **`GET /api/public/translations?locale=`** для клиента. | **`npm run db:sync-i18n`** (или **`db:sync-i18n:prune`** / **`npm run db:deploy`** — подтягивает строки из `resources.ts` в БД и поднимает **`i18n.cacheVersion`**). Руками в БД: **`locale`** только в нижнем регистре (`ru` / `az`), ключ — как во flat из ресурсов (`counterparties.legalForm_LLC`, **не** `counterparties.legalForm.LLC`). Опасные родители-строки и «сырой» placeholder см. в **`apps/web/lib/i18n/apply-db-overrides.ts`**; сухой прогон: **`npm run db:audit-i18n-overrides -w @dayday/database`**. |
+
+**Практический чеклист в одном PR:** правки в **`resources.ts`** → **`npm run i18n:catalog`** + коммит **`i18n-default-catalog-data.json`** → **`npm run db:sync-i18n`** (или deploy-скрипт) → локально перезапуск **`dev:web`** / **`dev:api`** или жёсткое обновление страницы, на проде — новый образ/билд с актуальным JSON и применённой синхронизацией БД.
 
 ## Запуск приложений
 

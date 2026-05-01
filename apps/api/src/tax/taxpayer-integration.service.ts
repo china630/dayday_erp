@@ -2,12 +2,11 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   OnModuleDestroy,
-  ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios, { type AxiosResponse } from "axios";
-import { load } from "cheerio";
 import Redis from "ioredis";
 import { AuditService } from "../audit/audit.service";
 import { IntegrationReliabilityService } from "../integrations/integration-reliability.service";
@@ -28,6 +27,49 @@ const BROWSER_HEADERS = {
   Accept: "application/json, text/plain, */*",
   "Accept-Language": "az-AZ,az;q=0.9,en;q=0.8",
 };
+
+/** SPA / WAF заглушки: нельзя принимать как название компании. */
+const POISON_NAME_PATTERNS: RegExp[] = [
+  /<noscript/i,
+  /<script/i,
+  /<html/i,
+  /<!doctype/i,
+  /<\s*body/i,
+  /you need to enable javascript/i,
+  /enable javascript to run this app/i,
+  /\bcf-ray\b/i,
+  /\bcloudflare\b/i,
+  /attention required/i,
+  /checking your browser/i,
+];
+
+const MAX_COMPANY_NAME_LEN = 400;
+const MIN_COMPANY_NAME_LEN = 2;
+
+function rawBodyLooksLikePoisonHtml(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  if (POISON_NAME_PATTERNS.some((re) => re.test(t))) return true;
+  if (t.includes("<") && t.includes(">") && !t.trimStart().startsWith("{")) {
+    return true;
+  }
+  return false;
+}
+
+function isPoisonCompanyName(name: string): boolean {
+  const n = name.trim();
+  if (n.length < MIN_COMPANY_NAME_LEN || n.length > MAX_COMPANY_NAME_LEN) return true;
+  if (/[<>]/.test(n)) return true;
+  return POISON_NAME_PATTERNS.some((re) => re.test(n));
+}
+
+function assertValidTaxpayerLookup(r: TaxpayerLookupResult): void {
+  if (!r.name?.trim() || isPoisonCompanyName(r.name)) {
+    throw new NotFoundException(
+      "taxpayer lookup: no valid company name in response",
+    );
+  }
+}
 
 @Injectable()
 export class TaxpayerIntegrationService implements OnModuleDestroy {
@@ -63,18 +105,41 @@ export class TaxpayerIntegrationService implements OnModuleDestroy {
       );
     }
     if (cached) {
-      await this.reliability.trackCache("tax", true);
-      return JSON.parse(cached) as TaxpayerLookupResult;
+      try {
+        const parsed = JSON.parse(cached) as TaxpayerLookupResult;
+        assertValidTaxpayerLookup(parsed);
+        await this.reliability.trackCache("tax", true);
+        return parsed;
+      } catch (e) {
+        if (e instanceof NotFoundException) {
+          try {
+            await this.redis.del(cacheKey);
+          } catch {
+            /* ignore */
+          }
+        } else {
+          this.logger.warn(
+            `taxpayer cache invalid for ${voen}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          try {
+            await this.redis.del(cacheKey);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
     }
     await this.reliability.trackCache("tax", false);
 
     if (this.config.get<string>("TAX_LOOKUP_MOCK") === "1") {
-      return {
+      const mock: TaxpayerLookupResult = {
         name: `Demo Vergi Ödəyicisi ${voen}`,
         isVatPayer: true,
         address: "Bakı şəh.",
         isRiskyTaxpayer: false,
       };
+      assertValidTaxpayerLookup(mock);
+      return mock;
     }
 
     const baseUrl =
@@ -141,6 +206,11 @@ export class TaxpayerIntegrationService implements OnModuleDestroy {
           const parsed = this.parseResponse(res.data, ct);
           if (parsed) {
             try {
+              assertValidTaxpayerLookup(parsed);
+            } catch {
+              continue;
+            }
+            try {
               await this.redis.set(cacheKey, JSON.stringify(parsed), "EX", 24 * 60 * 60);
             } catch (e) {
               this.logger.warn(
@@ -166,8 +236,8 @@ export class TaxpayerIntegrationService implements OnModuleDestroy {
       },
     });
 
-    throw new ServiceUnavailableException(
-      "VÖEN yoxlanılmadı: e-taxes.gov.az cavab vermədi və ya format dəyişib. TAX_LOOKUP_MOCK=1 ilə inkişaf rejimi aktiv edə bilərsiniz.",
+    throw new NotFoundException(
+      "taxpayer lookup: no valid JSON company payload (e-taxes unavailable or blocked)",
     );
   }
 
@@ -186,7 +256,7 @@ export class TaxpayerIntegrationService implements OnModuleDestroy {
         "legalName",
         "ad",
       ]);
-      if (!name) return null;
+      if (!name || isPoisonCompanyName(name)) return null;
       const isVatPayer = this.pickVatFlag(o);
       const address = this.pickString(o, [
         "address",
@@ -200,15 +270,19 @@ export class TaxpayerIntegrationService implements OnModuleDestroy {
 
     if (typeof data === "string") {
       const trimmed = data.trim();
+      if (rawBodyLooksLikePoisonHtml(trimmed)) {
+        return null;
+      }
       if (trimmed.startsWith("{")) {
         try {
           return this.parseResponse(JSON.parse(trimmed) as unknown, "application/json");
         } catch {
-          /* fall through */
+          return null;
         }
       }
-      if (contentType.includes("html") || trimmed.includes("<html")) {
-        return this.parseHtmlSnippet(trimmed);
+      /** Только JSON; HTML больше не парсим — иначе в name попадают заглушки Cloudflare. */
+      if (contentType.includes("html")) {
+        return null;
       }
     }
 
@@ -267,56 +341,7 @@ export class TaxpayerIntegrationService implements OnModuleDestroy {
     return null;
   }
 
-  private parseHtmlSnippet(html: string): TaxpayerLookupResult | null {
-    try {
-      const $ = load(html);
-      const text = $("body").text().replace(/\s+/g, " ").trim();
-      if (text.length < 5) return null;
-
-      let name: string | undefined;
-      $("td, th, div, span, p, li").each((_, el) => {
-        const t = $(el).text().trim();
-        if (t.length > 5 && t.length < 400 && !name && /LLC|MMC|OJSC|ASC|VK|İstifadəçi|VÖEN/i.test(t)) {
-          name = t;
-          return false;
-        }
-        return undefined;
-      });
-
-      if (!name) {
-        const m = text.match(
-          /([A-ZƏÖÜİĞŞÇa-zəöüığşç0-9\s.,&'"()-]{10,120}(?:MMC|LLC|VK|ASC|OJSC)?)/u,
-        );
-        if (m) name = m[1].trim();
-      }
-      if (!name) return null;
-
-      const lower = text.toLowerCase();
-      const isVatPayer =
-        /ədv\s*payer|vat\s*payer|nds|ədv\s*ödəyicisi|ədv\s*ödəyən/i.test(lower) &&
-        !/ədv\s*yox|vat\s*no|non[\s-]*vat/i.test(lower);
-      const isRiskyTaxpayer =
-        /riskli\s+vergi\s+ödəyicisi|riskli\s+vergi\s+odeyicisi/i.test(lower)
-          ? true
-          : /riskli\s+deyil|risk\s+yoxdur|risk\s*0/i.test(lower)
-            ? false
-            : null;
-
-      let address: string | null = null;
-      const addrMatch = text.match(
-        /(Bakı|Gəncə|Sumqayıt|Naxçıvan|Şəki|Lənkəran)[^,]{0,80}/iu,
-      );
-      if (addrMatch) address = addrMatch[0].trim();
-
-      return { name, isVatPayer, address, isRiskyTaxpayer };
-    } catch (e) {
-      this.logger.warn(`HTML parse failed: ${String(e)}`);
-      return null;
-    }
-  }
-
   async onModuleDestroy(): Promise<void> {
     await this.redis.quit();
   }
 }
-

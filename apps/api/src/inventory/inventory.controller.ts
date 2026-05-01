@@ -13,7 +13,11 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
-import { UserRole } from "@dayday/database";
+import {
+  StockMovementReason,
+  StockMovementType,
+  UserRole,
+} from "@dayday/database";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
@@ -104,18 +108,41 @@ export class InventoryController {
     @Query("warehouseId") warehouseId?: string,
     @Query("productId") productId?: string,
     @Query("take") take?: string,
+    @Query("note") note?: string,
+    @Query("notes") notesCsv?: string,
+    @Query("type") type?: string,
+    @Query("reason") reason?: string,
   ) {
+    const notes =
+      notesCsv
+        ?.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean) ?? undefined;
+    const typeParsed =
+      type && Object.values(StockMovementType).includes(type as StockMovementType)
+        ? (type as StockMovementType)
+        : undefined;
+    const reasonParsed =
+      reason &&
+      Object.values(StockMovementReason).includes(reason as StockMovementReason)
+        ? (reason as StockMovementReason)
+        : undefined;
     return this.inventory.listMovements(organizationId, {
       warehouseId: warehouseId || undefined,
       productId: productId || undefined,
       take: take ? Number.parseInt(take, 10) : undefined,
+      note: note?.trim() || undefined,
+      notes: notes && notes.length > 0 ? notes : undefined,
+      type: typeParsed,
+      reason: reasonParsed,
     });
   }
 
   @Post("purchase")
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({
-    summary: "Закупка: приход на склад + Дт 201 Кт 531 (в одной транзакции)",
+    summary:
+      "Закупка: kind=goods — приход на склад + Дт 201 (+241 при ценах с НДС) Кт 531; kind=services — Дт 731 (+241) Кт 531 без StockMovement",
   })
   purchase(
     @OrganizationId() organizationId: string,

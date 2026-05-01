@@ -24,6 +24,7 @@ import {
   Factory,
   FileCheck2,
   FileText,
+  FolderTree,
   Gavel,
   History,
   Home,
@@ -350,7 +351,9 @@ export type MainNavSections = {
   bankCashActive: boolean;
   salesActive: boolean;
   purchasesActive: boolean;
+  manufacturingNavActive: boolean;
   warehouseActive: boolean;
+  catalogCrmActive: boolean;
   payrollHrActive: boolean;
   reportsActive: boolean;
   adminActive: boolean;
@@ -475,35 +478,66 @@ export function MainSidebar({
         </CollapsibleNavSection>
 
         <CollapsibleNavSection
+          sectionKey="catalogCrm"
+          title={t("nav.sectionCatalogCrm")}
+          icon={FolderTree}
+          sectionActive={navSections.catalogCrmActive}
+        >
+          <SideNavItem
+            href="/crm/counterparties"
+            label={t("nav.counterparties")}
+            isActive={pathname.startsWith("/crm/counterparties")}
+            icon={Contact2}
+            nested
+            onNavClick={onNavClick}
+          />
+          <SideNavSubItem
+            href="/catalog/products"
+            label={t("nav.products")}
+            isActive={pathname.startsWith("/catalog/products")}
+            icon={Boxes}
+            onNavClick={onNavClick}
+          />
+        </CollapsibleNavSection>
+
+        <CollapsibleNavSection
           sectionKey="sales"
           title={t("nav.sectionSales")}
           icon={ShoppingCart}
           sectionActive={navSections.salesActive}
         >
           <SideNavItem
-            href="/invoices"
+            href="/sales/invoices"
             label={t("nav.invoices")}
-            isActive={pathname.startsWith("/invoices")}
+            isActive={pathname.startsWith("/sales/invoices")}
             icon={FileText}
             nested
             onNavClick={onNavClick}
           />
           <SideNavSubItem
-            href="/counterparties"
-            label={t("nav.counterparties")}
-            isActive={pathname.startsWith("/counterparties")}
-            icon={Contact2}
+            href="/sales/reconciliation"
+            label={t("nav.reconciliation")}
+            isActive={pathname.startsWith("/sales/reconciliation")}
+            icon={FileCheck2}
             onNavClick={onNavClick}
           />
         </CollapsibleNavSection>
 
-        <SideNavItem
-          href="/inventory?modal=purchase"
-          label={t("nav.sectionPurchases")}
-          isActive={navSections.purchasesActive}
+        <CollapsibleNavSection
+          sectionKey="purchases"
+          title={t("nav.sectionPurchases")}
           icon={ShoppingBag}
-          onNavClick={onNavClick}
-        />
+          sectionActive={navSections.purchasesActive}
+        >
+          <SideNavItem
+            href="/purchases"
+            label={t("nav.purchaseReceipts")}
+            isActive={pathname.startsWith("/purchases")}
+            icon={ShoppingBag}
+            nested
+            onNavClick={onNavClick}
+          />
+        </CollapsibleNavSection>
 
         <CollapsibleNavSection
           sectionKey="warehouse"
@@ -513,23 +547,23 @@ export function MainSidebar({
         >
           <SideNavItem
             href="/inventory"
-            label={t("nav.inventory")}
+            label={t("inventory.stockBalancesTitle")}
             isActive={navSections.inventoryMainActive}
             icon={Package}
             nested
             onNavClick={onNavClick}
           />
           <SideNavSubItem
-            href="/products"
-            label={t("nav.products")}
-            isActive={pathname.startsWith("/products")}
-            icon={Boxes}
+            href="/inventory/movements"
+            label={t("inventory.movements")}
+            isActive={pathname.startsWith("/inventory/movements")}
+            icon={History}
             onNavClick={onNavClick}
           />
           <SideNavSubItem
-            href="/inventory/transfer"
+            href="/inventory/transfers"
             label={t("inventory.transferNav")}
-            isActive={pathname.startsWith("/inventory/transfer")}
+            isActive={pathname.startsWith("/inventory/transfers")}
             icon={ArrowLeftRight}
             onNavClick={onNavClick}
           />
@@ -538,6 +572,13 @@ export function MainSidebar({
             label={t("inventory.adjustNav")}
             isActive={pathname.startsWith("/inventory/adjustments")}
             icon={SlidersHorizontal}
+            onNavClick={onNavClick}
+          />
+          <SideNavSubItem
+            href="/inventory/settings"
+            label={t("inventory.settings")}
+            isActive={pathname.startsWith("/inventory/settings")}
+            icon={Settings}
             onNavClick={onNavClick}
           />
           <SideNavSubItem
@@ -554,13 +595,35 @@ export function MainSidebar({
             icon={ClipboardList}
             onNavClick={onNavClick}
           />
+        </CollapsibleNavSection>
+
+        <CollapsibleNavSection
+          sectionKey="manufacturing"
+          title={t("nav.sectionManufacturing")}
+          icon={Factory}
+          sectionActive={navSections.manufacturingNavActive}
+        >
           <SideNavItem
             href="/manufacturing"
             label={t("nav.manufacturing")}
-            isActive={pathname.startsWith("/manufacturing")}
+            isActive={pathname === "/manufacturing"}
             locked={lockedManufacturing}
             icon={Factory}
             nested
+            onNavClick={onNavClick}
+          />
+          <SideNavSubItem
+            href="/manufacturing/recipes"
+            label={t("nav.manufacturingRecipes")}
+            isActive={pathname.startsWith("/manufacturing/recipes")}
+            icon={BookOpen}
+            onNavClick={onNavClick}
+          />
+          <SideNavSubItem
+            href="/manufacturing/releases"
+            label={t("nav.manufacturingRelease")}
+            isActive={pathname.startsWith("/manufacturing/releases")}
+            icon={PackageSearch}
             onNavClick={onNavClick}
           />
         </CollapsibleNavSection>
@@ -640,13 +703,6 @@ export function MainSidebar({
             label={t("nav.receivables")}
             isActive={pathname.startsWith("/reporting/receivables")}
             icon={ArrowUpRight}
-            onNavClick={onNavClick}
-          />
-          <SideNavSubItem
-            href="/reporting/reconciliation"
-            label={t("nav.reconciliation")}
-            isActive={pathname.startsWith("/reporting/reconciliation")}
-            icon={FileCheck2}
             onNavClick={onNavClick}
           />
           <SideNavSubItem

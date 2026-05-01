@@ -1,27 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { Users2 } from "lucide-react";
+import { CreditCard, MoreVertical, Users2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { subscribeListRefresh } from "../../lib/list-refresh-bus";
+import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
 import { useTranslation } from "react-i18next";
-import { apiFetch } from "../../lib/api-client";
-import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
-import { useRequireAuth } from "../../lib/use-require-auth";
-import { EmptyState } from "../../components/empty-state";
-import { PageHeader } from "../../components/layout/page-header";
-import { CreateCounterpartyModal, EditCounterpartyModal } from "../../components/sales/modals";
+import { apiFetch } from "../../../lib/api-client";
+import { PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import { useRequireAuth } from "../../../lib/use-require-auth";
+import { EmptyState } from "../../../components/empty-state";
+import { PageHeader } from "../../../components/layout/page-header";
+import {
+  CounterpartyBankAccountsModal,
+  CreateCounterpartyModal,
+  EditCounterpartyModal,
+} from "../../../components/sales/modals";
+import type { CounterpartyLegalForm } from "../../../lib/counterparty-legal-form";
+import {
+  COUNTERPARTY_LEGAL_FORMS,
+  counterpartyLegalFormI18nKey,
+} from "../../../lib/counterparty-legal-form";
 
 type Row = {
   id: string;
   name: string;
   taxId: string;
-  kind: string;
+  legalForm?: string | null;
   role: string;
   email: string | null;
   address: string | null;
   isVatPayer?: boolean | null;
 };
+
+function legalFormLabel(t: (k: string) => string, code: string | null | undefined): string {
+  const c = (code ?? "").trim();
+  if (!c) return "—";
+  if ((COUNTERPARTY_LEGAL_FORMS as readonly string[]).includes(c)) {
+    return t(counterpartyLegalFormI18nKey(c));
+  }
+  return c;
+}
 
 export default function CounterpartiesPage() {
   const { t } = useTranslation();
@@ -32,6 +50,7 @@ export default function CounterpartiesPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [bankModal, setBankModal] = useState<{ id: string; name: string } | null>(null);
 
   const filtered = useCallback(() => {
     const term = q.trim().toLowerCase();
@@ -94,13 +113,13 @@ export default function CounterpartiesPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">{t("counterparties.list")}</h2>
-        <div className="mb-3">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="m-0 text-lg font-semibold text-gray-900">{t("counterparties.list")}</h2>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("counterparties.search", { defaultValue: "Поиск по имени или VÖEN…" })}
-            className="w-full max-w-md rounded-[2px] border border-[#D5DADF] px-3 py-2 text-sm outline-none focus:border-[#2980B9]"
+            className="w-full max-w-md shrink-0 rounded-[2px] border border-[#D5DADF] px-3 py-2 text-sm outline-none focus:border-[#2980B9] sm:max-w-xs"
           />
         </div>
         {loading && <p className="text-gray-600">{t("common.loading")}</p>}
@@ -131,10 +150,10 @@ export default function CounterpartiesPage() {
                   <th className="p-2 text-left">{t("counterparties.thName")}</th>
                   <th className="p-2 text-left">{t("counterparties.thTaxId")}</th>
                   <th className="p-2 text-left">{t("counterparties.vatStatus")}</th>
-                  <th className="p-2 text-left">{t("counterparties.thKind")}</th>
+                  <th className="p-2 text-left">{t("counterparties.thLegalForm")}</th>
                   <th className="p-2 text-left">{t("counterparties.thRole")}</th>
                   <th className="p-2 text-left">{t("counterparties.thEmail")}</th>
-                  <th className="p-2" />
+                  <th className="p-2 w-12" />
                 </tr>
               </thead>
               <tbody>
@@ -149,25 +168,56 @@ export default function CounterpartiesPage() {
                           ? t("counterparties.vatPayerNo")
                           : "—"}
                     </td>
-                    <td className="p-2">{r.kind}</td>
+                    <td className="p-2">{legalFormLabel(t, r.legalForm)}</td>
                     <td className="p-2">{r.role}</td>
                     <td className="p-2">{r.email ?? "—"}</td>
-                    <td className="p-2">
-                      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-                        <button
-                          type="button"
-                          className="text-sm text-action hover:underline"
-                          onClick={() => setEditId(r.id)}
+                    <td className="p-2 text-right">
+                      <details className="relative inline-block text-left">
+                        <summary
+                          className="inline-flex cursor-pointer list-none items-center justify-center rounded p-1 text-[#34495E] hover:bg-slate-100 [&::-webkit-details-marker]:hidden"
+                          aria-label={t("counterparties.bankAccounts_actions")}
                         >
-                          {t("counterparties.edit")}
-                        </button>
-                        <Link
-                          href={`/counterparties/${r.id}/reconciliation`}
-                          className="text-sm text-action hover:underline"
+                          <MoreVertical className="h-5 w-5" aria-hidden />
+                        </summary>
+                        <div
+                          className="absolute right-0 z-20 mt-1 min-w-[12.5rem] rounded-[2px] border border-[#D5DADF] bg-white py-1 shadow-md"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {t("counterparties.tabReconciliation")}
-                        </Link>
-                      </div>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#34495E] hover:bg-[#F4F5F7]"
+                            onClick={(e) => {
+                              const d = e.currentTarget.closest("details");
+                              if (d) (d as HTMLDetailsElement).open = false;
+                              setEditId(r.id);
+                            }}
+                          >
+                            {t("counterparties.edit")}
+                          </button>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#34495E] hover:bg-[#F4F5F7]"
+                            onClick={(e) => {
+                              const d = e.currentTarget.closest("details");
+                              if (d) (d as HTMLDetailsElement).open = false;
+                              setBankModal({ id: r.id, name: r.name });
+                            }}
+                          >
+                            <CreditCard className="h-4 w-4 shrink-0 text-[#7F8C8D]" aria-hidden />
+                            {t("counterparties.bankAccounts_menu")}
+                          </button>
+                          <Link
+                            href={`/crm/counterparties/${r.id}/reconciliation`}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-action hover:bg-[#F4F5F7]"
+                            onClick={(e) => {
+                              const d = e.currentTarget.closest("details");
+                              if (d) (d as HTMLDetailsElement).open = false;
+                            }}
+                          >
+                            {t("counterparties.tabReconciliation")}
+                          </Link>
+                        </div>
+                      </details>
                     </td>
                   </tr>
                 ))}
@@ -183,6 +233,12 @@ export default function CounterpartiesPage() {
         counterpartyId={editId}
         onClose={() => setEditId(null)}
         onSaved={() => void load()}
+      />
+      <CounterpartyBankAccountsModal
+        open={Boolean(bankModal)}
+        counterpartyId={bankModal?.id ?? null}
+        counterpartyName={bankModal?.name}
+        onClose={() => setBankModal(null)}
       />
     </div>
   );

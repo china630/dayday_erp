@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { subscribeListRefresh } from "../../lib/list-refresh-bus";
+import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
 import { FileStack } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "next/navigation";
-import { apiFetch } from "../../lib/api-client";
-import { PRIMARY_BUTTON_CLASS } from "../../lib/design-system";
-import { formatMoneyAzn } from "../../lib/format-money";
-import { useRequireAuth } from "../../lib/use-require-auth";
-import { PageHeader } from "../../components/layout/page-header";
-import { EmptyState } from "../../components/empty-state";
-import { CreateInvoiceModal } from "../../components/sales/modals";
+import { apiFetch } from "../../../lib/api-client";
+import { PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import { formatMoneyAzn } from "../../../lib/format-money";
+import { useRequireAuth } from "../../../lib/use-require-auth";
+import { PageHeader } from "../../../components/layout/page-header";
+import { EmptyState } from "../../../components/empty-state";
+import { CreateInvoiceModal } from "../../../components/sales/modals";
 
 type Row = {
   id: string;
@@ -203,7 +203,7 @@ export default function InvoicesPage() {
                 )}
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Link
-                    href={`/invoices/${r.id}`}
+                    href={`/sales/invoices/${r.id}`}
                     className="text-xs px-2 py-1 rounded-md border border-action/25 text-primary bg-action/10 hover:bg-action/15"
                   >
                     {t("invoices.view")}
@@ -327,7 +327,7 @@ export default function InvoicesPage() {
                       <td>
                       <div className="flex flex-wrap gap-2">
                         <Link
-                          href={`/invoices/${r.id}`}
+                          href={`/sales/invoices/${r.id}`}
                           className="text-sm px-2 py-1 rounded-md border border-action/25 text-primary bg-action/10 hover:bg-action/15"
                         >
                           {t("invoices.view")}

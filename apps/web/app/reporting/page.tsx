@@ -274,7 +274,7 @@ export default function ReportingPage() {
               <Link href="/reporting/receivables" className="text-action hover:text-primary">
                 {t("reporting.receivablesLink")}
               </Link>
-              <Link href="/reporting/reconciliation" className="text-action hover:text-primary">
+              <Link href="/sales/reconciliation" className="text-action hover:text-primary">
                 {t("reporting.reconciliationLink")}
               </Link>
               <Link href="/reporting/aging" className="text-action hover:text-primary">

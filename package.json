@@ -25,15 +25,19 @@
     "db:prisma": "npm exec -w @dayday/database prisma --",
     "db:seed": "npm run db:seed -w @dayday/database",
     "db:seed:demo": "cross-env SEED_DEMO_ORG=1 npm run db:seed -w @dayday/database",
-    "db:dev-bootstrap": "npm run db:seed:demo && npm run db:sync-i18n && npm run db:prod-init -w @dayday/database",
+    "db:dev-bootstrap": "npm run db:seed:demo && npm run db:sync-i18n:prune -w @dayday/database && npm run db:prod-init -w @dayday/database",
     "db:setup": "npm run db:migrate:deploy && npm run db:dev-bootstrap",
     "db:ifrs-demo-map": "npm run db:ifrs-demo-map -w @dayday/database",
     "db:studio": "npm run db:studio -w @dayday/database",
     "db:sync-i18n": "npm run db:sync-i18n -w @dayday/database",
+    "db:sync-i18n:prune": "npm run db:sync-i18n:prune -w @dayday/database",
+    "db:audit-i18n-overrides": "npm run db:audit-i18n-overrides -w @dayday/database",
+    "db:audit-i18n-overrides:fix": "npm run db:audit-i18n-overrides:fix -w @dayday/database",
     "db:dump-to-prod": "npm run docker-init:export -w @dayday/database",
     "db:wipe-tenant": "npx tsx packages/database/prisma/wipe-tenant-data.ts",
     "db:seed:tivi": "npm run db:seed:tivi -w @dayday/database",
-    "db:prod-init": "npm run db:migrate:deploy && npm run db:seed && npm run db:sync-i18n && npm run db:prod-init -w @dayday/database",
+    "db:prod-init": "npm run db:migrate:deploy && npm run db:seed && npm run db:sync-i18n:prune -w @dayday/database && npm run db:prod-init -w @dayday/database",
+    "db:deploy": "npm run db:migrate:deploy -w @dayday/database && npm run db:sync-i18n:prune -w @dayday/database",
     "db:apply-template:ifrs": "npm run db:apply-template:ifrs -w @dayday/database",
     "docker-init:export": "npm run docker-init:export -w @dayday/database",
     "docker-init:super-admin-hash": "npm run docker-init:super-admin-hash -w @dayday/database",
@@ -56,5 +60,13 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "overrides": {
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "@dayday/docs": {
+      "react": "18.3.1",
+      "react-dom": "18.3.1"
+    }
   }
 }

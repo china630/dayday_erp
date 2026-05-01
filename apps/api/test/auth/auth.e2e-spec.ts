@@ -29,7 +29,7 @@ describe("AuthService (JWT: login + switch-org)", () => {
         }),
         JwtModule.register({
           secret: "test-jwt-secret-for-auth-spec",
-          signOptions: { expiresIn: "15m" },
+          signOptions: { expiresIn: "12h" },
         }),
       ],
       providers: [

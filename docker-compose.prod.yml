@@ -3,7 +3,7 @@
 #
 # ВАЖНО (Prisma): не монтируем `prisma/migrations` в `docker-entrypoint-initdb.d`.
 # Иначе SQL применяется в обход `prisma migrate deploy`, и Prisma получает "непустую БД без baseline" (P3005).
-# Миграции/сидинг выполняются через контейнер `api` (см. `npm run db:migrate:deploy`, `npm run db:prod-init`).
+# Миграции/сидинг/i18n — через контейнер `api` (см. `docs/deploy.ru.md`: `db:migrate:deploy`, `db:sync-i18n:prune` / `db:deploy`, `db:prod-init`).
 
 services:
   db:

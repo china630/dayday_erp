@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiFetch } from "../../../../lib/api-client";
-import { safeJson } from "../../../../lib/api-fetch";
-import { inputFieldClass } from "../../../../lib/form-classes";
-import { useRequireAuth } from "../../../../lib/use-require-auth";
-import { PageHeader } from "../../../../components/layout/page-header";
+import { apiFetch } from "../../../../../lib/api-client";
+import { safeJson } from "../../../../../lib/api-fetch";
+import { inputFieldClass } from "../../../../../lib/form-classes";
+import { useRequireAuth } from "../../../../../lib/use-require-auth";
+import { PageHeader } from "../../../../../components/layout/page-header";
 
 const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
 
@@ -177,7 +177,7 @@ export default function CounterpartyReconciliationPage() {
         title={t("counterparties.tabReconciliation")}
         actions={
           <Link
-            href="/counterparties"
+            href="/crm/counterparties"
             className="inline-flex h-8 items-center rounded-[2px] border border-[#D5DADF] bg-white px-4 text-[13px] font-medium text-[#34495E] shadow-sm hover:bg-[#F4F5F7]"
           >
             {t("counterparties.backList")}

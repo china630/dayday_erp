@@ -3,10 +3,17 @@
  * Заполняет отсутствующие ключи и обновляет значения до актуальных из кода.
  * После синхронизации обновляет system_config i18n.cacheVersion.
  *
+ * Опции:
+ *   --prune  Удалить из translation_overrides строки ru/az, чьих ключей больше нет в resources.ts
+ *            (устаревшие переименования; не трогает другие locale, например en).
+ *   Или переменная окружения: I18N_SYNC_PRUNE=1
+ *
  * Запуск из корня репозитория:
  *   dotenv -e .env -- npm run db:sync-i18n
+ *   dotenv -e .env -- npm run db:sync-i18n:prune
  * или из packages/database:
  *   dotenv -e ../../.env -- npx tsx prisma/sync-translation-overrides-from-resources.ts
+ *   dotenv -e ../../.env -- npx tsx prisma/sync-translation-overrides-from-resources.ts --prune
  */
 import { closePrismaPool, createPrismaClient } from "./prisma-client";
 import { resources } from "../../../apps/web/lib/i18n/resources";
@@ -14,6 +21,11 @@ import { resources } from "../../../apps/web/lib/i18n/resources";
 const prisma = createPrismaClient();
 
 const I18N_CACHE_KEY = "i18n.cacheVersion";
+
+const pruneRequested =
+  process.argv.includes("--prune") ||
+  process.env.I18N_SYNC_PRUNE === "1" ||
+  process.env.I18N_SYNC_PRUNE === "true";
 
 function flattenStrings(
   obj: Record<string, unknown>,
@@ -32,6 +44,7 @@ function flattenStrings(
 }
 
 const BATCH = 100;
+const PRUNE_BATCH = 500;
 
 async function upsertLocale(
   locale: string,
@@ -55,6 +68,24 @@ async function upsertLocale(
   return n;
 }
 
+async function pruneLocale(locale: string, validKeys: Set<string>): Promise<number> {
+  const rows = await prisma.translationOverride.findMany({
+    where: { locale },
+    select: { id: true, key: true },
+  });
+  const staleIds = rows.filter((r) => !validKeys.has(r.key)).map((r) => r.id);
+  let deleted = 0;
+  for (let i = 0; i < staleIds.length; i += PRUNE_BATCH) {
+    const chunk = staleIds.slice(i, i + PRUNE_BATCH);
+    if (chunk.length === 0) continue;
+    const r = await prisma.translationOverride.deleteMany({
+      where: { id: { in: chunk } },
+    });
+    deleted += r.count;
+  }
+  return deleted;
+}
+
 async function main() {
   const ru = flattenStrings(
     (resources.ru as { translation: Record<string, unknown> }).translation,
@@ -66,14 +97,25 @@ async function main() {
   const ruN = await upsertLocale("ru", ru);
   const azN = await upsertLocale("az", az);
 
+  let ruPruned = 0;
+  let azPruned = 0;
+  if (pruneRequested) {
+    ruPruned = await pruneLocale("ru", new Set(Object.keys(ru)));
+    azPruned = await pruneLocale("az", new Set(Object.keys(az)));
+  }
+
+  const cacheVal = Date.now();
   await prisma.systemConfig.upsert({
     where: { key: I18N_CACHE_KEY },
-    create: { key: I18N_CACHE_KEY, value: Date.now() },
-    update: { value: Date.now() },
+    create: { key: I18N_CACHE_KEY, value: cacheVal },
+    update: { value: cacheVal },
   });
 
+  const pruneNote = pruneRequested
+    ? ` pruned stale ru=${ruPruned}, az=${azPruned}`
+    : " (no --prune: stale ru/az keys not removed; use npm run db:sync-i18n:prune or db:deploy)";
   process.stdout.write(
-    `translation_overrides: upserted ru=${ruN} keys, az=${azN} keys. i18n cache version bumped.\n`,
+    `translation_overrides: upserted ru=${ruN} keys, az=${azN} keys.${pruneNote} i18n cache version bumped.\n`,
   );
 }
 

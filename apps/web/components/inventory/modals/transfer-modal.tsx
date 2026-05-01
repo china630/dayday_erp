@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
-import { notifyListRefresh } from "../../../lib/list-refresh-bus";
+import { notifyInventoryListsRefresh } from "../../../lib/list-refresh-bus";
 import { INPUT_BORDERED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
@@ -32,7 +32,7 @@ export function TransferModal({
   const load = useCallback(async () => {
     const [w, p] = await Promise.all([
       apiFetch("/api/inventory/warehouses"),
-      apiFetch("/api/products"),
+      apiFetch("/api/products?isService=false"),
     ]);
     if (w.ok) {
       const list = (await w.json()) as Warehouse[];
@@ -112,7 +112,7 @@ export function TransferModal({
         }
       }
       toast.success(t("common.save"));
-      notifyListRefresh("inventory-hub");
+      notifyInventoryListsRefresh();
       onClose();
     } finally {
       setBusy(false);

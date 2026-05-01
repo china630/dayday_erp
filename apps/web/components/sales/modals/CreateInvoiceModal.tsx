@@ -14,12 +14,18 @@ import { uuidV4 } from "../../../lib/uuid";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
 type Counterparty = { id: string; name: string; taxId: string };
-type Product = { id: string; name: string; sku: string; price: unknown; vatRate: unknown; isService?: boolean };
+type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  price: unknown;
+  vatRate: unknown;
+  isService?: boolean;
+};
 
 type LineRow = {
   key: string;
   productId: string;
-  description: string;
   quantity: string;
   unitPrice: string;
 };
@@ -28,10 +34,19 @@ function newLine(): LineRow {
   return {
     key: uuidV4(),
     productId: "",
-    description: "",
     quantity: "1",
     unitPrice: "0",
   };
+}
+
+/** Effective VAT % for line total (0 or 18; exempt -1 → 0 for amount math). */
+function lineVatRatePctForTotals(products: Product[], productId: string, headerFallback: 0 | 18): number {
+  const p = products.find((x) => x.id === productId);
+  if (!p) return headerFallback;
+  const vr = Number(p.vatRate);
+  if (vr === -1) return 0;
+  if (vr === 0) return 0;
+  return 18;
 }
 
 /** VAT split for one line; `unitPrice` is stored as NET price per unit. */
@@ -70,7 +85,6 @@ export function CreateInvoiceModal({
   const [currency, setCurrency] = useState<"AZN" | "USD" | "EUR">("AZN");
   const [vatInclusive, setVatInclusive] = useState(false);
   const [vatRate, setVatRate] = useState<0 | 18>(18);
-  const [isService, setIsService] = useState(false);
   const [lines, setLines] = useState<LineRow[]>(() => []);
   const [busy, setBusy] = useState(false);
   const [netting, setNetting] = useState<NettingPreview | null>(null);
@@ -108,41 +122,26 @@ export function CreateInvoiceModal({
     setCurrency("AZN");
     setVatInclusive(false);
     setVatRate(18);
-    setIsService(false);
     setLines([]);
     void loadRefs();
   }, [open, loadRefs]);
 
   useEffect(() => {
     if (!open) return;
-    if (isService) {
-      setLines((prev) =>
-        prev.map((x) => ({
-          ...x,
-          productId: "",
-        })),
-      );
-    }
-  }, [isService, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (isService) return;
-    // when switching back to products, prefill empty product selections
-    const first = products[0];
-    if (!first) return;
-    setLines((prev) =>
-      prev.map((x) =>
-        x.productId
-          ? x
-          : {
-              ...x,
-              productId: first.id,
-              unitPrice: x.unitPrice && x.unitPrice !== "0" ? x.unitPrice : String(Number(first.price) || 0),
-            },
-      ),
-    );
-  }, [isService, open, products]);
+    if (!products.length) return;
+    setLines((prev) => {
+      if (prev.length > 0) return prev;
+      const first = products[0];
+      return [
+        {
+          key: uuidV4(),
+          productId: first.id,
+          quantity: "1",
+          unitPrice: String(Number(first.price) || 0),
+        },
+      ];
+    });
+  }, [open, products]);
 
   useEffect(() => {
     if (!open) {
@@ -181,16 +180,15 @@ export function CreateInvoiceModal({
       const q = Number(String(row.quantity).replace(",", "."));
       const u = Number(String(row.unitPrice).replace(",", "."));
       if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(u) || u < 0) continue;
-      if (isService) {
-        if (!row.description.trim()) continue;
-      } else if (!row.productId) continue;
-      const s = vatSplitForLine(q, u, vatRate);
+      if (!row.productId) continue;
+      const vr = lineVatRatePctForTotals(products, row.productId, vatRate);
+      const s = vatSplitForLine(q, u, vr);
       net += s.net;
       vat += s.vat;
       gross += s.gross;
     }
     return { net, vat, gross };
-  }, [lines, vatRate, isService]);
+  }, [lines, vatRate, products]);
 
   const canSubmit = useMemo(() => {
     if (!counterpartyId) return false;
@@ -199,17 +197,15 @@ export function CreateInvoiceModal({
         const q = Number(String(row.quantity).replace(",", "."));
         const u = Number(String(row.unitPrice).replace(",", "."));
         const okNum = Number.isFinite(q) && q > 0 && Number.isFinite(u) && u >= 0;
-        if (!okNum) return null;
-        if (isService) {
-          if (!row.description.trim()) return null;
-          return { productId: null, description: row.description.trim(), quantity: q, unitPrice: u };
-        }
-        if (!row.productId) return null;
-        return { productId: row.productId, description: null, quantity: q, unitPrice: u };
+        if (!okNum || !row.productId) return null;
+        const p = products.find((x) => x.id === row.productId);
+        const vr = p ? Number(p.vatRate) : vatRate;
+        const vatR = vr === -1 ? 0 : vr === 0 ? 0 : 18;
+        return { productId: row.productId, quantity: q, unitPrice: u, vatRate: vatR };
       })
       .filter(Boolean);
     return parsed.length > 0;
-  }, [counterpartyId, isService, lines]);
+  }, [counterpartyId, lines, products, vatRate]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -222,13 +218,11 @@ export function CreateInvoiceModal({
         const q = Number(String(row.quantity).replace(",", "."));
         const u = Number(String(row.unitPrice).replace(",", "."));
         if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(u) || u < 0) return null;
-        if (isService) {
-          const desc = row.description.trim();
-          if (!desc) return null;
-          return { description: desc, quantity: q, unitPrice: u, vatRate };
-        }
         if (!row.productId) return null;
-        return { productId: row.productId, quantity: q, unitPrice: u, vatRate };
+        const p = products.find((x) => x.id === row.productId);
+        const vr = p ? Number(p.vatRate) : vatRate;
+        const vatR = vr === -1 ? 0 : vr === 0 ? 0 : 18;
+        return { productId: row.productId, quantity: q, unitPrice: u, vatRate: vatR };
       })
       .filter(Boolean) as Array<Record<string, unknown>>;
 
@@ -256,7 +250,7 @@ export function CreateInvoiceModal({
       return;
     }
     const data = (await res.json()) as { stockWarnings?: string[] };
-    if (!isService && data.stockWarnings?.length) {
+    if (data.stockWarnings?.length) {
       toast.warning(t("invoiceNew.stockWarningsTitle"), {
         description: data.stockWarnings.join("\n"),
       });
@@ -264,6 +258,13 @@ export function CreateInvoiceModal({
     toast.success(t("common.save"));
     notifyListRefresh("invoices");
     onClose();
+  }
+
+  function productOptionLabel(p: Product): string {
+    if (p.isService) {
+      return `${p.name} (${t("products.kindServiceTag")})`;
+    }
+    return `${p.name} (${p.sku})`;
   }
 
   return (
@@ -345,10 +346,7 @@ export function CreateInvoiceModal({
               <option value={0}>0%</option>
               <option value={18}>18%</option>
             </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <input type="checkbox" checked={isService} onChange={(e) => setIsService(e.target.checked)} />
-            {t("invoiceNew.serviceToggle")}
+            <span className="text-xs font-normal text-[#7F8C8D]">{t("invoiceNew.vatRateLineHint")}</span>
           </label>
         </div>
 
@@ -356,9 +354,7 @@ export function CreateInvoiceModal({
           <table className="min-w-full text-sm">
             <thead className="bg-[#F4F5F7] text-left text-[#34495E]">
               <tr>
-                <th className="px-3 py-2 font-semibold">
-                  {isService ? t("invoiceNew.serviceCol") : t("invoiceNew.product")}
-                </th>
+                <th className="px-3 py-2 font-semibold">{t("invoiceNew.lineNomenclature")}</th>
                 <th className="w-28 px-3 py-2 text-right font-semibold">{t("invoiceNew.quantity")}</th>
                 <th className="w-40 px-3 py-2 text-right font-semibold">
                   {vatInclusive ? t("invoiceNew.priceHintGross") : t("invoiceNew.priceHintNet")}
@@ -370,44 +366,32 @@ export function CreateInvoiceModal({
               {lines.map((row, idx) => (
                 <tr key={row.key} className="border-t border-[#EBEDF0]">
                   <td className="px-3 py-2 align-middle">
-                    {isService ? (
-                      <input
-                        value={row.description}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, description: v } : x)));
-                        }}
-                        placeholder={t("invoiceNew.serviceNote")}
-                        className={inputFieldWideClass}
-                      />
-                    ) : (
-                      <select
-                        value={row.productId}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const p = products.find((x) => x.id === v);
-                          setLines((prev) =>
-                            prev.map((x, i) =>
-                              i === idx
-                                ? {
-                                    ...x,
-                                    productId: v,
-                                    unitPrice: String(Number(p?.price) || 0),
-                                  }
-                                : x,
-                            ),
-                          );
-                        }}
-                        className={inputFieldWideClass}
-                      >
-                        <option value="">{t("invoiceNew.noProductsOption")}</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.sku})
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                    <select
+                      value={row.productId}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const p = products.find((x) => x.id === v);
+                        setLines((prev) =>
+                          prev.map((x, i) =>
+                            i === idx
+                              ? {
+                                  ...x,
+                                  productId: v,
+                                  unitPrice: String(Number(p?.price) || 0),
+                                }
+                              : x,
+                          ),
+                        );
+                      }}
+                      className={inputFieldWideClass}
+                    >
+                      <option value="">{t("invoiceNew.noProductsOption")}</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {productOptionLabel(p)}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-3 py-2 align-middle text-right">
                     <input
@@ -424,19 +408,21 @@ export function CreateInvoiceModal({
                     <input
                       value={(() => {
                         const v = Number(String(row.unitPrice).replace(",", "."));
+                        const vr = lineVatRatePctForTotals(products, row.productId, vatRate);
                         if (!vatInclusive || !Number.isFinite(v)) return row.unitPrice;
-                        const mult = vatRate === 18 ? 1.18 : 1;
+                        const mult = vr === 18 ? 1.18 : 1;
                         const gross = v * mult;
                         return String(Math.round(gross * 10_000) / 10_000);
                       })()}
                       onChange={(e) => {
                         const raw = e.target.value;
                         const n = Number(String(raw).replace(",", "."));
+                        const vr = lineVatRatePctForTotals(products, row.productId, vatRate);
                         if (!Number.isFinite(n)) {
                           setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: raw } : x)));
                           return;
                         }
-                        const mult = vatRate === 18 ? 1.18 : 1;
+                        const mult = vr === 18 ? 1.18 : 1;
                         const net = vatInclusive ? n / mult : n;
                         const normalized = String(Math.round(net * 10_000) / 10_000);
                         setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: normalized } : x)));
@@ -486,4 +472,3 @@ export function CreateInvoiceModal({
     </SalesModalShell>
   );
 }
-

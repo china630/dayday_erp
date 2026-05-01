@@ -1020,24 +1020,24 @@ model JournalEntry {
 }
 
 model Counterparty {
-  id             String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  organizationId String              @map("organization_id") @db.Uuid
+  id             String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
   name           String
-  taxId          String              @map("tax_id")
+  taxId          String                    @map("tax_id")
   kind           CounterpartyKind
-  role           CounterpartyRole    @default(CUSTOMER)
+  role           CounterpartyRole          @default(CUSTOMER)
+  legalForm      CounterpartyLegalForm     @default(LLC) @map("legal_form")
   address        String?
-  bankAccounts   Json                @default("[]") @map("bank_accounts")
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
   email          String?
-  /// *
-  ///    * Статус плательщика НДС по данным VÖEN lookup (e-taxes), null — не проверяли
-  isVatPayer     Boolean?            @map("is_vat_payer")
-  globalId       String?             @map("global_id") @db.Uuid
+  /// Плательщик НДС (учётный статус контрагента)
+  isVatPayer     Boolean                   @default(false) @map("is_vat_payer")
+  globalId       String?                   @map("global_id") @db.Uuid
   /// *
   ///    * Предпочитаемый язык портала счёта для клиента: `az` | `ru` | `en` (nullable).
-  portalLocale   String?             @map("portal_locale")
+  portalLocale   String?                   @map("portal_locale")
+  bankAccounts   CounterpartyBankAccount[]
   cashOrders     CashOrder[]
   global         GlobalCounterparty? @relation(fields: [globalId], references: [id])
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1048,6 +1048,23 @@ model Counterparty {
   @@index([organizationId, createdAt])
   @@index([globalId])
   @@map("counterparties")
+}
+
+model CounterpartyBankAccount {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  counterpartyId String       @map("counterparty_id") @db.Uuid
+  bankName       String       @map("bank_name")
+  iban           String
+  swift          String?      @map("swift")
+  currency       String       @default("AZN") @map("currency")
+  isPrimary      Boolean      @default(false) @map("is_primary")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  counterparty   Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+
+  @@unique([counterpartyId, iban], map: "counterparty_bank_accounts_cp_iban_uidx")
+  @@index([counterpartyId], map: "counterparty_bank_accounts_counterparty_id_idx")
+  @@map("counterparty_bank_accounts")
 }
 
 /// *
@@ -1730,6 +1747,19 @@ enum CounterpartyRole {
   SUPPLIER
   BOTH
   OTHER
+}
+
+/// Организационно-правовая форма (АР): F/Ş, MMC, QSC, ASC, PHŞ и т.д.
+enum CounterpartyLegalForm {
+  INDIVIDUAL
+  LLC
+  CJSC
+  OJSC
+  PUBLIC_LEGAL_ENTITY
+  STATE_AGENCY
+  NGO
+  BRANCH
+  HOA
 }
 
 enum InvoiceStatus {

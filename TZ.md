@@ -199,7 +199,7 @@
 
 - **Middleware (NestJS):** инъекция `organizationId` из JWT в каждый запрос.
 - **Глобальный фильтр в Prisma:** все запросы `findMany`, `findUnique` должны включать `where: { organizationId }`.
-- **Auth:** Access Token (JWT); Refresh Token — в **HttpOnly Cookie**.
+- **Auth:** Access Token (JWT), срок жизни по умолчанию **12h** (`JWT_ACCESS_EXPIRES` в корневом `.env`); Refresh Token — в **HttpOnly Cookie** (`JWT_REFRESH_EXPIRES`, по умолчанию 7d).
 
 ### Validation Strict Mode (v5.8) — синхронно с §17
 
@@ -275,7 +275,7 @@
 
 #### UI (модуль 7 / отчёты)
 
-- **Акт сверки (Üzləşmə aktı):** `GET /api/reports/reconciliation/:counterpartyId` (`startDate`, `endDate`, опционально `currency`, `ledgerType`; алиасы `dateFrom`/`dateTo`); экспорт **`/pdf`**, **`/xlsx`**; **`POST …/email`** — PDF на `counterparty.email` при настроенном SMTP. Вкладка **«Акт сверки»** в UI редактирования контрагента (**модальное окно** на странице списка `/counterparties`; отдельный маршрут карточки — **`/counterparties/[id]/reconciliation`**). Устаревший JSON-эндпоинт **`GET /api/reporting/reconciliation?counterpartyId=…`** сохранён для совместимости.
+- **Акт сверки (Üzləşmə aktı):** `GET /api/reports/reconciliation/:counterpartyId` (`startDate`, `endDate`, опционально `currency`, `ledgerType`; алиасы `dateFrom`/`dateTo`); экспорт **`/pdf`**, **`/xlsx`**; **`POST …/email`** — PDF на `counterparty.email` при настроенном SMTP. Вкладка **«Акт сверки»** в UI редактирования контрагента (**модальное окно** на странице списка **`/crm/counterparties`**; отдельный маршрут карточки — **`/crm/counterparties/[id]/reconciliation`**). Устаревший JSON-эндпоинт **`GET /api/reporting/reconciliation?counterpartyId=…`** сохранён для совместимости.
 - **Встречные требования / взаимозачёт** (`GET /api/reporting/netting/preview`, UI отчётов): блок остатков **211 / 531** и лимит зачёта; кнопка **«Оплатить зачётом / Pay by netting»** на странице `/reporting/reconciliation` доступна только при `canNet`.
 - **Карточка инвойса:** при непогашенном остатке и `canNet` — действие **«Оплатить зачётом»** (сумма по умолчанию ≤ min(остаток инвойса, suggestedAmount)).
 
@@ -289,9 +289,10 @@
 
 ### Карточка контрагента
 
-- **Тип:** физическое лицо / юридическое лицо; в учёте взаимодействий — **Клиент / Поставщик**.
-- **Обязательные поля:** Name, VÖEN (10 цифр), Address, Bank Accounts.
-- **Merge дубликатов (v95+):** API `POST /api/counterparties/merge` принимает `{ sourceId, targetId }` и переносит связи (`Invoice`, `Transaction`, `CashOrder`) с `source` на `target` в одной БД-транзакции; `source` удаляется после успешного переноса.
+- **Юр./физ. (`kind`):** в БД хранится для учёта и **обновляется из `legalForm`** (например, `INDIVIDUAL` → физлицо); в модалках создания/редактирования **отдельный выбор «тип» не показывается**, чтобы не дублировать ОПФ. В учёте взаимодействий — **роль** Клиент / Поставщик и т.д.
+- **Обязательные поля (модалка create/edit):** Name, VÖEN (10 цифр), **`legalForm`**, **роль (`role`)**; адрес и e-mail — по мере необходимости; **плательщик НДС (`isVatPayer`)** — булев признак (по умолчанию `false`), задаётся пользователем и/или подсказывается lookup по VÖEN.
+- **Банковские счета:** хранятся в **`CounterpartyBankAccount`** (связь **1:N**); не задаются в той же форме, что карточка — управление через **`CounterpartyBankAccountsModal`** (меню строки реестра) и REST ниже.
+- **Merge дубликатов (v95+):** API `POST /api/counterparties/merge` принимает `{ sourceId, targetId }` и переносит связи (`Invoice`, `Transaction`, `CashOrder`) с `source` на `target` в одной БД-транзакции; **строки `CounterpartyBankAccount`** сливаются в `target` (по уникальному IBAN), затем `source` удаляется после успешного переноса.
 - **Проверка целостности после merge (M3/M4):** сразу после коммита транзакции merge сервис выполняет **`scanMergeIntegrity`**: параллельный `count` по тем же моделям (`invoice`, `transaction`, `cash_orders`) с фильтром `counterpartyId = <удалённый sourceId>`. Ожидаемое значение **0** по каждой таблице; при ненулевом счётчике пишется **error-log** (инцидент рассинхронизации / пропущенная связь при расширении схемы). Ответ `POST …/merge` включает поле **`integrity: { ok, counts }`** для диагностики клиентом и мониторинга.
 
 ### Взаиморасчёты
@@ -311,21 +312,42 @@
 ### UI (реализация vX.Y): создание и обновление через модальные компоненты
 
 - Клиент (`apps/web`) для операций **create/update** по REST вызывает **модальные компоненты** с формами на страницах списков (паттерн «таблица + модалка»), а не отдельные полноэкранные страницы форм.
-- Примеры: **CreateInvoiceModal** / редактирование на `/invoices`; **CreateCounterpartyModal** и форма редактирования на `/counterparties`; инвентаризация — **`InventoryAuditCreateFlow`** в модалке на `/inventory/audits`; основные средства — **`FixedAssetModal`** на `/fixed-assets`; склад — модалки в хабе `/inventory` (в т.ч. **`NewWarehouseModal`**).
-- Устаревшие маршруты (только редиректы на список, иногда с `?modal=…` или `?newAudit=1` для автозапуска UI):
-  - `/invoices/new` → `/invoices`
-  - `/counterparties/new` → `/counterparties`
-  - `/inventory/warehouses/new` → `/inventory?modal=newWh`
-  - `/inventory/audit/new` → `/inventory/audits?newAudit=1`
-  - `/fixed-assets/new` → `/fixed-assets?modal=fixedAsset`
+- Примеры: **CreateInvoiceModal** / редактирование на **`/sales/invoices`**; **акты сверки** — реестр **`/sales/reconciliation`**; **CreateCounterpartyModal** и форма редактирования на **`/crm/counterparties`**; **каталог** — **`/catalog/products`**: кнопка добавления — **выпадающее меню** «+ Yeni məhsul» / «+ Yeni xidmət» (RU: новый товар / новая услуга); **`ProductModal`** (товар: **Ad, SKU, ƏDV, Qiymət**, `isService: false`) и **`CreateServiceModal`** / режим услуги (только **Ad, ƏDV, Qiymət**, `isService: true`, без SKU в UI); инвентаризация — **`InventoryAuditCreateFlow`** в модалке на **`/inventory/audits`**; основные средства — **`FixedAssetModal`** на **`/fixed-assets`**; **закупки** — реестр **`/purchases`** + **`PurchaseModal`**; перемещения — **`/inventory/transfers`** + **`TransferModal`**; корректировки — **`/inventory/adjustments`** + **`AdjustmentsModal`**; настройки склада — **`/inventory/settings`** (**`NewWarehouseModal`**).
+- Устаревшие маршруты (только **редиректы** на реестр **без** query для автозапуска модалок из URL):
+  - `/invoices/new` → `/sales/invoices`
+  - `/invoices`, `/invoices/*` → `/sales/invoices`, `/sales/invoices/*`
+  - `/counterparties`, `/counterparties/*` → `/crm/counterparties`, `/crm/counterparties/*`
+  - `/products` → `/catalog/products`
+  - `/reporting/reconciliation` → `/sales/reconciliation`
+  - `/inventory/purchase` → `/purchases`
+  - `/inventory/warehouses/new` → `/inventory/settings`
+  - `/inventory/transfer` → `/inventory/transfers`
+  - `/inventory/audit/new` → `/inventory/audits`
+  - `/fixed-assets/new` → `/fixed-assets`
+  - `/manufacturing/recipe` → `/manufacturing/recipes`; `/manufacturing/release` → `/manufacturing/releases`
   - `/payroll/absences/new` → `/payroll`
+
+#### Иерархия левого меню и каталог `apps/web/app` (v2026.05.01, 1C/SAP-стиль)
+
+| Раздел меню | Базовые маршруты (`apps/web/app/…`) |
+|-------------|-------------------------------------|
+| **Kataloq və CRM** | `crm/counterparties/*`, `catalog/products/*` (**выше «Продаж» в сайдбаре**) |
+| **Satış** | `sales/invoices/*`, `sales/reconciliation` |
+| **Satınalma** | `purchases` |
+| **Anbar** | `inventory/*` (кроме закупок; `purchase` удалён) |
+| **İstehsalat** | `manufacturing` → редирект на `manufacturing/recipes`; `manufacturing/releases` |
 
 ### Контрагенты (VÖEN / MDM lookup) — UI/REST
 
 - Валидация: VÖEN (`taxId`) — **строго 10 цифр**.
-- Автозаполнение (MDM): при вводе 10 цифр UI вызывает `GET /api/counterparties/global/by-voen/:taxId` и автозаполняет **имя** и **статус НДС**.
-- **Strict lookup режим (v95+):** auto-lookup обязателен для create/edit контрагента; при успешном lookup поле `name` блокируется от ручного ввода, чтобы исключить расхождения с MDM/e-taxes.
-- Ручная проверка: кнопка «Yoxla» повторно запускает lookup; если MDM не вернул запись, допускается fallback-проверка через `GET /api/tax/taxpayer-info?voen=...`.
+- **Организационно-правовая форма:** в модалках **создания** и **редактирования** контрагента (`CreateCounterpartyModal`, `EditCounterpartyModal`) — обязательный выпадающий список **`legalForm`** (значения enum в БД: `INDIVIDUAL`, `LLC`, `CJSC`, `OJSC`, `PUBLIC_LEGAL_ENTITY`, `STATE_AGENCY`, `NGO`, `BRANCH`, `HOA`; бизнес-расшифровки F/Ş, MMC, QSC и т.д. — в [PRD.md](./PRD.md) §4.3).
+- **Плательщик НДС:** в тех же модалках — чекбокс **`isVatPayer`** (подписи UI: AZ «ƏDV ödəyicisidir», RU «Плательщик НДС»); значение сохраняется в `POST /api/counterparties` и `PATCH /api/counterparties/:id` и используется в налоговых сценариях (в т.ч. e-qaimə, взаимозачёт).
+- Автозаполнение (MDM / directory): при вводе 10 цифр UI выполняет цепочку запросов (в т.ч. `GET /api/organization/directory/by-voen/:taxId`, `GET /api/counterparties/global/by-voen/:taxId`) и при успешном ответе подставляет **имя**, **адрес** (если есть) и **признак плательщика НДС** там, где источник это отдаёт.
+- **Auto-lookup (create/edit):** при наборе 10 цифр VÖEN автоматически запускается проверка; при необходимости допускается fallback `GET /api/tax/taxpayer-info?voen=...`. Поле **`name` (Наименование / Ad)** **не блокируется** (`disabled` не используется): пользователь **всегда** может ввести или исправить наименование вручную, в том числе если lookup завершился ошибкой или вернул неполные данные.
+- **Ошибка поиска по VÖEN (UI):** при сбое цепочки lookup или ответе без пригодного наименования UI показывает **Toast** (локализованный ключ, AZ: «VÖEN üzrə məlumat tapılmadı») и **не подставляет** в поле имени технические сообщения, HTML или текст защитных заглушек (Cloudflare и т.п.).
+- Ручная проверка: кнопка «Yoxla» повторно запускает ту же цепочку lookup.
+- **Банковские счета (REST):** `GET /api/counterparties/:id/bank-accounts` — список; `POST /api/counterparties/:id/bank-accounts` — добавление (тело: `bankName`, `iban`, опционально `swift`, `currency`, `isPrimary`); `DELETE /api/counterparties/:id/bank-accounts/:accountId` — удаление. Маршрут **`GET …/global/by-voen/:taxId`** регистрируется **до** динамического **`GET …/:id`**, чтобы не перехватываться как `id = "global"`.
+- **UI:** в таблице **`/crm/counterparties`** в меню действий строки — пункт **«Bank hesabları» / «Банковские счета»** (иконка карты/счёта), открывающий **`CounterpartyBankAccountsModal`** (список счетов, форма добавления, удаление).
 
 ### Invoice
 
@@ -338,7 +360,7 @@
 
 - `vatInclusive`: чекбокс «Qiymətlər ƏDV daxil (brüt)» — если включён, `unitPrice` в UI трактуется как **брутто**, backend рассчитывает нетто.
 - `vatRate`: ставка **0%** или **18%**.
-- Услуги: флаг **isService** в UI — скрывает складские предупреждения и в PDF отображает строку как «Xidmət».
+- **Товары и услуги в одном инвойсе:** глобальный чекбокс **«Xidmət»** в шапке формы создания счёта **не используется**; пользователь выбирает номенклатуру в каждой строке. Если у выбранного **`Product`** установлено **`isService === true`**, для этой строки **не требуется** склад при проведении и **не создаётся** складское списание; для **`isService === false`** действуют проверки остатков и **`postSaleInventoryInTransaction`** только по таким строкам. В PDF тип строки берётся из номенклатуры (**Məhsul** / **Xidmət**).
 
 ### Бизнес-логика (триггеры)
 
@@ -935,8 +957,20 @@ Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: 
   - `POST /api/inventory/bins`
 - **Остатки/движения:** в `StockItem` и `StockMovement` добавлена опциональная ссылка `binId`.
 - **Целостность ячейка↔склад (M9, DB):** в PostgreSQL действуют **CHECK** `stock_items_bin_same_warehouse_chk` и `stock_movements_bin_same_warehouse_chk`: при непустом `bin_id` существует строка `warehouse_bins`, у которой **`id = bin_id` и `warehouse_id` совпадает** с `warehouse_id` строки остатка/движения; до введения ограничения расхождения чинятся **`UPDATE … SET bin_id = NULL`**. Это запрещает «перелёт» товара в ячейку чужого склада на уровне БД.
-- **Оприходование:** `POST /api/inventory/purchase` поддерживает `line.binId`; при выборе ячейки движение прихода пишется с `binId`, а `StockItem` хранит последнюю зафиксированную локацию партии в рамках SKU+склада.
-- **UI:** в хабе `/inventory` добавлен раздел «Топология склада» для создания ячеек и просмотра списка; в формах прихода (страница и модалка) добавлен выбор ячейки по строкам.
+- **Оприходование / закупка:** `POST /api/inventory/purchase`: тело **`kind`** — `goods` (по умолчанию) или `services`; **`pricesIncludeVat`** — если `true`, введённая **unitPrice** трактуется как цена **с НДС**, в учёт запасов/расхода и **201** попадает сумма **без НДС**, НДС — на **241**, кредиторка **531** — на сумму **с НДС**. Для **`kind=goods`** обязателен **`warehouseId`**, строки только по **`isService: false`**, создаются **`StockMovement`**. Для **`kind=services`** — только услуги (**`isService: true`**), **`warehouseId` не используется**, движений по складу **нет**, проводка **Дт 731 — Кт 531** (+ **241** при `pricesIncludeVat` и ненулевом НДС). Поддерживается **`line.binId`** для товаров.
+- **UI:** раздел «Топология склада» и настройки склада — на **`/inventory/settings`**; в формах прихода (реестр **`/purchases`** и **`PurchaseModal`**) добавлен выбор ячейки по строкам.
+
+#### §10.2.3 (v2026.05.01) Web: Anbar — подстраницы и модалки
+
+- **`/inventory`** — только остатки (**Qalıqlar**), фильтр по складу; в API **`GET /api/inventory/stock`** возвращает строки только с **`product.isService === false`**.
+- **`/inventory/movements`** — реестр движений; **`GET /api/inventory/movements`** — только по товарам (**`isService: false`**), опционально `note` / `notes` (CSV) для фильтрации по `stock_movements.note`.
+- **`/inventory/transfers`** — реестр строк **`TRANSFER_OUT`** (партия `transfer_batch_id` + сопоставление со **`TRANSFER_IN`**); создание — кнопка **+ Yeni köçürmə** → **`TransferModal`** (**`CreateTransferModal`**).
+- **`/inventory/adjustments`** — реестр движений с примечаниями **`INV_ADJ_IN`** / **`INV_ADJ_OUT`**; создание — **+ Yeni düzəliş** → **`AdjustmentsModal`** (**`CreateAdjustmentModal`**).
+- **`/purchases`** — реестр закупок (приходы **PURCHASE**) + кнопка **+ Yeni alış** → **`PurchaseModal`** (только по клику; query из глобальной навигации не используется).
+
+#### §10.2.4 (v2026.05.01) Web: İstehsalat (отдельный раздел навигации)
+
+- Маршруты: **`/manufacturing`** — **серверный редирект** на **`/manufacturing/recipes`**; **`/manufacturing/releases`** (см. PRD **§4.10A**, модуль 10; старые **`/recipe`** / **`/release`** — редирект). Раздел не вложен в «Anbar» в клиентском меню.
 
 **API (REST, префикс `/api`)**
 
@@ -1187,6 +1221,7 @@ Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: 
   - Если записи нет — допускается внешний lookup (e-taxes) с кэшированием и последующим созданием/обновлением записи в MDM.
   - Создание локального контрагента привязывает его к `globalId` (подписка организации на глобальные данные), при этом локальные данные сохраняются и не удаляются при изменении структуры холдинга.
 - **Integration Service:** добавлен `TaxpayerIntegrationService` с HTTP-адаптацией к `https://new.e-taxes.gov.az/etaxes/services/taxpayer-info`; нормализует поля `name`, `isVatPayer`, `address` и флаг `isRiskyTaxpayer` (riskli vergi ödəyicisi).
+- **Строгая валидация ответа VÖEN lookup (API, обязательно):** бэкенд **обязан** проверять тело ответа внешнего сервиса. Успешным считается только разбор **валидного JSON** с **допустимым наименованием организации** (без HTML-тегов, без типичных текстов защитных страниц вроде **Cloudflare** / `<noscript>` / «You need to enable JavaScript…»). Если возвращается **HTML**, не-JSON или структура без пригодного `name`, API возвращает **ошибку** (в реализации — `404 Not Found` / отказ lookup), **без** записи заглушки в Redis-кэш и **без** сохранения HTML/мусорной строки в поля наименования в БД (**строго запрещено** персистить HTML-заглушки в `GlobalCounterparty` / связанных сущностях). Клиентский UI при этом опирается на Toast и ручной ввод имени (см. §4 — контрагенты).
 - [x] **COMPLETED (Production Ready, Integration cross-stack):** Birbank (Kapital Bank), Pasha Bank и ABB direct connectors are production-ready with unified mapping to `BankingProviderInterface`.
 - **Статус Payroll-to-Bank (v2026.04.15):** **ABB: Direct API Salary Integration; Pasha/Kapital: Direct Balance Sync + Universal Salary Export**.
 - [x] **COMPLETED (Payroll E2E):** Universal Salary Registry с выбором счёта организации, payout-strategy `ABB_XML | UNIVERSAL_XLSX`, и подготовка реестра из фактических `PayrollSlip`.
@@ -1595,7 +1630,7 @@ enum SubscriptionTier {
 **Схема данных (расширение)**
 
 - **`SystemConfig`:** ключ–значение (JSON): цены тарифов, квоты, системные сообщения.
-- **`TranslationOverride`:** переопределения строк i18n поверх статических файлов (`resources.ts` на web). В бандле дублируются краткие строки **`paymentHistory.*`** (страница истории) и **`subscriptionSettings.paymentHistory.*`** (тот же смысл в блоке подписки); при оверрайдах из БД не использовать родительский ключ вместо вложенных полей.
+- **`TranslationOverride`:** переопределения строк i18n поверх статических файлов (`resources.ts` на web). После **`npm run db:deploy`** / **`db:sync-i18n(:prune)`** для локалей **ru** и **az** в таблице хранится полный набор ключей из `resources.ts` (upsert значений из кода); Super-Admin может менять отдельные значения до следующего деплой-синка. В бандле дублируются краткие строки **`paymentHistory.*`** (страница истории) и **`subscriptionSettings.paymentHistory.*`** (тот же смысл в блоке подписки); при оверрайдах из БД не использовать родительский ключ вместо вложенных полей.
 
 **Эндпоинты (REST, префикс `/api`)**
 
@@ -1721,6 +1756,9 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 
 - **`npm run i18n:audit`** — обязателен в CI перед сборкой: сверка `t("…")` с `resources.ts` для **RU** и **AZ**.
 - **`npm run i18n:catalog`** — пересборка `i18n-default-catalog-data.json` из `resources.ts`; выполнять **в том же PR**, что и правки переводов, и коммитить обновлённый JSON, иначе Super-Admin / сравнение дефолтов на сервере увидят устаревший снимок.
+- **`npm run db:deploy`** — рекомендуемый шаг **после** `prisma migrate deploy` на проде: `migrate deploy` + **`db:sync-i18n:prune`** — полный upsert всех плоских ключей **ru/az** из `resources.ts` в **`translation_overrides`**, удаление строк с ключами, которых больше нет в `resources.ts`, инкремент **`i18n.cacheVersion`** (клиенты перезагрузят оверрайды). DDL миграции **не** содержат текстов переводов (см. миграцию `20260502180000_i18n_deploy_post_migrate_note`).
+- **`npm run db:sync-i18n`** — только upsert + bump кэша (**без** удаления устаревших ключей; удобно для локальных экспериментов).
+- **`npm run db:sync-i18n:prune`** — то же + удаление «лишних» **ru/az** строк в БД относительно текущего `resources.ts`.
 
 **Вне репозитория / не для прод:** произвольные файлы вида `_i18n-default-catalog-data.new.json` в корне **не** подключаются к Nest и **не** заменяют `i18n-default-catalog-data.json`; хранить их в git не следует — это источник путаницы и рассинхрона с п.2.
 
@@ -1825,6 +1863,8 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 | **2026.05.18** | Текущая | Final QA (Platform): Billing reconciliation and automated DR validation. Horizons v1/v2 reached 100%. |
 | **2026.05.19** | Текущая | Web UI: зафиксирован `PageHeader`, сайдбар-only навигация (без горизонтальных межмодульных ссылок); добавлены §11.1, строка истории в PRD §13; перекрёстные ссылки на PRD §10.1 и DESIGN.md. |
 | **2026.05.20** | Текущая | i18n: таблица источников правды и деплой в §17 (`resources.ts` → `i18n-default-catalog-data.json` → БД); команда **`npm run i18n:catalog`**; PRD §7.6.1; уточнён охват `i18n:audit`. |
+| **2026.05.21** | Текущая | i18n: **`npm run db:deploy`**, **`db:sync-i18n:prune`**, prune в `sync-translation-overrides-from-resources.ts`, миграция `20260502180000_i18n_deploy_post_migrate_note`; `db:prod-init` / `db:dev-bootstrap` переведены на prune-синк. |
+| **2026.05.22** | Текущая | **`v1.0.0-RC1` (Release Candidate 1)** — синхронизация ТЗ с этапом: **UI/UX** — модальные окна на реестрах, **`PageHeader`**, сайдбар-only layout (**§11.1**); **Склад** и **Производство** разведены по разделам/маршрутам; **закупки товаров vs услуг** (поля вида закупки, склад, проводки); **VÖEN** — строгая валидация ответа интеграции (**§13.2**), в CRM — **`legalForm`** (ОПФ) и **`isVatPayer`** (**§4**); перекрёстные ссылки на [PRD.md](./PRD.md) §4.3. |
 
 ### Принцип ведения истории (дальше)
 

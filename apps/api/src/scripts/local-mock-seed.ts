@@ -218,6 +218,8 @@ async function recreateOrganization(
           taxId: cp.taxId,
           role: cp.role,
           kind: cp.kind,
+          legalForm: "LLC",
+          isVatPayer: false,
           email: cp.email ?? null,
         },
       });

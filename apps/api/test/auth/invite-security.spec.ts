@@ -35,7 +35,7 @@ describe("AuthService invite security (M1)", () => {
         }),
         JwtModule.register({
           secret: "test-jwt-secret-for-auth-spec",
-          signOptions: { expiresIn: "15m" },
+          signOptions: { expiresIn: "12h" },
         }),
       ],
       providers: [

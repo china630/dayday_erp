@@ -1,54 +1,67 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
-import {
-  CARD_CONTAINER_CLASS,
-  INPUT_BORDERED_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from "../../../lib/design-system";
+import { formatMoneyAzn } from "../../../lib/format-money";
 import { useRequireAuth } from "../../../lib/use-require-auth";
+import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
 import { PageHeader } from "../../../components/layout/page-header";
+import { AdjustmentsModal } from "../../../components/inventory/modals";
+import { BORDER_MUTED_CLASS, PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
 
-type Warehouse = { id: string; name: string };
-type Product = { id: string; name: string; sku: string };
+type Movement = {
+  id: string;
+  type: string;
+  quantity: unknown;
+  price: unknown;
+  createdAt: string;
+  documentDate?: string;
+  note: string | null;
+  product: { name: string; sku?: string };
+  warehouse: { name: string };
+};
+
+function fmtQty(v: unknown): string {
+  if (v == null) return "—";
+  if (typeof v === "object" && v !== null && "toString" in v) {
+    return String((v as { toString(): string }).toString());
+  }
+  return String(v);
+}
+
+function rowDate(m: Movement): string {
+  const d = m.documentDate ?? m.createdAt;
+  return d.slice(0, 19);
+}
 
 export default function InventoryAdjustmentsPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
-  const router = useRouter();
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [warehouseId, setWarehouseId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [type, setType] = useState<"OUT" | "IN">("OUT");
-  const [inventoryAccountCode, setInventoryAccountCode] = useState<"201" | "204">(
-    "201",
-  );
-  const [quantity, setQuantity] = useState("1");
-  const [unitPrice, setUnitPrice] = useState("0");
-  const [busy, setBusy] = useState(false);
+  const [rows, setRows] = useState<Movement[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const load = useCallback(async () => {
-    if (!token) return;
-    const [w, p] = await Promise.all([
-      apiFetch("/api/inventory/warehouses"),
-      apiFetch("/api/products"),
-    ]);
-    if (w.ok) {
-      const list = (await w.json()) as Warehouse[];
-      setWarehouses(list);
-      setWarehouseId((prev) => prev || list[0]?.id || "");
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    if (p.ok) {
-      const plist = (await p.json()) as Product[];
-      setProducts(plist);
-      setProductId((prev) => prev || plist[0]?.id || "");
+    setLoading(true);
+    setError(null);
+    try {
+      const q = new URLSearchParams({
+        take: "500",
+        notes: "INV_ADJ_IN,INV_ADJ_OUT",
+      });
+      const res = await apiFetch(`/api/inventory/movements?${q.toString()}`);
+      if (!res.ok) throw new Error(`movements ${res.status}`);
+      setRows(await res.json());
+    } catch (e) {
+      setError(String(e));
     }
+    setLoading(false);
   }, [token]);
 
   useEffect(() => {
@@ -56,43 +69,10 @@ export default function InventoryAdjustmentsPage() {
     void load();
   }, [load, ready, token]);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    const q = Number(quantity);
-    if (!warehouseId || !productId || !Number.isFinite(q) || q <= 0) {
-      alert(t("inventory.adjustNeedFields"));
-      return;
-    }
-    if (type === "IN") {
-      const up = Number(unitPrice);
-      if (!Number.isFinite(up) || up < 0) {
-        alert(t("inventory.adjustNeedUnitPrice"));
-        return;
-      }
-    }
-    const body: Record<string, unknown> = {
-      warehouseId,
-      productId,
-      quantity: q,
-      type,
-      inventoryAccountCode,
-    };
-    if (type === "IN") {
-      body.unitPrice = Number(unitPrice);
-    }
-    setBusy(true);
-    const res = await apiFetch("/api/inventory/adjustments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      alert(await res.text());
-      return;
-    }
-    router.push("/inventory");
-  }
+  useEffect(() => {
+    if (!ready || !token) return;
+    return subscribeListRefresh("inventory-adjustments", () => void load());
+  }, [load, ready, token]);
 
   if (!ready) {
     return (
@@ -104,114 +84,56 @@ export default function InventoryAdjustmentsPage() {
   if (!token) return null;
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <PageHeader
-        title={t("inventory.adjustTitle")}
-        subtitle={t("inventory.adjustHint")}
+        title={t("inventory.adjustmentsPageTitle")}
         actions={
-          <Link href="/inventory" className={SECONDARY_BUTTON_CLASS}>
-            ← {t("inventory.backList")}
-          </Link>
+          <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={() => setModalOpen(true)}>
+            + {t("inventory.newAdjustBtn")}
+          </button>
         }
       />
+      {error && <p className="text-red-600 text-sm">{error}</p>}
 
-      <form onSubmit={(e) => void onSubmit(e)} className={`${CARD_CONTAINER_CLASS} space-y-4 p-5`}>
-        <label className="block text-[13px] font-medium text-[#34495E]">
-          {t("inventory.whSelect")}
-          <select
-            value={warehouseId}
-            onChange={(e) => setWarehouseId(e.target.value)}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
-          >
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      {loading && <p className="text-gray-600">{t("common.loading")}</p>}
+      {!loading && rows.length === 0 && !error && (
+        <p className="text-sm text-slate-600">{t("inventory.emptyMovementsHint")}</p>
+      )}
+      {!loading && rows.length > 0 && (
+        <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white shadow-sm`}>
+          <table className="text-sm min-w-full">
+            <thead>
+              <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
+                <th className="text-left p-2">{t("inventory.thMovDate")}</th>
+                <th className="text-left p-2">{t("inventory.thWh")}</th>
+                <th className="text-left p-2">{t("inventory.thProduct")}</th>
+                <th className="text-left p-2">{t("inventory.thMovType")}</th>
+                <th className="text-left p-2">{t("inventory.thQty")}</th>
+                <th className="text-right p-2">{t("inventory.thMovPrice")}</th>
+                <th className="text-left p-2">{t("inventory.thNote")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((m) => (
+                <tr key={m.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
+                  <td className="p-2 whitespace-nowrap">{rowDate(m)}</td>
+                  <td className="p-2">{m.warehouse.name}</td>
+                  <td className="p-2">
+                    {m.product.name}
+                    {m.product.sku ? ` (${m.product.sku})` : ""}
+                  </td>
+                  <td className="p-2">{m.type}</td>
+                  <td className="p-2">{fmtQty(m.quantity)}</td>
+                  <td className="p-2 text-right font-mono">{formatMoneyAzn(m.price)}</td>
+                  <td className="p-2 text-xs">{m.note ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        <label className="block text-[13px] font-medium text-[#34495E]">
-          {t("inventory.thProduct")}
-          <select
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
-          >
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.sku})
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <fieldset className="space-y-2">
-          <legend className="text-[13px] font-medium text-[#34495E]">{t("inventory.adjustType")}</legend>
-          <label className="inline-flex items-center gap-2 mr-6">
-            <input
-              type="radio"
-              name="adjType"
-              checked={type === "OUT"}
-              onChange={() => setType("OUT")}
-            />
-            {t("inventory.adjustOut")}
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              name="adjType"
-              checked={type === "IN"}
-              onChange={() => setType("IN")}
-            />
-            {t("inventory.adjustIn")}
-          </label>
-        </fieldset>
-
-        <label className="block text-[13px] font-medium text-[#34495E]">
-          {t("inventory.adjustInvAccount")}
-          <select
-            value={inventoryAccountCode}
-            onChange={(e) =>
-              setInventoryAccountCode(e.target.value === "204" ? "204" : "201")
-            }
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
-          >
-            <option value="201">{t("inventory.adjustInv201")}</option>
-            <option value="204">{t("inventory.adjustInv204")}</option>
-          </select>
-        </label>
-
-        <label className="block text-[13px] font-medium text-[#34495E]">
-          {t("inventory.thQty")}
-          <input
-            type="number"
-            min={0.0001}
-            step="any"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
-          />
-        </label>
-
-        {type === "IN" && (
-          <label className="block text-[13px] font-medium text-[#34495E]">
-            {t("inventory.adjustUnitPrice")}
-            <input
-              type="number"
-              min={0}
-              step="any"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-              className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
-            />
-          </label>
-        )}
-
-        <button type="submit" disabled={busy} className={PRIMARY_BUTTON_CLASS}>
-          {busy ? "…" : t("inventory.adjustSubmit")}
-        </button>
-      </form>
+      <AdjustmentsModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
 }

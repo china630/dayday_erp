@@ -100,7 +100,8 @@ export class VatQuarterDataService {
       const eff = invoiceEffectiveDateIso(inv);
       if (!dateInRangeInclusive(eff, fromStr, toStr)) continue;
       for (const line of inv.items) {
-        const rate = new Decimal(line.vatRate);
+        const rateRaw = new Decimal(line.vatRate);
+        const rate = rateRaw.lt(0) ? new Decimal(0) : rateRaw;
         const lineTotal = new Decimal(line.lineTotal);
         const div = new Decimal(1).add(rate.div(100));
         const exVat = lineTotal.div(div);
@@ -117,7 +118,7 @@ export class VatQuarterDataService {
           amountWithoutVat: exVat.toFixed(4),
           vatAmount: vat.toFixed(4),
           amountWithVat: lineTotal.toFixed(4),
-          vatRatePercent: rate.toFixed(2),
+          vatRatePercent: rateRaw.toFixed(2),
           invoiceId: inv.id,
           invoiceLineId: line.id,
           productId: line.productId,
@@ -131,6 +132,7 @@ export class VatQuarterDataService {
         organizationId,
         reason: StockMovementReason.PURCHASE,
         type: "IN",
+        product: { isService: false },
       },
       include: { product: true },
     });
@@ -143,7 +145,8 @@ export class VatQuarterDataService {
       const qty = new Decimal(m.quantity);
       const price = new Decimal(m.price);
       const lineTotal = qty.mul(price);
-      const rate = new Decimal(m.product.vatRate);
+      const rateRaw = new Decimal(m.product.vatRate);
+      const rate = rateRaw.lt(0) ? new Decimal(0) : rateRaw;
       const div = new Decimal(1).add(rate.div(100));
       const exVat = lineTotal.div(div);
       const vat = lineTotal.sub(exVat);
@@ -157,7 +160,7 @@ export class VatQuarterDataService {
         amountWithoutVat: exVat.toFixed(4),
         vatAmount: vat.toFixed(4),
         amountWithVat: lineTotal.toFixed(4),
-        vatRatePercent: rate.toFixed(2),
+        vatRatePercent: rateRaw.toFixed(2),
         stockMovementId: m.id,
         productId: m.productId,
         productSku: m.product.sku,

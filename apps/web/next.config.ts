@@ -29,22 +29,34 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  /** Обратная совместимость закладок и внешних ссылок после реорганизации меню (1C/SAP-иерархия). */
+  async redirects() {
+    return [
+      { source: "/invoices", destination: "/sales/invoices", permanent: true },
+      { source: "/invoices/:path*", destination: "/sales/invoices/:path*", permanent: true },
+      { source: "/reporting/reconciliation", destination: "/sales/reconciliation", permanent: true },
+      { source: "/inventory/purchase", destination: "/purchases", permanent: true },
+      { source: "/counterparties", destination: "/crm/counterparties", permanent: true },
+      { source: "/counterparties/:path*", destination: "/crm/counterparties/:path*", permanent: true },
+      { source: "/products", destination: "/catalog/products", permanent: true },
+      { source: "/manufacturing/recipe", destination: "/manufacturing/recipes", permanent: true },
+      { source: "/manufacturing/recipe/:path*", destination: "/manufacturing/recipes/:path*", permanent: true },
+      { source: "/manufacturing/release", destination: "/manufacturing/releases", permanent: true },
+      { source: "/manufacturing/release/:path*", destination: "/manufacturing/releases/:path*", permanent: true },
+    ];
+  },
 };
 
 export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT_WEB,
-  // По умолчанию включён: resolveSentryTunnelRoute() → true (случайный путь), пока SENTRY_TUNNEL_PATH не false/0.
   tunnelRoute: resolveSentryTunnelRoute(),
-  // При наличии токена показываем логи плагина (upload source maps); без токена — тише.
   silent: !(
     process.env.SENTRY_AUTH_TOKEN &&
     process.env.SENTRY_ORG &&
     process.env.SENTRY_PROJECT_WEB
   ),
   widenClientFileUpload: true,
-  // В @sentry/nextjs v10 нет `hideSourceMaps` в типах (устарело). Клиентские .map после upload
-  // удаляются через deleteSourcemapsAfterUpload; «hidden» source maps задаёт сам плагин.
   sourcemaps: {
     deleteSourcemapsAfterUpload: true,
   },

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { CounterpartyKind, CounterpartyRole } from "@dayday/database";
+import { CounterpartyLegalForm, CounterpartyRole } from "@dayday/database";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -25,9 +25,9 @@ export class CreateCounterpartyDto {
   @Matches(/^\d{10}$/, { message: "taxId must be 10 digits (VÖEN)" })
   taxId!: string;
 
-  @ApiProperty({ enum: CounterpartyKind })
-  @IsEnum(CounterpartyKind)
-  kind!: CounterpartyKind;
+  @ApiProperty({ enum: CounterpartyLegalForm })
+  @IsEnum(CounterpartyLegalForm)
+  legalForm!: CounterpartyLegalForm;
 
   @ApiPropertyOptional({ enum: CounterpartyRole })
   @IsOptional()
@@ -44,13 +44,10 @@ export class CreateCounterpartyDto {
   @IsEmail()
   email?: string;
 
-  @ApiPropertyOptional({ description: "Counterparty IBAN (optional)" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  iban?: string;
-
-  @ApiPropertyOptional({ description: "Плательщик НДС (после Yoxla / e-taxes)" })
+  @ApiPropertyOptional({
+    description: "Плательщик НДС (можно подставить после Yoxla / e-taxes)",
+    default: false,
+  })
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()

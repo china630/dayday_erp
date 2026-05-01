@@ -1125,7 +1125,7 @@ export default function BankingPage() {
           title={t("banking.title")}
           actions={
             <>
-              <Link href="/invoices?pay=1" className={SECONDARY_BUTTON_CLASS}>
+              <Link href="/sales/invoices?pay=1" className={SECONDARY_BUTTON_CLASS}>
                 {t("banking.quickPay")}
               </Link>
               <button

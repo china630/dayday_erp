@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -15,16 +16,12 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { OrganizationId } from "../common/org-id.decorator";
 import { PrismaService } from "../prisma/prisma.service";
+import { counterpartyKindFromLegalForm } from "./counterparty-kind.util";
+import { CreateCounterpartyBankAccountDto } from "./dto/create-counterparty-bank-account.dto";
 import { CreateCounterpartyDto } from "./dto/create-counterparty.dto";
 import { MergeCounterpartiesDto } from "./dto/merge-counterparties.dto";
 import { UpdateCounterpartyDto } from "./dto/update-counterparty.dto";
 import { CounterpartiesService } from "./counterparties.service";
-
-function buildBankAccountsPayload(ibanRaw?: string | null): Array<{ iban: string }> {
-  const iban = ibanRaw?.trim();
-  if (!iban) return [];
-  return [{ iban }];
-}
 
 @ApiTags("counterparties")
 @ApiBearerAuth("bearer")
@@ -47,23 +44,52 @@ export class CounterpartiesController {
     });
   }
 
+  @Get("global/by-voen/:taxId")
+  @ApiOperation({ summary: "MDM lookup by VÖEN (GlobalCounterparty)" })
+  lookupGlobal(@Param("taxId") taxId: string) {
+    return this.svc.lookupGlobalByVoen(taxId);
+  }
+
+  @Get(":id/bank-accounts")
+  @ApiOperation({ summary: "Банковские счета контрагента (1:N)" })
+  listBankAccounts(@OrganizationId() orgId: string, @Param("id") id: string) {
+    return this.svc.listBankAccounts(orgId, id);
+  }
+
+  @Post(":id/bank-accounts")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Добавить банковский счёт контрагенту" })
+  createBankAccount(
+    @OrganizationId() orgId: string,
+    @Param("id") id: string,
+    @Body() dto: CreateCounterpartyBankAccountDto,
+  ) {
+    return this.svc.createBankAccount(orgId, id, dto);
+  }
+
+  @Delete(":id/bank-accounts/:accountId")
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: "Удалить банковский счёт контрагента" })
+  async deleteBankAccount(
+    @OrganizationId() orgId: string,
+    @Param("id") id: string,
+    @Param("accountId") accountId: string,
+  ) {
+    await this.svc.deleteBankAccount(orgId, id, accountId);
+    return { ok: true };
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Контрагент по id" })
   async getOne(@OrganizationId() orgId: string, @Param("id") id: string) {
     const row = await this.prisma.counterparty.findFirst({
       where: { id, organizationId: orgId },
-      include: { global: true },
+      include: { global: true, bankAccounts: { orderBy: { createdAt: "asc" } } },
     });
     if (!row) {
       throw new NotFoundException("Counterparty not found");
     }
     return row;
-  }
-
-  @Get("global/by-voen/:taxId")
-  @ApiOperation({ summary: "MDM lookup by VÖEN (GlobalCounterparty)" })
-  lookupGlobal(@Param("taxId") taxId: string) {
-    return this.svc.lookupGlobalByVoen(taxId);
   }
 
   @Post()
@@ -87,8 +113,8 @@ export class CounterpartiesController {
       );
     }
 
-    // MDM: attach to global registry if possible (or create global stub).
-    // Local counterparty remains the org-scoped record with globalId link.
+    const kind = counterpartyKindFromLegalForm(dto.legalForm);
+
     try {
       const linked = await this.svc.findOrCreateByVoen({
         organizationId: orgId,
@@ -97,23 +123,20 @@ export class CounterpartiesController {
         legalAddressFallback: dto.address ?? null,
         vatStatusFallback: dto.isVatPayer ?? null,
       });
-      // allow local overrides of kind/role/email if provided
       const updated = await this.prisma.counterparty.update({
         where: { id: linked.id },
         data: {
-          kind: dto.kind,
+          kind,
           role: dto.role ?? CounterpartyRole.CUSTOMER,
+          legalForm: dto.legalForm,
           address: dto.address ?? null,
           email: dto.email?.trim() || null,
-          ...(dto.iban !== undefined && {
-            bankAccounts: buildBankAccountsPayload(dto.iban),
-          }),
-          isVatPayer: dto.isVatPayer ?? linked.isVatPayer ?? null,
+          isVatPayer: dto.isVatPayer ?? linked.isVatPayer ?? false,
           ...(dto.portalLocale !== undefined && {
             portalLocale: dto.portalLocale,
           }),
         },
-        include: { global: true },
+        include: { global: true, bankAccounts: { orderBy: { createdAt: "asc" } } },
       });
       await this.svc.syncDirectoryAfterLocalSave(orgId, updated.id);
       return updated;
@@ -131,26 +154,23 @@ export class CounterpartiesController {
           } as object,
         },
       });
-      // fallback to legacy local-only create
     }
     const created = await this.prisma.counterparty.create({
       data: {
         organizationId: orgId,
         name,
         taxId,
-        kind: dto.kind,
+        kind,
         role: dto.role ?? CounterpartyRole.CUSTOMER,
+        legalForm: dto.legalForm,
         address: dto.address ?? null,
         email: dto.email?.trim() || null,
-        ...(dto.iban !== undefined && {
-          bankAccounts: buildBankAccountsPayload(dto.iban),
-        }),
-        isVatPayer: dto.isVatPayer ?? null,
+        isVatPayer: dto.isVatPayer ?? false,
         ...(dto.portalLocale !== undefined && {
           portalLocale: dto.portalLocale,
         }),
       },
-      include: { global: true },
+      include: { global: true, bankAccounts: { orderBy: { createdAt: "asc" } } },
     });
     await this.svc.syncDirectoryAfterLocalSave(orgId, created.id);
     return created;
@@ -184,24 +204,26 @@ export class CounterpartiesController {
         );
       }
     }
+    const kindPatch =
+      dto.legalForm !== undefined
+        ? { kind: counterpartyKindFromLegalForm(dto.legalForm) }
+        : {};
     const updated = await this.prisma.counterparty.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name.trim() }),
         ...(dto.taxId !== undefined && { taxId: dto.taxId.trim() }),
-        ...(dto.kind !== undefined && { kind: dto.kind }),
+        ...kindPatch,
         ...(dto.role !== undefined && { role: dto.role }),
+        ...(dto.legalForm !== undefined && { legalForm: dto.legalForm }),
         ...(dto.address !== undefined && { address: dto.address || null }),
         ...(dto.email !== undefined && { email: dto.email?.trim() || null }),
-        ...(dto.iban !== undefined && {
-          bankAccounts: buildBankAccountsPayload(dto.iban),
-        }),
         ...(dto.isVatPayer !== undefined && { isVatPayer: dto.isVatPayer }),
         ...(dto.portalLocale !== undefined && {
           portalLocale: dto.portalLocale,
         }),
       },
-      include: { global: true },
+      include: { global: true, bankAccounts: { orderBy: { createdAt: "asc" } } },
     });
     await this.svc.syncDirectoryAfterLocalSave(orgId, updated.id);
     return updated;

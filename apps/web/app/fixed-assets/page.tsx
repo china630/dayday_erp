@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,7 +33,6 @@ type Fa = {
 
 function FixedAssetsPageContent() {
   const { t } = useTranslation();
-  const router = useRouter();
   const { token, ready } = useRequireAuth();
   const { user } = useAuth();
   const hideDestructive = isRestrictedUserRole(user?.role ?? undefined);
@@ -69,17 +67,6 @@ function FixedAssetsPageContent() {
     if (!ready || !token) return;
     void load();
   }, [load, ready, token]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const q = new URLSearchParams(window.location.search);
-    if (q.get("modal") === "fixedAsset") {
-      setFaModalMode("create");
-      setFaEditId(null);
-      setFaModalOpen(true);
-      router.replace("/fixed-assets", { scroll: false });
-    }
-  }, [router]);
 
   useEffect(() => {
     const onOnline = () => {

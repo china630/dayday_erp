@@ -23,6 +23,7 @@ import {
   INVENTORY_SURPLUS_INCOME_ACCOUNT_CODE,
   MISC_OPERATING_EXPENSE_ACCOUNT_CODE,
   PAYABLE_SUPPLIERS_ACCOUNT_CODE,
+  VAT_INPUT_ACCOUNT_CODE,
 } from "../ledger.constants";
 import { PrismaService } from "../prisma/prisma.service";
 import { StockService } from "../stock/stock.service";
@@ -205,6 +206,7 @@ export class InventoryService {
       where: {
         organizationId,
         ...(warehouseId ? { warehouseId } : {}),
+        product: { isService: false },
       },
       include: { product: true, warehouse: true, bin: true },
       orderBy: [{ warehouseId: "asc" }, { product: { name: "asc" } }],
@@ -213,13 +215,31 @@ export class InventoryService {
 
   listMovements(
     organizationId: string,
-    filters?: { warehouseId?: string; productId?: string; take?: number },
+    filters?: {
+      warehouseId?: string;
+      productId?: string;
+      take?: number;
+      note?: string;
+      notes?: string[];
+      type?: StockMovementType;
+      reason?: StockMovementReason;
+    },
   ) {
+    const noteFilter =
+      filters?.notes && filters.notes.length > 0
+        ? { note: { in: filters.notes } }
+        : filters?.note
+          ? { note: filters.note }
+          : {};
     return this.prisma.stockMovement.findMany({
       where: {
         organizationId,
         ...(filters?.warehouseId ? { warehouseId: filters.warehouseId } : {}),
         ...(filters?.productId ? { productId: filters.productId } : {}),
+        ...(filters?.type ? { type: filters.type } : {}),
+        ...(filters?.reason ? { reason: filters.reason } : {}),
+        ...noteFilter,
+        product: { isService: false },
       },
       include: {
         product: true,
@@ -232,31 +252,75 @@ export class InventoryService {
     });
   }
 
+  /** Цена за ед. без НДС для оценки запасов / расхода (если в форме цена с НДС). */
+  private purchaseNetUnit(
+    enteredUnit: Decimal,
+    vatRatePct: Decimal,
+    pricesIncludeVat: boolean,
+  ): Decimal {
+    if (!pricesIncludeVat) return enteredUnit;
+    const denom = new Decimal(1).add(vatRatePct.div(100));
+    return enteredUnit.div(denom);
+  }
+
   async recordPurchase(organizationId: string, dto: PurchaseStockDto) {
+    const kind = dto.kind ?? "goods";
+    const pricesIncludeVat = Boolean(dto.pricesIncludeVat);
+    if (kind === "services") {
+      return this.recordServicePurchase(organizationId, dto, pricesIncludeVat);
+    }
+    if (!dto.warehouseId) {
+      throw new BadRequestException(
+        "Для закупки товаров укажите склад (warehouseId)",
+      );
+    }
+    return this.recordGoodsPurchase(organizationId, dto, pricesIncludeVat);
+  }
+
+  private async recordGoodsPurchase(
+    organizationId: string,
+    dto: PurchaseStockDto,
+    pricesIncludeVat: boolean,
+  ) {
+    const warehouseId = dto.warehouseId!;
     const wh = await this.prisma.warehouse.findFirst({
-      where: { id: dto.warehouseId, organizationId },
+      where: { id: warehouseId, organizationId },
     });
     if (!wh) throw new NotFoundException("Warehouse not found");
 
     return this.prisma.$transaction(async (tx) => {
       const documentDate = new Date();
-      let total = new Decimal(0);
+      let totalNet = new Decimal(0);
+      let totalVat = new Decimal(0);
+      let totalGross = new Decimal(0);
 
-      for (const line of dto.lines) {
+      for (let lineIndex = 0; lineIndex < dto.lines.length; lineIndex++) {
+        const line = dto.lines[lineIndex];
         const p = await tx.product.findFirst({
           where: { id: line.productId, organizationId },
         });
         if (!p) {
           throw new NotFoundException(`Product ${line.productId} not found`);
         }
+        if (p.isService) {
+          throw new BadRequestException(
+            `Строка ${lineIndex + 1}: услуга не может быть оприходована на склад; выберите тип закупки «Услуги»`,
+          );
+        }
         const qty = new Decimal(line.quantity);
-        const unit = new Decimal(line.unitPrice);
-        const lineAmt = qty.mul(unit);
-        total = total.add(lineAmt);
+        const grossUnit = new Decimal(line.unitPrice);
+        const vatRate = new Decimal(p.vatRate ?? 0);
+        const netUnit = this.purchaseNetUnit(grossUnit, vatRate, pricesIncludeVat);
+        const lineNet = qty.mul(netUnit);
+        const lineGross = pricesIncludeVat ? qty.mul(grossUnit) : lineNet;
+        const lineVat = lineGross.sub(lineNet);
+        totalNet = totalNet.add(lineNet);
+        totalVat = totalVat.add(lineVat);
+        totalGross = totalGross.add(lineGross);
 
         if (line.binId) {
           const bin = await tx.warehouseBin.findFirst({
-            where: { id: line.binId, organizationId, warehouseId: dto.warehouseId },
+            where: { id: line.binId, organizationId, warehouseId },
             select: { id: true },
           });
           if (!bin) {
@@ -270,7 +334,7 @@ export class InventoryService {
           where: {
             organizationId_warehouseId_productId: {
               organizationId,
-              warehouseId: dto.warehouseId,
+              warehouseId,
               productId: line.productId,
             },
           },
@@ -280,11 +344,11 @@ export class InventoryService {
         let newAvg: Decimal;
         if (!existing || existing.quantity.lte(0)) {
           newQty = qty;
-          newAvg = unit;
+          newAvg = netUnit;
         } else {
           const q0 = existing.quantity;
           const c0 = existing.averageCost;
-          const sumCost = q0.mul(c0).add(qty.mul(unit));
+          const sumCost = q0.mul(c0).add(qty.mul(netUnit));
           newQty = q0.add(qty);
           newAvg = sumCost.div(newQty);
         }
@@ -293,13 +357,13 @@ export class InventoryService {
           where: {
             organizationId_warehouseId_productId: {
               organizationId,
-              warehouseId: dto.warehouseId,
+              warehouseId,
               productId: line.productId,
             },
           },
           create: {
             organizationId,
-            warehouseId: dto.warehouseId,
+            warehouseId,
             productId: line.productId,
             ...(line.binId ? { binId: line.binId } : {}),
             quantity: newQty,
@@ -315,12 +379,12 @@ export class InventoryService {
         await tx.stockMovement.create({
           data: {
             organizationId,
-            warehouseId: dto.warehouseId,
+            warehouseId,
             productId: line.productId,
             type: StockMovementType.IN,
             reason: StockMovementReason.PURCHASE,
             quantity: qty,
-            price: unit,
+            price: netUnit,
             binId: line.binId ?? null,
             note: dto.reference ?? null,
             documentDate,
@@ -328,27 +392,144 @@ export class InventoryService {
         });
       }
 
+      const lines =
+        totalVat.gt(0) && pricesIncludeVat
+          ? [
+              {
+                accountCode: INVENTORY_GOODS_ACCOUNT_CODE,
+                debit: totalNet.toString(),
+                credit: 0,
+              },
+              {
+                accountCode: VAT_INPUT_ACCOUNT_CODE,
+                debit: totalVat.toString(),
+                credit: 0,
+              },
+              {
+                accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
+                debit: 0,
+                credit: totalGross.toString(),
+              },
+            ]
+          : [
+              {
+                accountCode: INVENTORY_GOODS_ACCOUNT_CODE,
+                debit: totalNet.toString(),
+                credit: 0,
+              },
+              {
+                accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
+                debit: 0,
+                credit: totalGross.toString(),
+              },
+            ];
+
       await this.accounting.postJournalInTransaction(tx, {
         organizationId,
         date: documentDate,
         reference: dto.reference ?? "PURCHASE",
-        description: "Закупка товара на склад",
+        description: pricesIncludeVat
+          ? "Закупка товара на склад (цены с НДС)"
+          : "Закупка товара на склад",
         counterpartyId: dto.counterpartyId ?? null,
-        lines: [
-          {
-            accountCode: INVENTORY_GOODS_ACCOUNT_CODE,
-            debit: total.toString(),
-            credit: 0,
-          },
-          {
-            accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
-            debit: 0,
-            credit: total.toString(),
-          },
-        ],
+        lines,
       });
 
-      return { totalAmount: total.toString(), lines: dto.lines.length };
+      return {
+        totalAmount: totalGross.toString(),
+        netAmount: totalNet.toString(),
+        vatAmount: totalVat.toString(),
+        lines: dto.lines.length,
+      };
+    });
+  }
+
+  /** Закупка услуг: кредиторка 531, расход 731; без движений по складу. */
+  private async recordServicePurchase(
+    organizationId: string,
+    dto: PurchaseStockDto,
+    pricesIncludeVat: boolean,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const documentDate = new Date();
+      let totalNet = new Decimal(0);
+      let totalVat = new Decimal(0);
+      let totalGross = new Decimal(0);
+
+      for (let lineIndex = 0; lineIndex < dto.lines.length; lineIndex++) {
+        const line = dto.lines[lineIndex];
+        const p = await tx.product.findFirst({
+          where: { id: line.productId, organizationId },
+        });
+        if (!p) {
+          throw new NotFoundException(`Product ${line.productId} not found`);
+        }
+        if (!p.isService) {
+          throw new BadRequestException(
+            `Строка ${lineIndex + 1}: для закупки услуг выберите номенклатуру-услугу (isService)`,
+          );
+        }
+        const qty = new Decimal(line.quantity);
+        const grossUnit = new Decimal(line.unitPrice);
+        const vatRate = new Decimal(p.vatRate ?? 0);
+        const netUnit = this.purchaseNetUnit(grossUnit, vatRate, pricesIncludeVat);
+        const lineNet = qty.mul(netUnit);
+        const lineGross = pricesIncludeVat ? qty.mul(grossUnit) : lineNet;
+        const lineVat = lineGross.sub(lineNet);
+        totalNet = totalNet.add(lineNet);
+        totalVat = totalVat.add(lineVat);
+        totalGross = totalGross.add(lineGross);
+      }
+
+      const lines =
+        totalVat.gt(0) && pricesIncludeVat
+          ? [
+              {
+                accountCode: MISC_OPERATING_EXPENSE_ACCOUNT_CODE,
+                debit: totalNet.toString(),
+                credit: 0,
+              },
+              {
+                accountCode: VAT_INPUT_ACCOUNT_CODE,
+                debit: totalVat.toString(),
+                credit: 0,
+              },
+              {
+                accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
+                debit: 0,
+                credit: totalGross.toString(),
+              },
+            ]
+          : [
+              {
+                accountCode: MISC_OPERATING_EXPENSE_ACCOUNT_CODE,
+                debit: totalNet.toString(),
+                credit: 0,
+              },
+              {
+                accountCode: PAYABLE_SUPPLIERS_ACCOUNT_CODE,
+                debit: 0,
+                credit: totalGross.toString(),
+              },
+            ];
+
+      await this.accounting.postJournalInTransaction(tx, {
+        organizationId,
+        date: documentDate,
+        reference: dto.reference ?? "PURCHASE_SVC",
+        description: pricesIncludeVat
+          ? "Закупка услуги (цены с НДС)"
+          : "Закупка услуги",
+        counterpartyId: dto.counterpartyId ?? null,
+        lines,
+      });
+
+      return {
+        totalAmount: totalGross.toString(),
+        netAmount: totalNet.toString(),
+        vatAmount: totalVat.toString(),
+        lines: dto.lines.length,
+      };
     });
   }
 
@@ -368,6 +549,15 @@ export class InventoryService {
       where: { id: dto.toWarehouseId, organizationId },
     });
     if (!fromW || !toW) throw new NotFoundException("Warehouse not found");
+
+    const prod = await this.prisma.product.findFirst({
+      where: { id: dto.productId, organizationId },
+      select: { isService: true },
+    });
+    if (!prod) throw new NotFoundException("Product not found");
+    if (prod.isService) {
+      throw new BadRequestException("Service products cannot be transferred on stock");
+    }
 
     const qty = new Decimal(dto.quantity);
     const batch = randomUUID();
@@ -534,6 +724,14 @@ export class InventoryService {
       const pid = line.productId as string;
       const need = line.quantity;
 
+      const prod = await tx.product.findFirst({
+        where: { id: pid, organizationId },
+        select: { isService: true },
+      });
+      if (prod?.isService) {
+        continue;
+      }
+
       const si = await tx.stockItem.findUnique({
         where: {
           organizationId_warehouseId_productId: {
@@ -647,6 +845,9 @@ export class InventoryService {
       where: { id: dto.productId, organizationId },
     });
     if (!product) throw new NotFoundException("Product not found");
+    if (product.isService) {
+      throw new BadRequestException("Service products cannot be adjusted on stock");
+    }
 
     const org = await tx.organization.findUnique({
       where: { id: organizationId },

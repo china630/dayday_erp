@@ -4,15 +4,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiFetch } from "../../../lib/api-client";
-import { formatMoneyAzn } from "../../../lib/format-money";
-import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
-import { useRequireAuth } from "../../../lib/use-require-auth";
+import { apiFetch } from "../../../../lib/api-client";
+import { formatMoneyAzn } from "../../../../lib/format-money";
+import { ledgerQueryParam, useLedger } from "../../../../lib/ledger-context";
+import { useRequireAuth } from "../../../../lib/use-require-auth";
 import QRCode from "qrcode";
-import { SignatureProviderMark } from "../../../components/signature-provider-mark";
-import { PageHeader } from "../../../components/layout/page-header";
-import { SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
-import { EntityAuditHistory } from "../../../components/admin/entity-audit-history";
+import { SignatureProviderMark } from "../../../../components/signature-provider-mark";
+import { PageHeader } from "../../../../components/layout/page-header";
+import { SECONDARY_BUTTON_CLASS } from "../../../../lib/design-system";
+import { EntityAuditHistory } from "../../../../components/admin/entity-audit-history";
 
 type SignatureLog = {
   id: string;
@@ -311,7 +311,7 @@ export default function InvoiceViewPage() {
         title={inv?.number ?? t("invoices.title")}
         subtitle={inv?.counterparty?.name}
         actions={
-          <Link href="/invoices" className={SECONDARY_BUTTON_CLASS}>
+          <Link href="/sales/invoices" className={SECONDARY_BUTTON_CLASS}>
             ← {t("invoiceView.backList")}
           </Link>
         }

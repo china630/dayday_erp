@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth-context";
 import { useOrgPermissions } from "../lib/use-org-permissions";
@@ -47,7 +47,7 @@ function QuickActionsMenuItems({
   return (
     <>
       <Link
-        href="/invoices"
+        href="/sales/invoices"
         className={quickActionItemClass}
         role="menuitem"
         onClick={onNavigate}
@@ -83,7 +83,7 @@ function QuickActionsMenuItems({
         </span>
       ) : canPostAccounting ? (
         <Link
-          href="/manufacturing/release"
+          href="/manufacturing/releases"
           className={quickActionItemClass}
           role="menuitem"
           onClick={onNavigate}
@@ -440,7 +440,6 @@ function LedgerToggle() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user, ready, logout } = useAuth();
@@ -507,16 +506,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const bankCashActive =
       pathname.startsWith("/banking") || pathname.startsWith("/expenses");
     const salesActive =
-      pathname.startsWith("/invoices") ||
-      pathname.startsWith("/counterparties");
-    const purchasesActive =
-      pathname.startsWith("/inventory/purchase") ||
-      (pathname === "/inventory" && searchParams.get("modal") === "purchase");
-    const warehouseActive =
-      (pathname.startsWith("/inventory") &&
-        !pathname.startsWith("/inventory/purchase")) ||
-      pathname.startsWith("/products") ||
-      pathname.startsWith("/manufacturing");
+      pathname.startsWith("/sales/invoices") ||
+      pathname.startsWith("/sales/reconciliation");
+    const purchasesActive = pathname.startsWith("/purchases");
+    const manufacturingNavActive = pathname.startsWith("/manufacturing");
+    const warehouseActive = pathname.startsWith("/inventory");
+    const catalogCrmActive =
+      pathname.startsWith("/crm") || pathname.startsWith("/catalog");
     const payrollHrActive =
       pathname.startsWith("/employees") ||
       pathname.startsWith("/hr/") ||
@@ -532,7 +528,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       (pathname === "/reporting" ||
         (pathname.startsWith("/reporting") &&
           !pathname.startsWith("/reporting/receivables") &&
-          !pathname.startsWith("/reporting/reconciliation") &&
           !pathname.startsWith("/reporting/aging") &&
           !pathname.startsWith("/reporting/tax-export") &&
           !pathname.startsWith("/reporting/holding")));
@@ -542,14 +537,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       bankCashActive,
       salesActive,
       purchasesActive,
+      manufacturingNavActive,
       warehouseActive,
+      catalogCrmActive,
       payrollHrActive,
       reportsActive,
       adminActive,
       reportingHubActive,
       inventoryMainActive,
     };
-  }, [pathname, searchParams]);
+  }, [pathname]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useEffect(() => {

@@ -37,9 +37,6 @@ function SeoHeadSync() {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  // Prevent hydration mismatch caused by client-only sources (localStorage,
-  // sessionStorage, i18next language detector) that differ between SSR and
-  // first client render.
   const [mounted, setMounted] = useState(false);
   const [i18nReady, setI18nReady] = useState(false);
   useEffect(() => {
@@ -59,8 +56,6 @@ export function Providers({ children }: { children: ReactNode }) {
     };
   }, [mounted]);
 
-  // Ensure translations are ready before first paint to avoid flashing raw keys like
-  // `nav.sectionPurchases` / `home.loginPrompt`.
   if (!mounted || !i18nReady) return null;
 
   return (

@@ -2,6 +2,10 @@
 export const inputFieldClass =
   "w-full max-w-md rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-action";
 
+/** То же оформление, без фиксированной ширины — для рядов `flex` (VÖEN + кнопка и т.п.). */
+export const inputFieldInlineClass =
+  "min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-action";
+
 export const inputFieldWideClass =
   "w-full max-w-xl min-w-[min(100%,16rem)] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-action";
 

@@ -65,16 +65,6 @@ export default function InventoryAuditsHistoryPage() {
     return subscribeListRefresh("inventory-audits", () => void load());
   }, [load, ready, token]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const q = new URLSearchParams(window.location.search);
-    if (q.get("newAudit") === "1") {
-      setAuditFlowKey((k) => k + 1);
-      setAuditCreateOpen(true);
-      router.replace("/inventory/audits", { scroll: false });
-    }
-  }, [router]);
-
   function openAuditCreate() {
     setAuditFlowKey((k) => k + 1);
     setAuditCreateOpen(true);

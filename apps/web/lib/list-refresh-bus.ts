@@ -6,7 +6,23 @@ export type ListRefreshKey =
   | "counterparties"
   | "invoices"
   | "inventory-audits"
-  | "inventory-hub";
+  | "inventory-hub"
+  | "inventory-movements"
+  | "inventory-transfers"
+  | "inventory-adjustments";
+
+/** После складских мутаций обновить реестры остатков / движений / köçürmə / düzəliş. */
+export function notifyInventoryListsRefresh(): void {
+  const keys: ListRefreshKey[] = [
+    "inventory-hub",
+    "inventory-movements",
+    "inventory-transfers",
+    "inventory-adjustments",
+  ];
+  for (const k of keys) {
+    notifyListRefresh(k);
+  }
+}
 
 export function notifyListRefresh(key: ListRefreshKey): void {
   if (typeof window === "undefined") return;

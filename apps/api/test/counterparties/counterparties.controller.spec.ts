@@ -1,5 +1,5 @@
 import { CounterpartiesController } from "../../src/counterparties/counterparties.controller";
-import { CounterpartyKind, CounterpartyRole } from "@dayday/database";
+import { CounterpartyLegalForm, CounterpartyRole } from "@dayday/database";
 
 describe("CounterpartiesController degraded mode", () => {
   it("creates counterparty manually and writes audit event when e-taxes path fails", async () => {
@@ -29,11 +29,10 @@ describe("CounterpartiesController degraded mode", () => {
     const out = await controller.create("org-1", {
       name: "Manual LLC",
       taxId: "1234567890",
-      kind: CounterpartyKind.LEGAL_ENTITY,
+      legalForm: CounterpartyLegalForm.LLC,
       role: CounterpartyRole.CUSTOMER,
       address: undefined,
       email: undefined,
-      iban: undefined,
       isVatPayer: undefined,
       portalLocale: "az",
     });

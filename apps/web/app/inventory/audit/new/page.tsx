@@ -5,5 +5,5 @@ import { redirect } from "next/navigation";
  * (см. `InventoryAuditCreateFlow`). Отдельная полноэкранная страница не используется.
  */
 export default function LegacyInventoryAuditNewRedirectPage() {
-  redirect("/inventory/audits?newAudit=1");
+  redirect("/inventory/audits");
 }

@@ -19,6 +19,7 @@
 - В корне репозитория будет `.env` (шаблон: `env.production.example`).
 - Вы понимаете, что `NEXT_PUBLIC_*` переменные **вшиваются в клиентский бандл на этапе build**.
 - На сервере открыт только нужный внешний порт (обычно 80/443); Postgres/Redis наружу не публикуем.
+- После **каждого** деплоя с новым кодом фронта: не забыть шаг **синхронизации переводов в БД** (§7.3) — иначе `/public/translations` и кэш i18n могут расходиться с бандлом `resources.ts`.
 
 ---
 
@@ -174,8 +175,9 @@ sudo cp /opt/dayday_erp/docs/maintenance.html /var/www/html/maintenance.html
 sudo touch /var/www/html/maintenance.enable
 sudo nginx -t && sudo systemctl reload nginx
 
-# 3) миграции/инициализация
+# 3) миграции / i18n / инициализация
 docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+docker compose -f docker-compose.prod.yml exec api npm run db:sync-i18n:prune
 docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
 
 # 4) выключить maintenance
@@ -197,7 +199,33 @@ docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
 docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
 ```
 
-Примечание: `db:prod-init` должен быть идемпотентным; это не “reset”.
+Примечание: `db:prod-init` должен быть идемпотентным; это не “reset”. Корневой **`npm run db:prod-init`** (так его вызывают из `docker compose … exec api`) уже включает **`db:migrate:deploy`**, **`db:seed`**, **`db:sync-i18n:prune`** и скрипт **`db:prod-init`** в workspace `@dayday/database` — отдельный §7.3 в этом случае дублирует синхронизацию, но не вредит. Если хотите **явный** порядок без повторного `migrate`/`seed` из корня: выполните §7.1 и §7.3, затем только **`npm run db:prod-init -w @dayday/database`** (доводка платформы без полной цепочки корня).
+
+### 7.3. Синхронизация переводов (i18n) в Postgres — **не пропускать на проде**
+
+Строки **RU/AZ** для UI лежат в **`apps/web/lib/i18n/resources.ts`** (в образ `api` файл копируется при сборке). Таблица **`translation_overrides`** и ответ **`GET /api/public/translations`** должны соответствовать этому словарю: иначе после релиза на проде возможны «старые» подписи или лишние ключи в БД.
+
+**Рекомендуемый шаг после `db:migrate:deploy` на каждом релизе** (идемпотентно, из контейнера `api`, `WORKDIR` = корень монорепо в образе):
+
+```bash
+docker compose -f docker-compose.prod.yml exec api npm run db:sync-i18n:prune
+```
+
+Что делает команда:
+
+- upsert всех плоских ключей **ru** и **az** из `resources.ts` в **`translation_overrides`**;
+- удаляет из **ru/az** строки, ключей которых **больше нет** в `resources.ts` (актуализация после переименований);
+- обновляет **`system_config`** ключ **`i18n.cacheVersion`** — клиенты перезапрашивают оверрайды.
+
+**Альтернатива одной строкой** (миграции + синхронизация i18n с prune; без seed):
+
+```bash
+docker compose -f docker-compose.prod.yml exec api npm run db:deploy
+```
+
+Если нужен только upsert **без** удаления устаревших ключей (редко на проде): `npm run db:sync-i18n` — см. [TZ.md](../TZ.md) §17.
+
+Связь с CI: перед сборкой образов выполняйте **`npm run i18n:audit`** и при изменении `resources.ts` — **`npm run i18n:catalog`** (обновление `apps/api/src/admin/i18n-default-catalog-data.json`); подробности — **PRD §7.6.1**, **TZ §17**.
 
 ---
 
@@ -247,6 +275,7 @@ API можно не публиковать отдельно: браузер хо
 - `GET /api/health` через публичный web-origin (например `https://your-domain.tld/api/health`)
 - Логин/регистрация в UI
 - Проверка, что переводы подгружаются (нет ошибок `Failed to fetch`/`Unexpected end of JSON input`)
+- После шага §7.3: `GET /api/public/translations?locale=ru` (и `az`) — не пустой объект при ожидании полного зеркала; при смене языка в UI строки совпадают с ожидаемым релизом (при расхождении повторите `db:sync-i18n:prune` и сброс кэша браузера)
 
 ---
 
@@ -254,6 +283,7 @@ API можно не публиковать отдельно: браузер хо
 
 - **`npm install` / `prisma generate` падает из-за `DATABASE_URL`**: убедитесь, что `.env` в корне и `DATABASE_URL`/`POSTGRES_*` заданы корректно (в compose `DATABASE_URL` для `api` собирается автоматически).
 - **Windows локально: ENOTEMPTY/EPERM в `.next`**: остановить `next dev`, запустить `npm run clean -w @dayday/web`, повторить build; добавить исключение антивируса для `apps/web/.next`.
+- **На проде «старые» подписи или сырые ключи i18n после деплоя**: не выполнен §7.3 — запустите `docker compose -f docker-compose.prod.yml exec api npm run db:sync-i18n:prune` (или `db:deploy` сразу после миграций). Локально: из корня репозитория `npx dotenv-cli -e .env -o -- npm run db:sync-i18n` (без prune) или `… db:sync-i18n:prune`.
 
 ---
 
@@ -282,8 +312,11 @@ cd /opt/dayday_erp
 docker compose -f docker-compose.prod.yml up -d --build
 
 docker compose -f docker-compose.prod.yml exec api npm run db:migrate:deploy
+docker compose -f docker-compose.prod.yml exec api npm run db:sync-i18n:prune
 docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
 ```
+
+Команда `db:prod-init` из корня в `package.json` уже включает migrate + seed + **prune-синк i18n**; здесь шаг **`db:sync-i18n:prune`** перед `db:prod-init` даёт явный порядок «схема → словарь → остальная инициализация» и совпадает с типовым деплоем из §7.
 
 ### 11.3. Проверки
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
-import { notifyListRefresh } from "../../../lib/list-refresh-bus";
+import { notifyInventoryListsRefresh } from "../../../lib/list-refresh-bus";
 import { INPUT_BORDERED_CLASS } from "../../../lib/design-system";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
@@ -83,7 +83,7 @@ export function SurplusModal({
       return;
     }
     toast.success(t("common.save"));
-    notifyListRefresh("inventory-hub");
+    notifyInventoryListsRefresh();
     onClose();
   }
 

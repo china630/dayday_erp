@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { CounterpartyKind, CounterpartyRole } from "@dayday/database";
+import { CounterpartyLegalForm, CounterpartyRole } from "@dayday/database";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -24,10 +24,10 @@ export class UpdateCounterpartyDto {
   @Matches(/^\d{10}$/)
   taxId?: string;
 
-  @ApiPropertyOptional({ enum: CounterpartyKind })
+  @ApiPropertyOptional({ enum: CounterpartyLegalForm })
   @IsOptional()
-  @IsEnum(CounterpartyKind)
-  kind?: CounterpartyKind;
+  @IsEnum(CounterpartyLegalForm)
+  legalForm?: CounterpartyLegalForm;
 
   @ApiPropertyOptional({ enum: CounterpartyRole })
   @IsOptional()
@@ -43,12 +43,6 @@ export class UpdateCounterpartyDto {
   @IsOptional()
   @IsEmail()
   email?: string;
-
-  @ApiPropertyOptional({ description: "Counterparty IBAN (optional)" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  iban?: string;
 
   @ApiPropertyOptional({ description: "Плательщик НДС по данным e-taxes lookup" })
   @IsOptional()
