@@ -37,7 +37,8 @@
     "db:migrate:nas-names": "tsx prisma/data-migrate-nas-account-names.ts",
     "db:seed:nas-templates": "tsx prisma/seed-nas-accounts.ts",
     "docker-init:export": "tsx prisma/docker-init/export-seed-data.ts",
-    "docker-init:super-admin-hash": "tsx prisma/docker-init/export-super-admin-hash.ts"
+    "docker-init:super-admin-hash": "tsx prisma/docker-init/export-super-admin-hash.ts",
+    "db:resync-nas-user": "tsx prisma/resync-nas-for-user-email.ts"
   },
   "dependencies": {
     "@prisma/client": "^7.0.0",
