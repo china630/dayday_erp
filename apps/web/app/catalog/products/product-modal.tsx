@@ -1,16 +1,17 @@
 "use client";
 
-import { Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import {
-  CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
 } from "../../../lib/design-system";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../../lib/form-styles";
+import { Button } from "../../../components/ui/button";
+import { NumericAmountInput } from "../../../components/ui/numeric-amount-input";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../components/ui/select";
+import { SalesModalFooter, SalesModalShell } from "../../../components/sales/modals/modal-shell";
 
 export type ProductModalCreateAs = "product" | "service";
 
@@ -23,20 +24,26 @@ type ProductDto = {
   isService?: boolean;
 };
 
-type VatSelect = "18" | "0" | "exempt";
+type VatSelect = "18" | "8" | "2" | "0" | "exempt";
 
 function vatSelectFromDto(vatRate: unknown): VatSelect {
   const n = Number(String(vatRate ?? 18));
   if (n === -1) return "exempt";
   if (n === 0) return "0";
+  if (n === 2) return "2";
+  if (n === 8) return "8";
   return "18";
 }
 
 function vatSelectToApi(v: VatSelect): number {
   if (v === "exempt") return -1;
   if (v === "0") return 0;
+  if (v === "2") return 2;
+  if (v === "8") return 8;
   return 18;
 }
+
+const lbl = MODAL_FIELD_LABEL_CLASS;
 
 export function ProductModal({
   open,
@@ -157,74 +164,83 @@ export function ProductModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-2xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("products.subtitle")}</p>
-          </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+    <SalesModalShell
+      open={open}
+      title={title}
+      subtitle={t("products.subtitle")}
+      onClose={onClose}
+      maxWidthClass="max-w-2xl"
+      footer={
+        <SalesModalFooter
+          onCancel={onClose}
+          busy={busy || loading}
+          formId="product-modal-form"
+          cancelVariant="ghost"
+        />
+      }
+    >
+      <div className="space-y-4">
+        {loadErr ? <p className="text-[13px] text-red-600">{loadErr}</p> : null}
+        {loading ? <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p> : null}
 
-        {loadErr ? <p className="text-sm text-red-600 mt-4 mb-0">{loadErr}</p> : null}
-        {loading ? <p className="text-sm text-slate-600 mt-4 mb-0">{t("common.loading")}</p> : null}
-
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
+        <form
+          id="product-modal-form"
+          className="space-y-4"
+          onSubmit={(e) => void onSubmit(e)}
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("products.name")}</span>
-              <input className={FORM_INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
+          <div className="md:col-span-2">
+            <span className={lbl}>{t("products.name")}</span>
+            <input
+              className={MODAL_INPUT_CLASS}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
 
-            {showSkuField ? (
-              <div>
-                <span className={FORM_LABEL_CLASS}>{t("products.sku")}</span>
-                <input className={FORM_INPUT_CLASS} value={sku} onChange={(e) => setSku(e.target.value)} required />
-              </div>
-            ) : null}
-
-            <div className={showSkuField ? "" : "md:col-span-2"}>
-              <span className={FORM_LABEL_CLASS}>{t("products.vat")}</span>
-              <select
-                className={FORM_INPUT_CLASS}
-                value={vatSelect}
-                onChange={(e) => setVatSelect(e.target.value as VatSelect)}
-                required
-              >
-                <option value="18">{t("products.vatOption18")}</option>
-                <option value="0">{t("products.vatOption0")}</option>
-                <option value="exempt">{t("products.vatOptionExempt")}</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("products.price")}</span>
+          {showSkuField ? (
+            <div>
+              <span className={lbl}>{t("products.sku")}</span>
               <input
-                className={FORM_INPUT_CLASS}
-                type="number"
-                min={0}
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                className={MODAL_INPUT_CLASS}
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
                 required
               />
             </div>
+          ) : null}
+
+          <div className={showSkuField ? "" : "md:col-span-2"}>
+            <span className={lbl}>{t("products.vat")}</span>
+            <Select
+              value={vatSelect}
+              onValueChange={(v) => setVatSelect(v as VatSelect)}
+              className={MODAL_INPUT_CLASS}
+            >
+              <SelectTrigger className="" />
+              <SelectContent>
+                <SelectItem value="18">{t("products.vatOption18")}</SelectItem>
+                <SelectItem value="8">{t("products.vatOption8")}</SelectItem>
+                <SelectItem value="2">{t("products.vatOption2")}</SelectItem>
+                <SelectItem value="0">{t("products.vatOption0")}</SelectItem>
+                <SelectItem value="exempt">{t("products.vatOptionExempt")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
-            </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy || loading}>
-              <Save className="h-4 w-4 shrink-0" aria-hidden />
-              {busy ? "…" : t("common.save")}
-            </button>
+          <div className="md:col-span-2">
+            <span className={lbl}>{t("products.price")}</span>
+            <NumericAmountInput
+              value={price}
+              onValueChange={setPrice}
+              decimalScale={4}
+              required
+            />
+          </div>
           </div>
         </form>
       </div>
-    </div>
+    </SalesModalShell>
   );
 }

@@ -5,7 +5,22 @@ import { useTranslation } from "react-i18next";
 import { apiBaseUrl, apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
-import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
+import { CircleArrowUp, Download, Loader2, Upload } from "lucide-react";
 
 type ExportStatus = "GENERATED" | "UPLOADED" | "CONFIRMED_BY_TAX";
 
@@ -224,52 +239,70 @@ export default function TaxExportPage() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           {t("reporting.taxExportWorkflowTitle")}
         </h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} min-w-full`}>
             <thead>
-              <tr className="text-left text-slate-600 border-b border-slate-200">
-                <th className="py-2 pr-4">{t("reporting.taxExportPeriod")}</th>
-                <th className="py-2 pr-4">{t("reporting.taxExportType")}</th>
-                <th className="py-2 pr-4">{t("reporting.taxExportStatus")}</th>
-                <th className="py-2 pr-4">{t("reporting.taxExportActions")}</th>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("reporting.taxExportPeriod")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("reporting.taxExportType")}</th>
+                <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("reporting.taxExportStatus")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("reporting.taxExportActions")}</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id} className="border-b border-slate-100 align-top">
-                  <td className="py-3 pr-4">{item.period}</td>
-                  <td className="py-3 pr-4">{item.taxType}</td>
-                  <td className="py-3 pr-4">{statusLabel[item.status]}</td>
-                  <td className="py-3 pr-4">
-                    <div className="flex flex-wrap items-center gap-2">
+                <tr key={item.id} className={`${DATA_TABLE_TR_CLASS} align-top`}>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>{item.period}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>{item.taxType}</td>
+                  <td className={DATA_TABLE_TD_CENTER_CLASS}>{statusLabel[item.status]}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>
+                    <div className="flex flex-wrap items-center justify-end gap-1">
                       <button
                         type="button"
-                        className={PRIMARY_BUTTON_CLASS}
+                        className={TABLE_ROW_ICON_BTN_CLASS}
+                        title={t("reporting.taxExportDownload")}
                         disabled={busyId === item.id}
                         onClick={() => void downloadDeclaration(item.id, item.period)}
                       >
-                        {busyId === item.id ? "…" : t("reporting.taxExportDownload")}
+                        {busyId === item.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                        ) : (
+                          <Download className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                        )}
                       </button>
                       {item.status !== "CONFIRMED_BY_TAX" && (
                         <>
                           <input
+                            id={`tax-receipt-${item.id}`}
                             type="file"
                             accept="application/pdf"
+                            className="sr-only"
                             onChange={(e) =>
                               setReceiptFiles((prev) => ({
                                 ...prev,
                                 [item.id]: e.target.files?.[0] ?? null,
                               }))
                             }
-                            className="max-w-[220px]"
                           />
+                          <label
+                            htmlFor={`tax-receipt-${item.id}`}
+                            className={`${TABLE_ROW_ICON_BTN_CLASS} cursor-pointer`}
+                            title={t("reporting.taxExportAttachReceipt")}
+                          >
+                            <Upload className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                          </label>
                           <button
                             type="button"
-                            className={SECONDARY_BUTTON_CLASS}
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("reporting.taxExportAttachReceipt")}
                             disabled={busyId === item.id}
                             onClick={() => void uploadReceipt(item.id)}
                           >
-                            {t("reporting.taxExportAttachReceipt")}
+                            {busyId === item.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                            ) : (
+                              <CircleArrowUp className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                            )}
                           </button>
                         </>
                       )}
@@ -278,8 +311,8 @@ export default function TaxExportPage() {
                 </tr>
               ))}
               {items.length === 0 && !loadingList && (
-                <tr>
-                  <td className="py-3 text-slate-500" colSpan={4}>
+                <tr className={DATA_TABLE_TR_CLASS}>
+                  <td className={`${DATA_TABLE_TD_CLASS} py-6 text-center text-[#7F8C8D]`} colSpan={4}>
                     {t("reporting.taxExportEmpty")}
                   </td>
                 </tr>

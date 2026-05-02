@@ -1,12 +1,16 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 
+import { PDF_FONT_UNICODE, registerUnicodeFonts } from "../reporting/pdf-font.util";
+
 function pdfBuffer(build: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
+    registerUnicodeFonts(doc);
+    doc.font(PDF_FONT_UNICODE);
     build(doc);
     doc.end();
   });

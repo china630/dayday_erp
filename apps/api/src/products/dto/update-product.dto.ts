@@ -28,12 +28,12 @@ export class UpdateProductDto {
   price?: number;
 
   @ApiPropertyOptional({
-    description: "НДС, %: 18, 0 или -1 (освобождение от ƏDV)",
+    description: "НДС, %: 18, 8, 2, 0 или -1 (освобождение от ƏDV)",
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @IsIn([-1, 0, 18])
+  @IsIn([-1, 0, 2, 8, 18])
   vatRate?: number;
 
   @ApiPropertyOptional()

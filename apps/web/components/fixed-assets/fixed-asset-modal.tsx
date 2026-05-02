@@ -5,14 +5,14 @@ import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
-import { inputFieldClass } from "../../lib/form-classes";
 import {
   CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
 } from "../../lib/design-system";
-
-const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
+import { Button } from "../ui/button";
 
 function decToInput(v: unknown): string {
   if (v == null) return "";
@@ -92,6 +92,20 @@ export function FixedAssetModal({
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (busy || loading) return;
+    if (!name.trim() || !invNo.trim() || !purchaseDate) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
+    const pp = Number(purchasePrice);
+    if (!Number.isFinite(pp)) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
+    const lifeN = Number(life);
+    if (!Number.isFinite(lifeN) || lifeN < 1) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "create") {
@@ -102,8 +116,8 @@ export function FixedAssetModal({
             name: name.trim(),
             inventoryNumber: invNo.trim(),
             purchaseDate,
-            purchasePrice: Number(purchasePrice),
-            usefulLifeMonths: Number(life),
+            purchasePrice: pp,
+            usefulLifeMonths: lifeN,
             salvageValue: Number(salvage || 0),
           }),
         });
@@ -124,8 +138,8 @@ export function FixedAssetModal({
           name: name.trim(),
           inventoryNumber: invNo.trim(),
           purchaseDate,
-          purchasePrice: Number(purchasePrice),
-          usefulLifeMonths: Number(life),
+          purchasePrice: pp,
+          usefulLifeMonths: lifeN,
           salvageValue: Number(salvage || 0),
         }),
       });
@@ -143,100 +157,96 @@ export function FixedAssetModal({
 
   if (!open) return null;
 
-  const title =
-    mode === "create" ? t("fixedAssets.newTitle") : t("employees.editSection");
+  const title = mode === "create" ? t("fixedAssets.newTitle") : t("employees.editSection");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
-        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-lg flex-col bg-white p-6`}
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden bg-white p-6`}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3">
-          <h3 className="m-0 text-base font-semibold text-[#34495E]">{title}</h3>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label="Close">
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <h3 className="m-0 min-w-0 flex-1 pr-2 text-lg font-semibold leading-snug text-[#34495E]">{title}</h3>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
           {loading ? (
-            <p className="text-sm text-slate-600">{t("common.loading")}</p>
+            <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p>
           ) : (
-            <form id="fixed-asset-modal-form" className="grid gap-3" onSubmit={(e) => void onSubmit(e)}>
-              <div>
-                <span className={lbl}>{t("fixedAssets.name")}</span>
+            <form id="fixed-asset-modal-form" className="grid gap-4" onSubmit={(e) => void onSubmit(e)}>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("fixedAssets.name")}
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className={inputFieldClass}
-                  required
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
                 />
-              </div>
-              <div>
-                <span className={lbl}>{t("fixedAssets.invNo")}</span>
-                <input value={invNo} onChange={(e) => setInvNo(e.target.value)} className={inputFieldClass} />
-              </div>
-              <div>
-                <span className={lbl}>{t("fixedAssets.commission")}</span>
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("fixedAssets.invNo")}
+                <input
+                  value={invNo}
+                  onChange={(e) => setInvNo(e.target.value)}
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                />
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("fixedAssets.commission")}
                 <input
                   type="date"
                   value={purchaseDate}
                   onChange={(e) => setPurchaseDate(e.target.value)}
-                  className={inputFieldClass}
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
                 />
-              </div>
-              <div>
-                <span className={lbl}>{t("fixedAssets.initial")}</span>
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("fixedAssets.initial")}
                 <input
                   type="number"
                   step="0.01"
                   value={purchasePrice}
                   onChange={(e) => setPurchasePrice(e.target.value)}
-                  className={inputFieldClass}
-                  required
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                 />
-              </div>
-              <div>
-                <span className={lbl}>{t("fixedAssets.life")}</span>
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("fixedAssets.life")}
                 <input
                   type="number"
                   min={1}
                   value={life}
                   onChange={(e) => setLife(e.target.value)}
-                  className={inputFieldClass}
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                 />
-              </div>
-              <div>
-                <span className={lbl}>{t("fixedAssets.salvage")}</span>
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("fixedAssets.salvage")}
                 <input
                   type="number"
                   step="0.01"
                   value={salvage}
                   onChange={(e) => setSalvage(e.target.value)}
-                  className={inputFieldClass}
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                 />
-              </div>
+              </label>
             </form>
           )}
         </div>
 
-        <div className="mt-4 flex shrink-0 justify-end gap-2 border-t border-[#EBEDF0] pt-4">
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-            {t("common.cancel")}
-          </button>
-          {!loading ? (
-            <button
-              type="submit"
-              form="fixed-asset-modal-form"
-              disabled={busy}
-              className={PRIMARY_BUTTON_CLASS}
-            >
+        {!loading ? (
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" form="fixed-asset-modal-form" disabled={busy}>
               {busy ? "…" : t("fixedAssets.save")}
-            </button>
-          ) : null}
-        </div>
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -2,14 +2,13 @@
 
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
-import {
-  CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
-} from "../../../lib/design-system";
+import { useTranslation } from "react-i18next";
+import { CARD_CONTAINER_CLASS, MODAL_FOOTER_ACTIONS_CLASS } from "../../../lib/design-system";
+import { Button } from "../../ui/button";
 
-/** Стандартные подписи футера для модулей anbar (по ТЗ). */
+/** @deprecated Используйте `t("common.cancel")` / `t("common.save")`. */
 export const INVENTORY_MODAL_CANCEL_AZ = "Ləğv et";
+/** @deprecated см. INVENTORY_MODAL_CANCEL_AZ */
 export const INVENTORY_MODAL_SAVE_AZ = "Yadda saxla";
 
 export function InventoryModalShell({
@@ -29,6 +28,7 @@ export function InventoryModalShell({
   footer?: ReactNode;
   maxWidthClass?: string;
 }) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -39,30 +39,32 @@ export function InventoryModalShell({
         aria-modal="true"
         aria-labelledby="inventory-modal-title"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3">
-          <div className="min-w-0 pr-2">
-            <h3 id="inventory-modal-title" className="m-0 text-base font-semibold text-[#34495E]">
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3
+              id="inventory-modal-title"
+              className="m-0 text-lg font-semibold leading-snug text-[#34495E]"
+            >
               {title}
             </h3>
             {subtitle ? (
-              <p className="mb-0 mt-1 text-[13px] text-[#7F8C8D]">{subtitle}</p>
+              <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{subtitle}</p>
             ) : null}
           </div>
-          <button
+          <Button
             type="button"
-            className={SECONDARY_BUTTON_CLASS}
+            variant="ghost"
+            className="!px-2"
             onClick={onClose}
-            aria-label={INVENTORY_MODAL_CANCEL_AZ}
+            aria-label={t("common.close")}
           >
             <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          </Button>
+        </header>
 
-        <div className="mt-5 min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">{children}</div>
 
-        {footer != null ? (
-          <div className="mt-4 shrink-0 border-t border-[#EBEDF0] pt-4">{footer}</div>
-        ) : null}
+        {footer != null ? <footer className="shrink-0">{footer}</footer> : null}
       </div>
     </div>
   );
@@ -72,44 +74,28 @@ export function InventoryModalFooter({
   onCancel,
   onSave,
   busy,
-  saveDisabled,
   formId,
 }: {
   onCancel: () => void;
   onSave?: () => void | Promise<void>;
   busy?: boolean;
-  saveDisabled?: boolean;
-  /** Если задан, кнопка «Yadda saxla» отправляет форму с этим id (вместо onSave). */
+  /** Если задан, основная кнопка отправляет форму с этим id (вместо onSave). */
   formId?: string;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="flex w-full flex-col-reverse gap-2 lg:flex-row lg:w-auto lg:justify-end">
-      <button
-        type="button"
-        className={`${SECONDARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
-        onClick={onCancel}
-        disabled={!!busy}
-      >
-        {INVENTORY_MODAL_CANCEL_AZ}
-      </button>
+    <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+      <Button type="button" variant="ghost" onClick={onCancel} disabled={!!busy}>
+        {t("common.cancel")}
+      </Button>
       {formId ? (
-        <button
-          type="submit"
-          form={formId}
-          className={`${PRIMARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
-          disabled={!!busy || !!saveDisabled}
-        >
-          {busy ? "…" : INVENTORY_MODAL_SAVE_AZ}
-        </button>
+        <Button type="submit" variant="primary" form={formId} disabled={!!busy}>
+          {busy ? "…" : t("common.save")}
+        </Button>
       ) : (
-        <button
-          type="button"
-          className={`${PRIMARY_BUTTON_CLASS} w-full justify-center lg:w-auto`}
-          disabled={!!busy || !!saveDisabled}
-          onClick={() => void onSave?.()}
-        >
-          {busy ? "…" : INVENTORY_MODAL_SAVE_AZ}
-        </button>
+        <Button type="button" variant="primary" disabled={!!busy} onClick={() => void onSave?.()}>
+          {busy ? "…" : t("common.save")}
+        </Button>
       )}
     </div>
   );

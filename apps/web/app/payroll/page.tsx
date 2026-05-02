@@ -14,6 +14,7 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import { parseHrEmployeesResponse } from "../../lib/hr-employees-list";
 import { formatMoneyAzn } from "../../lib/format-money";
@@ -22,9 +23,24 @@ import { EmptyState } from "../../components/empty-state";
 import { DepartmentSelect } from "../../components/payroll/department-select";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../lib/design-system";
+import { Button } from "../../components/ui/button";
 import { VacationCalcModal } from "../../components/payroll/vacation-calc-modal";
 import { SickCalcModal } from "../../components/payroll/sick-calc-modal";
 import { PayrollRunModal } from "../../components/payroll/payroll-run-modal";
@@ -33,7 +49,7 @@ import {
   EmployeeAbsencesModal,
   type EmployeeAbsenceRow,
 } from "../../components/payroll/employee-absences-modal";
-import { Users } from "lucide-react";
+import { CalendarRange, ChevronDown, ChevronUp, Loader2, Trash2, Users, X } from "lucide-react";
 
 type RunRow = {
   id: string;
@@ -458,7 +474,15 @@ function PayrollPageInner() {
   }
 
   async function payRun(id: string) {
-    if (!token || !selectedBankAccountId || payingRunId) return;
+    if (!token || payingRunId) return;
+    if (!id) {
+      toast.error(t("payroll.payRunNeedRun"));
+      return;
+    }
+    if (!selectedBankAccountId) {
+      toast.error(t("payroll.payRunNeedBank"));
+      return;
+    }
     setPayingRunId(id);
     const res = await apiFetch(`/api/hr/payroll/runs/${id}/pay`, {
       method: "POST",
@@ -480,7 +504,7 @@ function PayrollPageInner() {
       if (r.ok) setDetail(await r.json());
     }
     setPayingRunId(null);
-    alert(t("payroll.payRunSuccess"));
+    toast.success(t("payroll.payRunSuccess"));
   }
 
   async function loadRegistries(runId: string) {
@@ -808,84 +832,95 @@ function PayrollPageInner() {
                   </div>
                 ))}
               </div>
-              <div className={`hidden md:block overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-                <table className="text-sm min-w-full">
-                  <thead>
+              <div className={`hidden md:block ${DATA_TABLE_VIEWPORT_CLASS}`}>
+                <table className={`${DATA_TABLE_CLASS} min-w-full`}>
+                  <thead className="sticky top-0 z-10 bg-[#F8FAFC] shadow-[0_1px_0_0_#D5DADF]">
                     <tr className="border-b border-[#D5DADF]">
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                      <th className={`${DATA_TABLE_TH_LEFT_CLASS} bg-[#F8FAFC]`} rowSpan={2}>
                         {t("payroll.thEmployee")}
                       </th>
-                      <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                      <th className={`${DATA_TABLE_TH_LEFT_CLASS} bg-[#F8FAFC]`} rowSpan={2}>
                         {t("employees.thKind")}
                       </th>
                       {showTimesheetCols ? (
                         <th
-                          className="p-2 text-center text-[12px] font-semibold text-[#34495E] border-l border-[#D5DADF]"
+                          className={`${DATA_TABLE_TH_CENTER_CLASS} border-l border-[#D5DADF] bg-[#F8FAFC]`}
                           colSpan={4}
                         >
                           Tabel (gün)
                         </th>
                       ) : null}
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                      <th className={`${DATA_TABLE_TH_RIGHT_CLASS} bg-[#F8FAFC]`} rowSpan={2}>
                         {t("employees.thGross")} (₼)
                       </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                      <th className={`${DATA_TABLE_TH_RIGHT_CLASS} bg-[#F8FAFC]`} rowSpan={2}>
                         {t("payroll.thPit")} (₼)
                       </th>
                       {showContractorCol && (
-                        <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" rowSpan={3}>
+                        <th className={`${DATA_TABLE_TH_RIGHT_CLASS} bg-[#F8FAFC]`} rowSpan={2}>
                           {t("payroll.thContractorSoc")} (₼)
                         </th>
                       )}
                       <th
-                        className="p-2 text-center text-[12px] font-semibold text-[#34495E] border-l border-[#D5DADF]"
+                        className={`${DATA_TABLE_TH_CENTER_CLASS} border-l border-[#D5DADF] bg-[#F8FAFC]`}
                         colSpan={3}
                       >
                         İşçi (₼)
                       </th>
                       <th
-                        className="p-2 text-center text-[12px] font-semibold text-[#34495E] border-l border-[#D5DADF]"
+                        className={`${DATA_TABLE_TH_CENTER_CLASS} border-l border-[#D5DADF] bg-[#F8FAFC]`}
                         colSpan={3}
                       >
                         İşəgötürən (₼)
                       </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-l border-[#D5DADF]" rowSpan={3}>
+                      <th
+                        className={`${DATA_TABLE_TH_RIGHT_CLASS} border-l border-[#D5DADF] bg-[#F8FAFC]`}
+                        rowSpan={2}
+                      >
                         {t("payroll.thNet")} (₼)
                       </th>
                     </tr>
-                    <tr className="border-b border-[#D5DADF]">
+                    <tr className="border-b border-[#D5DADF] bg-[#F8FAFC]">
                       {showTimesheetCols ? (
                         <>
-                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10 border-l border-[#D5DADF]">
+                          <th
+                            className={`${DATA_TABLE_TH_CENTER_CLASS} w-10 min-w-10 border-l border-[#D5DADF] bg-[#F8FAFC] py-1`}
+                          >
                             W
                           </th>
-                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10">
+                          <th className={`${DATA_TABLE_TH_CENTER_CLASS} w-10 min-w-10 bg-[#F8FAFC] py-1`}>
                             M
                           </th>
-                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10">
+                          <th className={`${DATA_TABLE_TH_CENTER_CLASS} w-10 min-w-10 bg-[#F8FAFC] py-1`}>
                             X
                           </th>
-                          <th className="p-1 text-center text-[12px] font-semibold text-[#34495E] w-10 min-w-10 border-r border-[#D5DADF]">
+                          <th
+                            className={`${DATA_TABLE_TH_CENTER_CLASS} w-10 min-w-10 border-r border-[#D5DADF] bg-[#F8FAFC] py-1`}
+                          >
                             E
                           </th>
                         </>
                       ) : null}
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-l border-[#D5DADF]">
+                      <th
+                        className={`${DATA_TABLE_TH_RIGHT_CLASS} border-l border-[#D5DADF] bg-[#F8FAFC]`}
+                      >
                         DSMF
                       </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                        İTS
-                      </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-r border-[#D5DADF]">
+                      <th className={`${DATA_TABLE_TH_RIGHT_CLASS} bg-[#F8FAFC]`}>İTS</th>
+                      <th
+                        className={`${DATA_TABLE_TH_RIGHT_CLASS} border-r border-[#D5DADF] bg-[#F8FAFC]`}
+                      >
                         İŞS
                       </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-l border-[#D5DADF]">
+                      <th
+                        className={`${DATA_TABLE_TH_RIGHT_CLASS} border-l border-[#D5DADF] bg-[#F8FAFC]`}
+                      >
                         DSMF
                       </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                        İTS
-                      </th>
-                      <th className="p-2 text-right text-[13px] font-semibold text-[#34495E] border-r border-[#D5DADF]">
+                      <th className={`${DATA_TABLE_TH_RIGHT_CLASS} bg-[#F8FAFC]`}>İTS</th>
+                      <th
+                        className={`${DATA_TABLE_TH_RIGHT_CLASS} border-r border-[#D5DADF] bg-[#F8FAFC]`}
+                      >
                         İŞS
                       </th>
                     </tr>
@@ -893,76 +928,99 @@ function PayrollPageInner() {
                   <tbody>
                     {slipsFiltered.map((s) => (
                       <Fragment key={s.id}>
-                      <tr className="border-t border-[#EBEDF0]">
-                        <td className="p-2">
-                          <button
-                            type="button"
-                            className="text-action hover:text-primary hover:underline text-left"
-                            onClick={() => {
-                              setEmployeeAbsencesEmp({
-                                id: s.employee.id,
-                                firstName: s.employee.firstName,
-                                lastName: s.employee.lastName,
-                              });
-                              setEmployeeAbsencesOpen(true);
-                            }}
-                          >
-                            {s.employee.lastName} {s.employee.firstName}
-                          </button>
+                      <tr className={DATA_TABLE_TR_CLASS}>
+                        <td className={DATA_TABLE_TD_CLASS}>
+                          <div className="flex items-center gap-1">
+                            <span className="min-w-0 font-semibold text-[#34495E]">
+                              {s.employee.lastName} {s.employee.firstName}
+                            </span>
+                            <button
+                              type="button"
+                              className={TABLE_ROW_ICON_BTN_CLASS}
+                              title={t("payroll.absencesTitle")}
+                              onClick={() => {
+                                setEmployeeAbsencesEmp({
+                                  id: s.employee.id,
+                                  firstName: s.employee.firstName,
+                                  lastName: s.employee.lastName,
+                                });
+                                setEmployeeAbsencesOpen(true);
+                              }}
+                            >
+                              <CalendarRange className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                            </button>
+                          </div>
                         </td>
-                        <td className="p-2">
+                        <td className={DATA_TABLE_TD_CENTER_CLASS}>
                           {s.employee.kind === "CONTRACTOR"
                             ? t("employees.kindContractor")
                             : t("employees.kindEmployee")}
                         </td>
                         {showTimesheetCols && (
                           <>
-                            <td className="p-1 text-center tabular-nums w-10 min-w-10">{s.timesheetWorkDays ?? "—"}</td>
-                            <td className="p-1 text-center tabular-nums w-10 min-w-10">{s.timesheetVacationDays ?? "—"}</td>
-                            <td className="p-1 text-center tabular-nums w-10 min-w-10">{s.timesheetSickDays ?? "—"}</td>
-                            <td className="p-1 text-center tabular-nums w-10 min-w-10 border-r border-[#D5DADF]">{s.timesheetBusinessTripDays ?? "—"}</td>
+                            <td className={`${DATA_TABLE_TD_CENTER_CLASS} w-10 min-w-10 p-1`}>
+                              {s.timesheetWorkDays ?? "—"}
+                            </td>
+                            <td className={`${DATA_TABLE_TD_CENTER_CLASS} w-10 min-w-10 p-1`}>
+                              {s.timesheetVacationDays ?? "—"}
+                            </td>
+                            <td className={`${DATA_TABLE_TD_CENTER_CLASS} w-10 min-w-10 p-1`}>
+                              {s.timesheetSickDays ?? "—"}
+                            </td>
+                            <td
+                              className={`${DATA_TABLE_TD_CENTER_CLASS} w-10 min-w-10 border-r border-[#D5DADF] p-1`}
+                            >
+                              {s.timesheetBusinessTripDays ?? "—"}
+                            </td>
                           </>
                         )}
-                        <td className="p-2 text-right font-mono">{formatMoneyNoSymbol(s.gross)}</td>
-                        <td className="p-2 text-right font-mono">{formatMoneyNoSymbol(s.incomeTax)}</td>
+                        <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyNoSymbol(s.gross)}</td>
+                        <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyNoSymbol(s.incomeTax)}</td>
                         {showContractorCol && (
-                          <td className="p-2 text-right font-mono">
+                          <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                             {formatMoneyNoSymbol(s.contractorSocialWithheld ?? 0)}
                           </td>
                         )}
-                        <td className="p-2 text-right font-mono border-l border-[#D5DADF]">
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} border-l border-[#D5DADF]`}>
                           {formatMoneyNoSymbol(s.dsmfWorker)}
                         </td>
-                        <td className="p-2 text-right font-mono">
-                          {formatMoneyNoSymbol(s.itsWorker)}
-                        </td>
-                        <td className="p-2 text-right font-mono border-r border-[#D5DADF]">
+                        <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyNoSymbol(s.itsWorker)}</td>
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} border-r border-[#D5DADF]`}>
                           {formatMoneyNoSymbol(s.unemploymentWorker)}
                         </td>
-                        <td className="p-2 text-right font-mono border-l border-[#D5DADF]">
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} border-l border-[#D5DADF]`}>
                           {formatMoneyNoSymbol(s.dsmfEmployer)}
                         </td>
-                        <td className="p-2 text-right font-mono">
-                          {formatMoneyNoSymbol(s.itsEmployer)}
-                        </td>
-                        <td className="p-2 text-right font-mono border-r border-[#D5DADF]">
+                        <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyNoSymbol(s.itsEmployer)}</td>
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} border-r border-[#D5DADF]`}>
                           {formatMoneyNoSymbol(s.unemploymentEmployer)}
                         </td>
-                        <td className="p-2 text-right font-mono font-medium border-l border-[#D5DADF]">
-                          <button
-                            type="button"
-                            className="text-action hover:text-primary hover:underline"
-                            onClick={() =>
-                              setTaxDetailsSlipId((prev) => (prev === s.id ? null : s.id))
-                            }
-                          >
-                            {formatMoneyNoSymbol(s.net)}
-                          </button>
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} border-l border-[#D5DADF] font-semibold`}>
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="tabular-nums">{formatMoneyNoSymbol(s.net)}</span>
+                            <button
+                              type="button"
+                              className={TABLE_ROW_ICON_BTN_CLASS}
+                              title={t("payroll.taxDetails")}
+                              onClick={() =>
+                                setTaxDetailsSlipId((prev) => (prev === s.id ? null : s.id))
+                              }
+                            >
+                              {taxDetailsSlipId === s.id ? (
+                                <ChevronUp className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                              )}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       {taxDetailsSlipId === s.id ? (
-                        <tr className="border-t border-[#EBEDF0] bg-slate-50">
-                          <td className="p-2 text-xs text-slate-700" colSpan={showTimesheetCols ? (showContractorCol ? 13 : 12) : showContractorCol ? 9 : 8}>
+                        <tr className={`${DATA_TABLE_TR_CLASS} bg-[#F8FAFC]`}>
+                          <td
+                            className={`${DATA_TABLE_TD_CLASS} text-xs text-[#34495E]`}
+                            colSpan={showTimesheetCols ? (showContractorCol ? 13 : 12) : showContractorCol ? 9 : 8}
+                          >
                             <span className="font-semibold text-slate-900">{t("payroll.taxDetails")}:</span>{" "}
                             {t("payroll.thPit")} {formatMoneyNoSymbol(s.incomeTax)} · DSMF{" "}
                             {formatMoneyNoSymbol(s.dsmfWorker)} · İTS {formatMoneyNoSymbol(s.itsWorker)} · İŞS{" "}
@@ -1042,51 +1100,49 @@ function PayrollPageInner() {
             —
           </div>
         ) : (
-          <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-            <table className="text-sm min-w-full">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-full`}>
               <thead>
-                <tr className="border-b border-[#D5DADF]">
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceThEmployee")}
-                  </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceThType")}
-                  </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceThPeriod")}
-                  </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceNote")}
-                  </th>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("payroll.absenceThEmployee")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("payroll.absenceThType")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("payroll.absenceThPeriod")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("payroll.absenceNote")}</th>
                   {!hideDestructive ? (
-                    <th className="p-2 text-[13px] font-semibold text-[#34495E]" />
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("teamPage.actions")}</th>
                   ) : null}
                 </tr>
               </thead>
               <tbody>
                 {absencesInMonth.map((a) => (
-                  <tr key={a.id} className="border-t border-[#EBEDF0]">
-                    <td className="p-2">
+                  <tr key={a.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>
                       {a.employee.lastName} {a.employee.firstName}
                     </td>
-                    <td className="p-2">
+                    <td className={DATA_TABLE_TD_CLASS}>
                       {a.absenceType?.nameAz ?? t("payroll.absenceTypeUnknown")}
                     </td>
-                    <td className="p-2 whitespace-nowrap">
-                      {String(a.startDate).slice(0, 10)} —{" "}
-                      {String(a.endDate).slice(0, 10)}
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
+                      {String(a.startDate).slice(0, 10)} — {String(a.endDate).slice(0, 10)}
                     </td>
-                    <td className="p-2">{a.note || "—"}</td>
+                    <td className={DATA_TABLE_TD_CLASS}>{a.note || "—"}</td>
                     {!hideDestructive ? (
-                      <td className="p-2">
-                        <button
-                          type="button"
-                          className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md hover:bg-red-50 disabled:opacity-60"
-                          disabled={deletingAbsenceId !== null}
-                          onClick={() => void removeAbsence(a.id)}
-                        >
-                          {deletingAbsenceId === a.id ? "…" : t("payroll.absenceDelete")}
-                        </button>
+                      <td className={DATA_TABLE_TD_CLASS}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("payroll.absenceDelete")}
+                            disabled={deletingAbsenceId !== null}
+                            onClick={() => void removeAbsence(a.id)}
+                          >
+                            {deletingAbsenceId === a.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[#E74C3C]" aria-hidden />
+                            ) : (
+                              <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     ) : null}
                   </tr>
@@ -1154,40 +1210,62 @@ function PayrollPageInner() {
 
       {payoutModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className={`${CARD_CONTAINER_CLASS} w-full max-w-lg bg-white p-5`}>
-            <h3 className="text-base font-semibold text-[#34495E]">{t("payroll.payRun")}</h3>
-            <p className="mt-1 text-sm text-[#7F8C8D]">{t("payroll.payRunHint")}</p>
-            <label className="mt-4 block text-sm text-[#34495E]">
-              {t("payroll.bankAccount")}
-              <select
-                className="mt-1 block w-full rounded-[2px] border border-[#D5DADF] bg-white px-2 py-2"
-                value={selectedBankAccountId}
-                onChange={(e) => setSelectedBankAccountId(e.target.value)}
-              >
-                {orgBankAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.bankName} • {a.accountNumber} ({a.currency})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
+          <div
+            className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] min-h-0 w-full max-w-lg flex-col overflow-hidden bg-white p-6`}
+            role="dialog"
+            aria-modal="true"
+          >
+            <header className="flex shrink-0 items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 pr-2">
+                <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{t("payroll.payRun")}</h3>
+                <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("payroll.payRunHint")}</p>
+              </div>
+              <Button
                 type="button"
-                className={SECONDARY_BUTTON_CLASS}
+                variant="ghost"
+                className="!px-2"
                 onClick={() => setPayoutModalOpen(false)}
                 disabled={Boolean(payingRunId)}
+                aria-label={t("common.close")}
               >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                className={PRIMARY_BUTTON_CLASS}
-                onClick={() => currentRun && void payRun(currentRun.id)}
-                disabled={!currentRun || !selectedBankAccountId || Boolean(payingRunId)}
-              >
-                {payingRunId ? "…" : t("payroll.payRunConfirm")}
-              </button>
+                <X className="h-4 w-4 shrink-0" aria-hidden />
+              </Button>
+            </header>
+            <div className="mt-4 flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <label className={MODAL_FIELD_LABEL_CLASS}>
+                  {t("payroll.bankAccount")}
+                  <select
+                    className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                    value={selectedBankAccountId}
+                    onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                  >
+                    {orgBankAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.bankName} • {a.accountNumber} ({a.currency})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setPayoutModalOpen(false)}
+                  disabled={Boolean(payingRunId)}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => void payRun(currentRun?.id || "")}
+                  disabled={Boolean(payingRunId)}
+                >
+                  {payingRunId ? "…" : t("payroll.payRunConfirm")}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

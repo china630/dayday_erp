@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { SubscriptionTier } from "@dayday/database";
 import { resolveOrganizationUuid } from "../common/organization-id.util";
 import { PrismaService } from "../prisma/prisma.service";
@@ -38,14 +38,20 @@ export class QuotaService {
   private async getTier(organizationId: string): Promise<SubscriptionTier> {
     const orgId = resolveOrganizationUuid(organizationId);
     if (!orgId) {
-      throw new NotFoundException("Organization subscription not found");
+      this.logger.warn(
+        `getTier: unresolved organizationId="${organizationId}" — using STARTER quotas`,
+      );
+      return SubscriptionTier.STARTER;
     }
     const sub = await this.prisma.organizationSubscription.findUnique({
       where: { organizationId: orgId },
       select: { tier: true },
     });
     if (!sub) {
-      throw new NotFoundException("Organization subscription not found");
+      this.logger.warn(
+        `getTier: no OrganizationSubscription row for org ${orgId} — using STARTER quotas (dev / lazy billing)`,
+      );
+      return SubscriptionTier.STARTER;
     }
     return sub.tier;
   }
@@ -57,7 +63,7 @@ export class QuotaService {
   async assertEmployeeQuota(organizationId: string): Promise<void> {
     const orgId = resolveOrganizationUuid(organizationId);
     if (!orgId) {
-      throw new NotFoundException("Organization subscription not found");
+      return;
     }
     const tier = await this.getTier(organizationId);
     const { maxEmployees } = await this.quotasForTier(tier);
@@ -109,7 +115,7 @@ export class QuotaService {
   ): Promise<void> {
     const orgId = resolveOrganizationUuid(organizationId);
     if (!orgId) {
-      throw new NotFoundException("Organization subscription not found");
+      return;
     }
     if (additionalBytes <= 0) {
       return;
@@ -150,7 +156,7 @@ export class QuotaService {
   async assertInvoiceMonthlyQuota(organizationId: string): Promise<void> {
     const orgId = resolveOrganizationUuid(organizationId);
     if (!orgId) {
-      throw new NotFoundException("Organization subscription not found");
+      return;
     }
     const tier = await this.getTier(organizationId);
     const { maxInvoicesPerMonth } = await this.quotasForTier(tier);

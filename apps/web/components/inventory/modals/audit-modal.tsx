@@ -9,7 +9,11 @@ import {
   notifyListRefresh,
 } from "../../../lib/list-refresh-bus";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { FORM_INPUT_CLASS } from "../../../lib/form-styles";
+import {
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
+} from "../../../lib/design-system";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
 type WarehouseRow = { id: string; name: string; inventoryAccountCode?: string };
@@ -101,7 +105,12 @@ export function AuditModal({
   }, [open]);
 
   async function createDraft() {
-    if (!token || creating || !warehouseId) return;
+    if (!token || creating) return;
+    if (loading) return;
+    if (!warehouseId) {
+      toast.error(t("inventory.auditSelectWarehouse"));
+      return;
+    }
     setCreating(true);
     setError(null);
     const res = await apiFetch("/api/inventory/audits", {
@@ -123,6 +132,10 @@ export function AuditModal({
 
   async function approveDraft() {
     if (!token || approving || !audit?.id) return;
+    if (audit.status !== "DRAFT") {
+      toast.error(t("inventory.auditApproveNotDraft"));
+      return;
+    }
     setApproving(true);
     setError(null);
     const res = await apiFetch(`/api/inventory/audits/${encodeURIComponent(audit.id)}/approve`, {
@@ -179,21 +192,11 @@ export function AuditModal({
   if (!open) return null;
 
   const footerDraft = (
-    <InventoryModalFooter
-      onCancel={onClose}
-      onSave={() => void createDraft()}
-      busy={creating}
-      saveDisabled={!warehouseId || loading}
-    />
+    <InventoryModalFooter onCancel={onClose} onSave={() => void createDraft()} busy={creating} />
   );
 
   const footerApprove = (
-    <InventoryModalFooter
-      onCancel={onClose}
-      onSave={() => void approveDraft()}
-      busy={approving}
-      saveDisabled={audit?.status !== "DRAFT"}
-    />
+    <InventoryModalFooter onCancel={onClose} onSave={() => void approveDraft()} busy={approving} />
   );
 
   return (
@@ -209,15 +212,15 @@ export function AuditModal({
       {loading && <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p>}
 
       {!loading && warehouses.length === 0 && !error && (
-        <p className="text-sm text-slate-600">{t("inventory.auditEmpty")}</p>
+        <p className="text-[13px] text-[#7F8C8D]">{t("inventory.auditEmpty")}</p>
       )}
 
       {!loading && warehouses.length > 0 && !audit && (
         <div className="grid gap-3 md:grid-cols-2">
-          <label className="block text-sm font-medium text-gray-700">
+          <label className={MODAL_FIELD_LABEL_CLASS}>
             {t("inventory.thWh")}
             <select
-              className={FORM_INPUT_CLASS}
+              className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
             >
@@ -228,9 +231,9 @@ export function AuditModal({
               ))}
             </select>
           </label>
-          <label className="block text-sm font-medium text-gray-700">
+          <label className={MODAL_FIELD_LABEL_CLASS}>
             {t("inventory.auditThDateDoc")}
-            <input type="date" className={FORM_INPUT_CLASS} value={dateStr} readOnly />
+            <input type="date" className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`} value={dateStr} readOnly />
           </label>
         </div>
       )}
@@ -238,7 +241,7 @@ export function AuditModal({
       {audit && (
         <>
           <section className={`overflow-x-auto rounded-[2px] border border-[#D5DADF] bg-white shadow-sm`}>
-            <table className="min-w-full text-sm">
+            <table className="min-w-full text-[13px]">
               <thead>
                 <tr className="border-b border-[#EBEDF0]">
                   <th className="p-2 text-left">{t("inventory.thProduct")}</th>
@@ -261,14 +264,14 @@ export function AuditModal({
                   return (
                     <tr key={l.id} className="border-t border-[#EBEDF0]">
                       <td className="p-2">{l.product?.name ?? l.productId}</td>
-                      <td className="p-2 font-mono text-xs">{l.product?.sku ?? "—"}</td>
+                      <td className="p-2 font-mono text-[13px]">{l.product?.sku ?? t("common.emptyValue")}</td>
                       <td className="p-2 text-right tabular-nums text-slate-600">{numStr(l.systemQty)}</td>
                       <td className="p-2 text-right">
                         <input
                           type="number"
                           min={0}
                           step="any"
-                          className="w-28 rounded-[2px] border border-[#D5DADF] px-2 py-1 text-right text-[13px] shadow-sm"
+                          className={`${MODAL_INPUT_NUMERIC_CLASS} !w-28 max-w-[7rem]`}
                           value={numStr(l.factQty)}
                           disabled={disabled}
                           onChange={(e) => {
@@ -293,7 +296,7 @@ export function AuditModal({
                           type="number"
                           min={0}
                           step="any"
-                          className="w-28 rounded-[2px] border border-[#D5DADF] px-2 py-1 text-right text-[13px] shadow-sm"
+                          className={`${MODAL_INPUT_NUMERIC_CLASS} !w-28 max-w-[7rem]`}
                           value={numStr(l.costPrice)}
                           disabled={disabled}
                           onChange={(e) => {
@@ -324,12 +327,12 @@ export function AuditModal({
           </section>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="m-0 text-sm text-slate-600">
+            <p className="m-0 text-[13px] text-[#7F8C8D]">
               {t("inventory.auditTotalDiff")}:{" "}
               <span className="font-semibold tabular-nums">{totals.sumAbs.toFixed(2)}</span>
             </p>
           </div>
-          <p className="mt-2 text-xs text-slate-500">{t("inventory.auditApproveHint")}</p>
+          <p className="mt-2 text-[13px] text-[#7F8C8D]">{t("inventory.auditApproveHint")}</p>
         </>
       )}
     </InventoryModalShell>

@@ -519,6 +519,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       pathname.startsWith("/payroll");
     const reportsActive =
       pathname.startsWith("/reporting") || pathname.startsWith("/reports");
+    const chartOfAccountsActive = pathname.startsWith("/accounting");
     const adminActive =
       pathname.startsWith("/companies") ||
       pathname.startsWith("/settings") ||
@@ -542,6 +543,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       catalogCrmActive,
       payrollHrActive,
       reportsActive,
+      chartOfAccountsActive,
       adminActive,
       reportingHubActive,
       inventoryMainActive,

@@ -1,18 +1,33 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
-import { FileStack } from "lucide-react";
+import { CheckCircle2, Eye, FileStack, Loader2, Send, SendHorizontal, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "../../../lib/api-client";
-import { PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
+import { formatInvoiceStatus } from "../../../lib/invoice-status";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
-import { CreateInvoiceModal } from "../../../components/sales/modals";
+import { CreateInvoiceModal, ViewInvoiceModal } from "../../../components/sales/modals";
 
 type Row = {
   id: string;
@@ -28,6 +43,7 @@ type Row = {
 export default function InvoicesPage() {
   const { t } = useTranslation();
   const { token, ready } = useRequireAuth();
+  const router = useRouter();
   const search = useSearchParams();
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +54,28 @@ export default function InvoicesPage() {
   const [payDate, setPayDate] = useState("");
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [invoiceActionBusy, setInvoiceActionBusy] = useState<string | null>(null);
+  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null);
+
+  const invoiceFromUrl = search.get("invoice");
+  useEffect(() => {
+    if (invoiceFromUrl) setViewInvoiceId(invoiceFromUrl);
+    else setViewInvoiceId(null);
+  }, [invoiceFromUrl]);
+
+  function openInvoiceView(id: string) {
+    setViewInvoiceId(id);
+    router.replace(`/sales/invoices?invoice=${encodeURIComponent(id)}`, {
+      scroll: false,
+    });
+  }
+
+  function closeInvoiceView() {
+    setViewInvoiceId(null);
+    const params = new URLSearchParams(search.toString());
+    params.delete("invoice");
+    const qs = params.toString();
+    router.replace(qs ? `/sales/invoices?${qs}` : "/sales/invoices", { scroll: false });
+  }
 
   const load = useCallback(async () => {
     if (!token) {
@@ -180,51 +218,67 @@ export default function InvoicesPage() {
             {rows.map((r) => (
               <div
                 key={r.id}
-                className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm text-sm space-y-2"
+                className="rounded-[2px] border border-[#D5DADF] bg-white p-4 shadow-sm text-[13px] space-y-2"
               >
-                <div className="font-semibold text-gray-900">{r.number}</div>
-                <div className="text-slate-600">{r.counterparty.name}</div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                  <span>{t("invoices.status")}: {r.status}</span>
+                <div className="font-semibold text-[#34495E]">{r.number}</div>
+                <div className="text-[#34495E]">{r.counterparty.name}</div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-[#34495E]">
+                  <span>
+                    {t("invoices.status")}: {formatInvoiceStatus(t, r.status)}
+                  </span>
                   <span>
                     {t("invoices.due")}: {String(r.dueDate).slice(0, 10)}
                   </span>
                 </div>
-                <div>{t("invoices.amount")}: {formatMoneyAzn(r.totalAmount)}</div>
+                <div className="text-right font-mono tabular-nums">
+                  {t("invoices.amount")}: {formatMoneyAzn(r.totalAmount)}
+                </div>
                 {r.paidTotal != null && (
-                  <div className="text-xs">
+                  <div className="text-[13px] text-right font-mono tabular-nums">
                     {t("invoices.paidCol")}: {formatMoneyAzn(r.paidTotal)}
                   </div>
                 )}
                 {r.remaining != null && (
-                  <div className="text-xs font-medium">
+                  <div className="text-[13px] font-medium text-right font-mono tabular-nums">
                     {t("invoices.remainingCol")}: {formatMoneyAzn(r.remaining)}
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Link
-                    href={`/sales/invoices/${r.id}`}
-                    className="text-xs px-2 py-1 rounded-md border border-action/25 text-primary bg-action/10 hover:bg-action/15"
+                <div className="flex flex-wrap items-center justify-end gap-1 pt-2">
+                  <button
+                    type="button"
+                    className={TABLE_ROW_ICON_BTN_CLASS}
+                    title={t("invoices.view")}
+                    onClick={() => openInvoiceView(r.id)}
                   >
-                    {t("invoices.view")}
-                  </Link>
+                    <Eye className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                  </button>
                   {r.status === "DRAFT" && (
                     <>
                       <button
                         type="button"
                         disabled={invoiceActionBusy !== null}
-                        className="text-xs px-2 py-1 rounded-md border border-slate-200 disabled:opacity-50"
+                        className={TABLE_ROW_ICON_BTN_CLASS}
+                        title={t("invoices.sent")}
                         onClick={() => void patchStatus(r.id, "SENT")}
                       >
-                        {invoiceActionBusy === `${r.id}:SENT` ? "…" : t("invoices.sent")}
+                        {invoiceActionBusy === `${r.id}:SENT` ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                        ) : (
+                          <SendHorizontal className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                        )}
                       </button>
                       <button
                         type="button"
                         disabled={invoiceActionBusy !== null}
-                        className="text-xs px-2 py-1 rounded-md border border-slate-200 disabled:opacity-50"
+                        className={TABLE_ROW_ICON_BTN_CLASS}
+                        title={t("invoices.payFull")}
                         onClick={() => void patchStatus(r.id, "PAID")}
                       >
-                        {invoiceActionBusy === `${r.id}:PAID` ? "…" : t("invoices.payFull")}
+                        {invoiceActionBusy === `${r.id}:PAID` ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                        )}
                       </button>
                     </>
                   )}
@@ -233,57 +287,68 @@ export default function InvoicesPage() {
                       <button
                         type="button"
                         disabled={invoiceActionBusy !== null}
-                        className="text-xs px-2 py-1 rounded-md border border-amber-200 bg-amber-50 disabled:opacity-50"
+                        className={TABLE_ROW_ICON_BTN_CLASS}
+                        title={t("invoices.partialPay")}
                         onClick={() => openPay(r)}
                       >
-                        {t("invoices.partialPay")}
+                        <Wallet className="h-4 w-4 text-[#2980B9]" aria-hidden />
                       </button>
                       <button
                         type="button"
                         disabled={invoiceActionBusy !== null}
-                        className="text-xs px-2 py-1 rounded-md border border-slate-200 disabled:opacity-50"
+                        className={TABLE_ROW_ICON_BTN_CLASS}
+                        title={t("invoices.payFull")}
                         onClick={() => void patchStatus(r.id, "PAID")}
                       >
-                        {invoiceActionBusy === `${r.id}:PAID` ? "…" : t("invoices.payFull")}
+                        {invoiceActionBusy === `${r.id}:PAID` ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                        )}
                       </button>
                     </>
                   )}
                   <button
                     type="button"
                     disabled={invoiceActionBusy !== null}
-                    className="text-xs px-2 py-1 rounded-md border border-slate-200 disabled:opacity-50"
+                    className={TABLE_ROW_ICON_BTN_CLASS}
+                    title={t("invoices.sendEmail")}
                     onClick={() => void sendEmail(r.id)}
                   >
-                    {invoiceActionBusy === `email:${r.id}` ? "…" : t("invoices.sendEmail")}
+                    {invoiceActionBusy === `email:${r.id}` ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                    ) : (
+                      <Send className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                    )}
                   </button>
                 </div>
                 {payForId === r.id && (
-                  <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                  <div className="pt-3 border-t border-[#D5DADF] flex flex-wrap gap-2">
                     <input
                       type="text"
                       value={payAmount}
                       onChange={(e) => setPayAmount(e.target.value)}
-                      className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm w-28"
+                      className="border border-[#D5DADF] rounded-[2px] px-2 py-1.5 text-[13px] w-28"
                       placeholder={t("invoices.payAmount")}
                     />
                     <input
                       type="date"
                       value={payDate}
                       onChange={(e) => setPayDate(e.target.value)}
-                      className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
+                      className="border border-[#D5DADF] rounded-[2px] px-2 py-1.5 text-[13px]"
                     />
                     <button
                       type="button"
                       disabled={paySubmitting}
                       onClick={() => void submitPartialPayment(r.id)}
-                      className={`${PRIMARY_BUTTON_CLASS} px-3 text-xs`}
+                      className={`${PRIMARY_BUTTON_CLASS} px-3 text-[13px]`}
                     >
                       {paySubmitting ? "…" : t("invoices.paySubmit")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setPayForId(null)}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs"
+                      className="px-3 py-1.5 rounded-[2px] border border-[#D5DADF] text-[13px]"
                     >
                       {t("invoices.payCancel")}
                     </button>
@@ -293,146 +358,191 @@ export default function InvoicesPage() {
             ))}
           </div>
 
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="min-w-[720px] text-sm">
+          <div className={`hidden md:block ${DATA_TABLE_VIEWPORT_CLASS}`}>
+            <table className={`${DATA_TABLE_CLASS} min-w-[720px]`}>
               <thead>
-                <tr>
-                  <th>{t("invoices.number")}</th>
-                  <th>{t("invoices.counterparty")}</th>
-                  <th>{t("invoices.status")}</th>
-                  <th className="hidden lg:table-cell">{t("invoices.due")}</th>
-                  <th>{t("invoices.amount")}</th>
-                  <th className="hidden xl:table-cell">{t("invoices.paidCol")}</th>
-                  <th className="hidden xl:table-cell">{t("invoices.remainingCol")}</th>
-                  <th>{t("invoices.actions")}</th>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("invoices.number")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("invoices.counterparty")}</th>
+                  <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("invoices.status")}</th>
+                  <th className={`hidden lg:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
+                    {t("invoices.due")}
+                  </th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("invoices.amount")}</th>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
+                    {t("invoices.paidCol")}
+                  </th>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
+                    {t("invoices.remainingCol")}
+                  </th>
+                  <th
+                    className={`${DATA_TABLE_TH_RIGHT_CLASS} min-w-[200px] w-[200px]`}
+                  >
+                    {t("invoices.actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <Fragment key={r.id}>
-                    <tr>
-                      <td className="font-medium text-gray-900">{r.number}</td>
-                      <td>{r.counterparty.name}</td>
-                      <td>{r.status}</td>
-                      <td className="hidden lg:table-cell">
+                    <tr className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>
+                        {r.number}
+                      </td>
+                      <td className={DATA_TABLE_TD_CLASS}>{r.counterparty.name}</td>
+                      <td className={DATA_TABLE_TD_CENTER_CLASS}>
+                        {formatInvoiceStatus(t, r.status)}
+                      </td>
+                      <td className={`hidden lg:table-cell ${DATA_TABLE_TD_RIGHT_CLASS}`}>
                         {String(r.dueDate).slice(0, 10)}
                       </td>
-                      <td>{formatMoneyAzn(r.totalAmount)}</td>
-                      <td className="hidden xl:table-cell">
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                        {formatMoneyAzn(r.totalAmount)}
+                      </td>
+                      <td className={`hidden xl:table-cell ${DATA_TABLE_TD_RIGHT_CLASS}`}>
                         {r.paidTotal != null ? formatMoneyAzn(r.paidTotal) : "—"}
                       </td>
-                      <td className="hidden xl:table-cell">
+                      <td className={`hidden xl:table-cell ${DATA_TABLE_TD_RIGHT_CLASS}`}>
                         {r.remaining != null ? formatMoneyAzn(r.remaining) : "—"}
                       </td>
-                      <td>
-                      <div className="flex flex-wrap gap-2">
-                        <Link
-                          href={`/sales/invoices/${r.id}`}
-                          className="text-sm px-2 py-1 rounded-md border border-action/25 text-primary bg-action/10 hover:bg-action/15"
-                        >
-                          {t("invoices.view")}
-                        </Link>
-                        {r.status === "DRAFT" && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={invoiceActionBusy !== null}
-                              className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10 disabled:opacity-50"
-                              onClick={() => void patchStatus(r.id, "SENT")}
-                            >
-                              {invoiceActionBusy === `${r.id}:SENT` ? "…" : t("invoices.sent")}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={invoiceActionBusy !== null}
-                              className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10 disabled:opacity-50"
-                              onClick={() => void patchStatus(r.id, "PAID")}
-                            >
-                              {invoiceActionBusy === `${r.id}:PAID` ? "…" : t("invoices.payFull")}
-                            </button>
-                          </>
-                        )}
-                        {(r.status === "SENT" || r.status === "PARTIALLY_PAID") && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={invoiceActionBusy !== null}
-                              className="text-sm px-2 py-1 rounded-md border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-                              onClick={() => openPay(r)}
-                            >
-                              {t("invoices.partialPay")}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={invoiceActionBusy !== null}
-                              className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10 disabled:opacity-50"
-                              onClick={() => void patchStatus(r.id, "PAID")}
-                            >
-                              {invoiceActionBusy === `${r.id}:PAID` ? "…" : t("invoices.payFull")}
-                            </button>
-                          </>
-                        )}
-                        <button
-                          type="button"
-                          disabled={invoiceActionBusy !== null}
-                          className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10 disabled:opacity-50"
-                          onClick={() => void sendEmail(r.id)}
-                        >
-                          {invoiceActionBusy === `email:${r.id}` ? "…" : t("invoices.sendEmail")}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {payForId === r.id && (
-                    <tr className="bg-slate-50">
-                      <td colSpan={8} className="p-4">
-                        <div className="flex flex-wrap items-end gap-3 max-w-xl">
-                          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                            {t("invoices.payAmount")}
-                            <input
-                              type="text"
-                              value={payAmount}
-                              onChange={(e) => setPayAmount(e.target.value)}
-                              className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm w-36"
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                            {t("invoices.payDate")}
-                            <input
-                              type="date"
-                              value={payDate}
-                              onChange={(e) => setPayDate(e.target.value)}
-                              className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
-                            />
-                          </label>
+                      <td className={`${DATA_TABLE_ACTIONS_TD_CLASS} min-w-[200px] w-[200px]`}>
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
-                            disabled={paySubmitting}
-                            onClick={() => void submitPartialPayment(r.id)}
-                            className={`${PRIMARY_BUTTON_CLASS} px-3 text-sm`}
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("invoices.view")}
+                            onClick={() => openInvoiceView(r.id)}
                           >
-                            {paySubmitting ? "…" : t("invoices.paySubmit")}
+                            <Eye className="h-4 w-4 text-[#2980B9]" aria-hidden />
                           </button>
+                          {r.status === "DRAFT" && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={invoiceActionBusy !== null}
+                                className={TABLE_ROW_ICON_BTN_CLASS}
+                                title={t("invoices.sent")}
+                                onClick={() => void patchStatus(r.id, "SENT")}
+                              >
+                                {invoiceActionBusy === `${r.id}:SENT` ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                                ) : (
+                                  <SendHorizontal className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={invoiceActionBusy !== null}
+                                className={TABLE_ROW_ICON_BTN_CLASS}
+                                title={t("invoices.payFull")}
+                                onClick={() => void patchStatus(r.id, "PAID")}
+                              >
+                                {invoiceActionBusy === `${r.id}:PAID` ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                                )}
+                              </button>
+                            </>
+                          )}
+                          {(r.status === "SENT" || r.status === "PARTIALLY_PAID") && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={invoiceActionBusy !== null}
+                                className={TABLE_ROW_ICON_BTN_CLASS}
+                                title={t("invoices.partialPay")}
+                                onClick={() => openPay(r)}
+                              >
+                                <Wallet className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={invoiceActionBusy !== null}
+                                className={TABLE_ROW_ICON_BTN_CLASS}
+                                title={t("invoices.payFull")}
+                                onClick={() => void patchStatus(r.id, "PAID")}
+                              >
+                                {invoiceActionBusy === `${r.id}:PAID` ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                                )}
+                              </button>
+                            </>
+                          )}
                           <button
                             type="button"
-                            onClick={() => setPayForId(null)}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm"
+                            disabled={invoiceActionBusy !== null}
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("invoices.sendEmail")}
+                            onClick={() => void sendEmail(r.id)}
                           >
-                            {t("invoices.payCancel")}
+                            {invoiceActionBusy === `email:${r.id}` ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                            ) : (
+                              <Send className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                            )}
                           </button>
                         </div>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {payForId === r.id && (
+                      <tr className={`${DATA_TABLE_TR_CLASS} bg-[#F8FAFC]`}>
+                        <td colSpan={8} className={`${DATA_TABLE_TD_CLASS} p-4`}>
+                          <div className="flex flex-wrap items-end gap-3 max-w-xl">
+                            <label className="flex flex-col gap-1 text-xs font-semibold text-[#475569]">
+                              {t("invoices.payAmount")}
+                              <input
+                                type="text"
+                                value={payAmount}
+                                onChange={(e) => setPayAmount(e.target.value)}
+                                className="border border-[#D5DADF] rounded-[2px] px-2 py-1.5 text-[13px] w-36"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 text-xs font-semibold text-[#475569]">
+                              {t("invoices.payDate")}
+                              <input
+                                type="date"
+                                value={payDate}
+                                onChange={(e) => setPayDate(e.target.value)}
+                                className="border border-[#D5DADF] rounded-[2px] px-2 py-1.5 text-[13px]"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={paySubmitting}
+                              onClick={() => void submitPartialPayment(r.id)}
+                              className={`${PRIMARY_BUTTON_CLASS} px-3 text-[13px]`}
+                            >
+                              {paySubmitting ? "…" : t("invoices.paySubmit")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPayForId(null)}
+                              className="px-3 py-1.5 rounded-[2px] border border-[#D5DADF] text-[13px]"
+                            >
+                              {t("invoices.payCancel")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
       <CreateInvoiceModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <ViewInvoiceModal
+        open={!!viewInvoiceId}
+        invoiceId={viewInvoiceId}
+        onClose={closeInvoiceView}
+        onInvoicesUpdated={() => void load()}
+      />
     </div>
   );
 }

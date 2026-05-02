@@ -1,17 +1,16 @@
+import { uiLangRuAz } from "./i18n/ui-lang";
+
 export type AccountNameFields = {
   nameAz: string;
   nameRu: string;
   nameEn: string;
 };
 
-/** Согласовано с `pickAccountDisplayName` в `@dayday/database`. */
+/** Согласовано с `pickAccountDisplayName` в `@dayday/database`. Только `ru` | `az` (см. `ui-lang.ts`). */
 export function accountDisplayName(
   row: AccountNameFields,
   locale: string | undefined,
 ): string {
-  const raw = (locale ?? "az").trim().toLowerCase();
-  const two = raw.startsWith("en") ? "en" : raw.startsWith("ru") ? "ru" : "az";
-  if (two === "ru") return row.nameRu || row.nameAz;
-  if (two === "en") return row.nameEn || row.nameAz;
+  if (uiLangRuAz(locale) === "ru") return row.nameRu || row.nameAz;
   return row.nameAz || row.nameRu;
 }

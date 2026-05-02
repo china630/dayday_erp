@@ -95,7 +95,7 @@ export function AuditHistoryModal({
 
       {!loading && rows.length > 0 && (
         <div className={`overflow-x-auto rounded-[2px] border border-[#D5DADF] bg-white shadow-sm`}>
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-[13px]">
             <thead>
               <tr className="border-b border-[#EBEDF0]">
                 <th className="p-2 text-left">{t("inventory.auditThDateDoc")}</th>
@@ -109,9 +109,11 @@ export function AuditHistoryModal({
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-[#EBEDF0]">
                   <td className="whitespace-nowrap p-2">
-                    {typeof r.date === "string" ? r.date.slice(0, 10) : "—"}
+                    {typeof r.date === "string" ? r.date.slice(0, 10) : t("common.emptyValue")}
                   </td>
-                  <td className="whitespace-nowrap p-2 text-slate-700">{r.warehouse?.name ?? "—"}</td>
+                  <td className="whitespace-nowrap p-2 text-slate-700">
+                    {r.warehouse?.name ?? t("common.emptyValue")}
+                  </td>
                   <td className="whitespace-nowrap p-2 text-slate-600">
                     {r.status === "APPROVED"
                       ? t("inventory.auditStatusApproved")
@@ -120,7 +122,7 @@ export function AuditHistoryModal({
                         : r.status}
                   </td>
                   <td className="whitespace-nowrap p-2 text-slate-600">
-                    {r.createdAt?.slice(0, 19)?.replace("T", " ") ?? "—"}
+                    {r.createdAt?.slice(0, 19)?.replace("T", " ") ?? t("common.emptyValue")}
                   </td>
                   <td className="p-2 text-right">
                     <Link

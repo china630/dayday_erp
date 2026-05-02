@@ -11,8 +11,15 @@ import { apiFetch } from "../../../../lib/api-client";
 import { notifyListRefresh } from "../../../../lib/list-refresh-bus";
 import { useAuth } from "../../../../lib/auth-context";
 import {
-  BORDER_MUTED_CLASS,
-  INPUT_BORDERED_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
 } from "../../../../lib/design-system";
@@ -220,17 +227,17 @@ export default function InventoryAuditDetailPage() {
 
       {!loading && row && lines.length > 0 && (
         <>
-          <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white shadow-sm`}>
-            <table className="min-w-full text-sm">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-full`}>
               <thead>
-                <tr className={`border-b ${BORDER_MUTED_CLASS} bg-[#F4F5F7] text-left text-[#34495E]`}>
-                  <th className="p-2 font-semibold">{t("inventory.auditThProduct")}</th>
-                  <th className="p-2 font-semibold">{t("inventory.thSku")}</th>
-                  <th className="p-2 text-right font-semibold">{t("inventory.auditThSystem")}</th>
-                  <th className="p-2 text-right font-semibold">{t("inventory.auditThFact")}</th>
-                  <th className="p-2 text-right font-semibold">{t("inventory.auditThDiff")}</th>
-                  <th className="p-2 text-right font-semibold">{t("inventory.auditThCost")}</th>
-                  <th className="p-2 text-right font-semibold">{t("inventory.auditThAmountDiff")}</th>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.auditThProduct")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thSku")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThSystem")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThFact")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThDiff")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThCost")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThAmountDiff")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,17 +248,21 @@ export default function InventoryAuditDetailPage() {
                   const cost = toNum(numStr(l.costPrice));
                   const amt = diff * cost;
                   return (
-                    <tr key={l.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
-                      <td className="p-2 text-[#34495E]">{l.product?.name ?? l.productId}</td>
-                      <td className="p-2 font-mono text-xs text-slate-600">{l.product?.sku ?? "—"}</td>
-                      <td className="p-2 text-right tabular-nums text-slate-700">{numStr(l.systemQty)}</td>
-                      <td className="p-2 text-right">
+                    <tr key={l.id} className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>
+                        {l.product?.name ?? l.productId}
+                      </td>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs text-[#7F8C8D]`}>
+                        {l.product?.sku ?? "—"}
+                      </td>
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>{numStr(l.systemQty)}</td>
+                      <td className={`${DATA_TABLE_TD_RIGHT_CLASS} max-w-[9rem]`}>
                         {isDraft ? (
                           <input
                             type="number"
                             min={0}
                             step="any"
-                            className={`w-28 text-right ${INPUT_BORDERED_CLASS}`}
+                            className={`${MODAL_INPUT_NUMERIC_CLASS} w-full max-w-[8rem] ml-auto`}
                             value={numStr(l.factQty)}
                             onChange={(e) => {
                               const v = e.target.value;
@@ -272,11 +283,13 @@ export default function InventoryAuditDetailPage() {
                           <span className="tabular-nums">{numStr(l.factQty)}</span>
                         )}
                       </td>
-                      <td className="p-2 text-right tabular-nums">{diff.toFixed(4)}</td>
-                      <td className="p-2 text-right tabular-nums text-slate-700">{numStr(l.costPrice)}</td>
-                      <td className="p-2 text-right tabular-nums">
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>{diff.toFixed(4)}</td>
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>{numStr(l.costPrice)}</td>
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                         {amt.toFixed(2)}
-                        {savingLineId === l.id ? <span className="ml-1 text-xs text-slate-400">…</span> : null}
+                        {savingLineId === l.id ? (
+                          <span className="ml-1 text-xs text-[#7F8C8D]">…</span>
+                        ) : null}
                       </td>
                     </tr>
                   );

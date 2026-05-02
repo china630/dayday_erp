@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { EmptyState } from "../empty-state";
 import {
   CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
 } from "../../lib/design-system";
-import { FORM_INPUT_CLASS } from "../../lib/form-styles";
+import { Button } from "../ui/button";
 
 type WarehouseRow = { id: string; name: string; inventoryAccountCode?: string };
 
@@ -98,7 +101,11 @@ export function InventoryAuditCreateFlow({
   }, []);
 
   async function createDraft() {
-    if (!token || creating || !warehouseId) return;
+    if (!token || creating) return;
+    if (!warehouseId) {
+      toast.error(t("inventory.auditSelectWarehouse"));
+      return;
+    }
     setCreating(true);
     setError(null);
     const res = await apiFetch("/api/inventory/audits", {
@@ -116,6 +123,10 @@ export function InventoryAuditCreateFlow({
 
   async function approveDraft() {
     if (!token || approving || !audit?.id) return;
+    if (audit.status !== "DRAFT") {
+      toast.error(t("inventory.auditApproveNotDraft"));
+      return;
+    }
     setApproving(true);
     setError(null);
     const res = await apiFetch(`/api/inventory/audits/${encodeURIComponent(audit.id)}/approve`, {
@@ -167,7 +178,7 @@ export function InventoryAuditCreateFlow({
 
   if (!ready) {
     return (
-      <div className="text-gray-600">
+      <div className="text-[13px] text-[#7F8C8D]">
         <p>{t("common.loading")}</p>
       </div>
     );
@@ -175,76 +186,82 @@ export function InventoryAuditCreateFlow({
   if (!token) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="m-0 text-xl font-semibold text-[#34495E]">{t("inventory.auditTitle")}</h2>
-          <p className="mb-0 mt-1 text-sm text-slate-600">{t("inventory.auditSubtitle")}</p>
+          <h2 className="m-0 text-lg font-semibold text-[#34495E]">{t("inventory.auditTitle")}</h2>
+          <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("inventory.auditSubtitle")}</p>
         </div>
-        <button type="button" onClick={onBackToInventory} className="text-sm text-action hover:text-primary">
+        <Button
+          type="button"
+          variant="ghost"
+          className="!h-auto text-[13px] font-medium text-[#2980B9] hover:bg-transparent"
+          onClick={onBackToInventory}
+        >
           {t("inventory.auditBack")}
-        </button>
+        </Button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {loading && <p className="text-gray-600">{t("common.loading")}</p>}
+      {error && <p className="text-[13px] text-red-600">{error}</p>}
+      {loading && <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p>}
 
       {!loading && warehouses.length === 0 && !error && (
         <EmptyState title={t("inventory.auditEmpty")} description={t("inventory.emptyStockHint")} />
       )}
 
       {!loading && warehouses.length > 0 && !audit && (
-        <div className={`${CARD_CONTAINER_CLASS} space-y-4 p-5`}>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t("inventory.thWh")}
-                <select
-                  className={FORM_INPUT_CLASS}
-                  value={warehouseId}
-                  onChange={(e) => setWarehouseId(e.target.value)}
-                >
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t("inventory.auditThDateDoc")}
-                <input type="date" className={FORM_INPUT_CLASS} value={dateStr} readOnly />
-              </label>
-            </div>
+        <div className={`${CARD_CONTAINER_CLASS} space-y-4 p-6`}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("inventory.thWh")}
+              <select
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                value={warehouseId}
+                onChange={(e) => setWarehouseId(e.target.value)}
+              >
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("inventory.auditThDateDoc")}
+              <input type="date" className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`} value={dateStr} readOnly />
+            </label>
           </div>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              disabled={creating}
-              onClick={() => void createDraft()}
-              className={PRIMARY_BUTTON_CLASS}
-            >
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="primary" disabled={creating} onClick={() => void createDraft()}>
               {creating ? "…" : t("inventory.auditSaveDraft")}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {audit && (
         <>
-          <section className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="min-w-full text-sm">
+          <section className="overflow-x-auto rounded-[2px] border border-[#D5DADF] bg-white shadow-sm">
+            <table className="min-w-full border-collapse text-[13px]">
               <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="p-2 text-left">{t("inventory.thProduct")}</th>
-                  <th className="p-2 text-left">{t("inventory.thSku")}</th>
-                  <th className="p-2 text-right">{t("inventory.auditThSystem")}</th>
-                  <th className="p-2 text-right">{t("inventory.auditThFact")}</th>
-                  <th className="p-2 text-right">{t("inventory.auditThDiff")}</th>
-                  <th className="p-2 text-right">{t("inventory.auditThCost")}</th>
-                  <th className="p-2 text-right">{t("inventory.auditThAmountDiff")}</th>
+                <tr className="sticky top-0 z-[1] border-b border-[#D5DADF] bg-[#F8FAFC]">
+                  <th className="px-4 py-2 text-left text-xs font-bold text-[#475569]">{t("inventory.thProduct")}</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold text-[#475569]">{t("inventory.thSku")}</th>
+                  <th className="px-4 py-2 text-right text-xs font-bold text-[#475569]">
+                    {t("inventory.auditThSystem")}
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-bold text-[#475569]">
+                    {t("inventory.auditThFact")}
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-bold text-[#475569]">
+                    {t("inventory.auditThDiff")}
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-bold text-[#475569]">
+                    {t("inventory.auditThCost")}
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-bold text-[#475569]">
+                    {t("inventory.auditThAmountDiff")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -256,16 +273,20 @@ export function InventoryAuditCreateFlow({
                   const amt = diff * cost;
                   const disabled = audit.status !== "DRAFT";
                   return (
-                    <tr key={l.id} className="border-t border-slate-50">
-                      <td className="p-2">{l.product?.name ?? l.productId}</td>
-                      <td className="p-2 font-mono text-xs">{l.product?.sku ?? "—"}</td>
-                      <td className="p-2 text-right tabular-nums text-slate-600">{numStr(l.systemQty)}</td>
-                      <td className="p-2 text-right">
+                    <tr key={l.id} className="border-b border-[#D5DADF] bg-white transition-colors hover:bg-[#F1F5F9]">
+                      <td className="px-4 py-2 align-middle text-[#34495E]">{l.product?.name ?? l.productId}</td>
+                      <td className="px-4 py-2 align-middle font-mono text-[13px] text-[#7F8C8D]">
+                        {l.product?.sku ?? t("common.emptyValue")}
+                      </td>
+                      <td className="px-4 py-2 align-middle text-right font-mono tabular-nums text-[#7F8C8D]">
+                        {numStr(l.systemQty)}
+                      </td>
+                      <td className="px-4 py-2 align-middle text-right">
                         <input
                           type="number"
                           min={0}
                           step="any"
-                          className="w-28 rounded border border-slate-200 px-2 py-1 text-right"
+                          className={`${MODAL_INPUT_NUMERIC_CLASS} !w-28 max-w-[7rem]`}
                           value={numStr(l.factQty)}
                           disabled={disabled}
                           onChange={(e) => {
@@ -282,13 +303,15 @@ export function InventoryAuditCreateFlow({
                           }}
                         />
                       </td>
-                      <td className="p-2 text-right tabular-nums">{diff.toFixed(2)}</td>
-                      <td className="p-2 text-right">
+                      <td className="px-4 py-2 align-middle text-right font-mono tabular-nums text-[#34495E]">
+                        {diff.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 align-middle text-right">
                         <input
                           type="number"
                           min={0}
                           step="any"
-                          className="w-28 rounded border border-slate-200 px-2 py-1 text-right"
+                          className={`${MODAL_INPUT_NUMERIC_CLASS} !w-28 max-w-[7rem]`}
                           value={numStr(l.costPrice)}
                           disabled={disabled}
                           onChange={(e) => {
@@ -305,9 +328,11 @@ export function InventoryAuditCreateFlow({
                           }}
                         />
                       </td>
-                      <td className="p-2 text-right tabular-nums">
+                      <td className="px-4 py-2 align-middle text-right font-mono tabular-nums text-[#34495E]">
                         {amt.toFixed(2)}
-                        {savingLineId === l.id ? <span className="ml-2 text-xs text-slate-400">…</span> : null}
+                        {savingLineId === l.id ? (
+                          <span className="ml-2 text-xs text-[#7F8C8D]">…</span>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -316,26 +341,21 @@ export function InventoryAuditCreateFlow({
             </table>
           </section>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="m-0 text-sm text-slate-600">
+          <div className="space-y-4">
+            <p className="m-0 text-[13px] text-[#7F8C8D]">
               {t("inventory.auditTotalDiff")}:{" "}
-              <span className="font-semibold tabular-nums">{totals.sumAbs.toFixed(2)}</span>
+              <span className="font-semibold tabular-nums text-[#34495E]">{totals.sumAbs.toFixed(2)}</span>
             </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={approving || audit.status !== "DRAFT"}
-                onClick={() => void approveDraft()}
-                className={PRIMARY_BUTTON_CLASS}
-              >
-                {approving ? "…" : t("inventory.auditApprove")}
-              </button>
-              <button type="button" onClick={onNavigateToHistory} className={SECONDARY_BUTTON_CLASS}>
-                {t("inventory.auditHistoryBack")}
-              </button>
-            </div>
+            <p className="m-0 max-w-2xl text-[13px] text-[#7F8C8D]">{t("inventory.auditApproveHint")}</p>
           </div>
-          <p className="max-w-2xl text-xs text-slate-500">{t("inventory.auditApproveHint")}</p>
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onNavigateToHistory}>
+              {t("inventory.auditHistoryBack")}
+            </Button>
+            <Button type="button" variant="primary" disabled={approving} onClick={() => void approveDraft()}>
+              {approving ? "…" : t("inventory.auditApprove")}
+            </Button>
+          </div>
         </>
       )}
     </div>

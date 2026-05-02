@@ -12,12 +12,17 @@ import {
   type CounterpartyLegalForm,
 } from "../../../lib/counterparty-legal-form";
 import { notifyListRefresh } from "../../../lib/list-refresh-bus";
-import { inputFieldClass, inputFieldInlineClass } from "../../../lib/form-classes";
+import {
+  MODAL_CHECKBOX_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_TAX_ID_CLASS,
+} from "../../../lib/design-system";
 import { Button } from "../../ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../ui/select";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
-/** Без `uppercase`: иначе при сбое i18n сырой ключ выглядит как «COUNTERPARTIES.…». */
-const lbl = "block text-xs font-semibold text-slate-600 mb-1.5";
+const lbl = MODAL_FIELD_LABEL_CLASS;
 
 function isPoisonLookupName(name: string): boolean {
   const n = name.trim();
@@ -255,7 +260,6 @@ export function CreateCounterpartyModal({
         <SalesModalFooter
           onCancel={onClose}
           busy={busy}
-          saveDisabled={!taxValid || !name.trim()}
           formId="create-counterparty-form"
           cancelVariant="ghost"
         />
@@ -274,12 +278,12 @@ export function CreateCounterpartyModal({
             autoComplete="organization"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
           />
         </div>
         <div>
           <span className={lbl}>{t("counterparties.taxId")}</span>
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex w-full max-w-md min-w-0 items-center justify-between gap-3">
             <input
               name="taxId"
               inputMode="numeric"
@@ -288,7 +292,7 @@ export function CreateCounterpartyModal({
               onChange={(e) => {
                 setTaxId(e.target.value.replace(/\D/g, "").slice(0, 10));
               }}
-              className={inputFieldInlineClass}
+              className={MODAL_INPUT_TAX_ID_CLASS}
               aria-invalid={!taxValid && digits.length > 0}
             />
             <Button
@@ -297,7 +301,7 @@ export function CreateCounterpartyModal({
               disabled={voenCheckBusy || !taxValid}
               aria-busy={voenCheckBusy}
               aria-label={t("counterparties.yoxla")}
-              className="shrink-0"
+              className="shrink-0 self-center"
               onClick={(e) => {
                 e.preventDefault();
                 void handleCheckVoen();
@@ -312,38 +316,38 @@ export function CreateCounterpartyModal({
           </div>
         </div>
         <div>
-          <span className={lbl}>{t("counterparties.legalForm")}</span>
-          <select
+          <span className={lbl}>{t("counterparties.legalFormField")}</span>
+          <Select
             key={i18n.language}
             value={legalForm}
-            onChange={(e) => setLegalForm(e.target.value as CounterpartyLegalForm)}
-            className={inputFieldClass}
-            required
+            onValueChange={(v) => setLegalForm(v as CounterpartyLegalForm)}
+            className={MODAL_INPUT_CLASS}
           >
-            {legalFormOptions.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="" />
+            <SelectContent>
+              {legalFormOptions.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border border-slate-300"
+        <label className="flex cursor-pointer items-center gap-2 text-[13px] text-[#34495E]">
+          <input type="checkbox" className={MODAL_CHECKBOX_CLASS}
             checked={isVatPayer}
             onChange={(e) => setIsVatPayer(e.target.checked)}
           />
           <span>{t("counterparties.vatPayerCheckbox")}</span>
         </label>
         {isRiskyTaxpayer === true ? (
-          <div className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+          <div className="inline-flex items-center rounded-[2px] border border-amber-300 bg-amber-100 px-2.5 py-1 text-[13px] font-semibold text-amber-900">
             {t("counterparties.riskyTaxpayerBadge")}
           </div>
         ) : null}
         <div>
           <span className={lbl}>{t("counterparties.role")}</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as typeof role)} className={inputFieldClass}>
+          <select value={role} onChange={(e) => setRole(e.target.value as typeof role)} className={MODAL_INPUT_CLASS}>
             <option value="CUSTOMER">{t("counterparties.roleCustomer")}</option>
             <option value="SUPPLIER">{t("counterparties.roleSupplier")}</option>
             <option value="BOTH">{t("counterparties.roleTradingPartner")}</option>
@@ -356,7 +360,7 @@ export function CreateCounterpartyModal({
             name="address"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
           />
         </div>
         <div>
@@ -366,7 +370,7 @@ export function CreateCounterpartyModal({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
           />
         </div>
       </form>

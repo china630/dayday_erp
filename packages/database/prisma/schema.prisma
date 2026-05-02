@@ -1714,6 +1714,8 @@ enum OrgBankAccountCurrency {
   AZN
   USD
   EUR
+  RUB
+  TRY
 }
 
 enum UserRole {

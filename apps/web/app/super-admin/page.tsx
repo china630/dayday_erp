@@ -4,13 +4,28 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useRouter } from "next/navigation";
+import { Building2, Check, LogIn, Pencil, Trash2 } from "lucide-react";
 import { EmptyState } from "../../components/empty-state";
 import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../lib/design-system";
 
 type Tab =
@@ -766,69 +781,75 @@ export default function SuperAdminPage() {
             </button>
           </div>
           {orgs && (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-left text-xs uppercase text-gray-600">
-                  <tr>
-                    <th className="px-3 py-2">{t("superAdmin.orgColVoen")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.orgColName")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.orgColTier")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.orgColExpires")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.orgColTrial")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.orgColBlocked")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.orgColActions")}</th>
+            <>
+            <div className={DATA_TABLE_VIEWPORT_CLASS}>
+              <table className={DATA_TABLE_CLASS}>
+                <thead>
+                  <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.orgColVoen")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.orgColName")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.orgColTier")}</th>
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("superAdmin.orgColExpires")}</th>
+                    <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("superAdmin.orgColTrial")}</th>
+                    <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("superAdmin.orgColBlocked")}</th>
+                    <th className={DATA_TABLE_ACTIONS_TH_CLASS}>{t("superAdmin.orgColActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orgs.items.map((o) => (
-                    <tr key={o.id} className="border-t border-gray-100">
-                      <td className="px-3 py-2 font-mono">{o.taxId}</td>
-                      <td className="px-3 py-2">{o.name}</td>
-                      <td className="px-3 py-2">
+                    <tr key={o.id} className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-mono`}>{o.taxId}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>{o.name}</td>
+                      <td className={DATA_TABLE_TD_CLASS}>
                         {o.subscription
                           ? tierLabel(o.subscription.tier, t)
                           : "—"}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                         {fmtExpires(o.subscription?.expiresAt)}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className={DATA_TABLE_TD_CENTER_CLASS}>
                         {o.subscription?.isTrial
                           ? t("common.yes")
                           : t("common.no")}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className={DATA_TABLE_TD_CENTER_CLASS}>
                         {o.subscription?.isBlocked
                           ? t("common.yes")
                           : t("common.no")}
                       </td>
-                      <td className="px-3 py-2 text-right space-x-3 whitespace-nowrap">
-                        <button
-                          type="button"
-                          className="text-action hover:underline text-sm"
-                          onClick={() => openSubModal(o)}
-                        >
-                          {t("superAdmin.orgEditSubscription")}
-                        </button>
-                        {o.primaryUserId ? (
+                      <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                        <div className="flex justify-end gap-1">
                           <button
                             type="button"
-                            className="text-action hover:underline text-sm"
-                            onClick={() => {
-                              void impersonateAsUser(o.primaryUserId!).then(
-                                () => router.push("/"),
-                              );
-                            }}
+                            className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#7F8C8D]`}
+                            title={t("superAdmin.orgEditSubscription")}
+                            onClick={() => openSubModal(o)}
                           >
-                            {t("superAdmin.loginAs")}
+                            <Pencil className="h-4 w-4 shrink-0" aria-hidden />
                           </button>
-                        ) : null}
+                          {o.primaryUserId ? (
+                            <button
+                              type="button"
+                              className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#2980B9]`}
+                              title={t("superAdmin.loginAs")}
+                              onClick={() => {
+                                void impersonateAsUser(o.primaryUserId!).then(() =>
+                                  router.push("/"),
+                                );
+                              }}
+                            >
+                              <LogIn className="h-4 w-4 shrink-0" aria-hidden />
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="px-3 py-2 text-xs text-gray-500 flex justify-between">
+            </div>
+              <div className="mt-2 flex justify-between rounded-[2px] border border-[#D5DADF] bg-[#F8FAFC] px-4 py-2 text-xs text-[#7F8C8D]">
                 <span>{t("superAdmin.totalLabel", { count: orgs.total })}</span>
                 <span>
                   <button
@@ -852,7 +873,7 @@ export default function SuperAdminPage() {
                   </button>
                 </span>
               </div>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -884,66 +905,73 @@ export default function SuperAdminPage() {
             </button>
           </div>
           {users && (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-left text-xs uppercase text-gray-600">
-                  <tr>
-                    <th className="px-3 py-2">{t("superAdmin.usersColEmail")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.usersColName")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.usersColSuper")}</th>
-                    <th className="px-3 py-2">{t("superAdmin.usersColOrgs")}</th>
-                    <th className="px-3 py-2">
+            <>
+            <div className={DATA_TABLE_VIEWPORT_CLASS}>
+              <table className={DATA_TABLE_CLASS}>
+                <thead>
+                  <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.usersColEmail")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.usersColName")}</th>
+                    <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("superAdmin.usersColSuper")}</th>
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("superAdmin.usersColOrgs")}</th>
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>
                       {t("superAdmin.usersColCreated")}
                     </th>
-                    <th className="px-3 py-2" />
+                    <th className={DATA_TABLE_ACTIONS_TH_CLASS} />
                   </tr>
                 </thead>
                 <tbody>
                   {users.items.map((u) => (
-                    <tr key={u.id} className="border-t border-gray-100">
-                      <td className="px-3 py-2 font-mono text-xs">{u.email}</td>
-                      <td className="px-3 py-2">
+                    <tr key={u.id} className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>{u.email}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>
                         {[u.firstName, u.lastName].filter(Boolean).join(" ").trim() ||
                           u.fullName ||
                           "—"}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className={DATA_TABLE_TD_CENTER_CLASS}>
                         {u.isSuperAdmin ? t("common.yes") : t("common.no")}
                       </td>
-                      <td className="px-3 py-2 tabular-nums">
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                         {u.membershipCount > 0 ? (
                           <button
                             type="button"
-                            className="text-action hover:underline font-medium"
+                            className={`${TABLE_ROW_ICON_BTN_CLASS} inline-flex min-w-[2.5rem] gap-1 text-[#2980B9]`}
+                            title={t("superAdmin.userOrgsModalTitle")}
                             onClick={() => void openUserOrgsModal(u.id)}
                           >
-                            {u.membershipCount}
+                            <Building2 className="h-4 w-4 shrink-0" aria-hidden />
+                            <span className="tabular-nums text-[12px] font-semibold">
+                              {u.membershipCount}
+                            </span>
                           </button>
                         ) : (
-                          <span className="text-gray-500">0</span>
+                          <span className="text-[#7F8C8D]">0</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                         {u.createdAt.slice(0, 19).replace("T", " ")}
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
                         <button
                           type="button"
-                          className="text-action hover:underline"
+                          className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#2980B9]`}
+                          title={t("superAdmin.loginAs")}
                           onClick={() => {
                             void impersonateAsUser(u.id).then(() =>
                               router.push("/"),
                             );
                           }}
                         >
-                          {t("superAdmin.loginAs")}
+                          <LogIn className="h-4 w-4 shrink-0" aria-hidden />
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="px-3 py-2 text-xs text-gray-500 flex justify-between">
+            </div>
+              <div className="mt-2 flex justify-between rounded-[2px] border border-[#D5DADF] bg-[#F8FAFC] px-4 py-2 text-xs text-[#7F8C8D]">
                 <span>
                   {t("superAdmin.totalLabel", { count: users.total })}
                 </span>
@@ -969,7 +997,7 @@ export default function SuperAdminPage() {
                   </button>
                 </span>
               </div>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -1132,25 +1160,26 @@ export default function SuperAdminPage() {
                   <h2 className="text-sm font-bold text-[#34495E] uppercase tracking-wide">
                     {t("superAdmin.billingModuleCatalogTitle")}
                   </h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="text-left border-b border-[#EBEDF0] text-[13px] font-semibold text-[#34495E]">
-                        <tr>
-                          <th className="py-2 pr-3">{t("superAdmin.billingColModule")}</th>
-                          <th className="py-2 pr-3">{t("superAdmin.billingColPrice")}</th>
-                          <th className="py-2 w-28" />
+                  <div className={DATA_TABLE_VIEWPORT_CLASS}>
+                    <table className={DATA_TABLE_CLASS}>
+                      <thead>
+                        <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                          <th className={DATA_TABLE_TH_LEFT_CLASS}>
+                            {t("superAdmin.billingColModule")}
+                          </th>
+                          <th className={DATA_TABLE_TH_RIGHT_CLASS}>
+                            {t("superAdmin.billingColPrice")}
+                          </th>
+                          <th className={DATA_TABLE_ACTIONS_TH_CLASS} />
                         </tr>
                       </thead>
                       <tbody>
                         {billing.pricingModules.map((mod) => (
-                          <tr
-                            key={mod.id}
-                            className="border-t border-[#EBEDF0] text-[#34495E]"
-                          >
-                            <td className="py-2 pr-3 font-medium">{mod.name}</td>
-                            <td className="py-2 pr-3">
+                          <tr key={mod.id} className={DATA_TABLE_TR_CLASS}>
+                            <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>{mod.name}</td>
+                            <td className={`${DATA_TABLE_TD_RIGHT_CLASS} max-w-[10rem]`}>
                               <input
-                                className="w-28 border border-[#D5DADF] rounded-[2px] px-2 py-1 text-sm tabular-nums"
+                                className={`${MODAL_INPUT_NUMERIC_CLASS} w-full max-w-[8rem] py-1.5 px-2 text-[13px] ml-auto`}
                                 value={modulePriceEdits[mod.id] ?? ""}
                                 onChange={(e) =>
                                   setModulePriceEdits((s) => ({
@@ -1160,10 +1189,11 @@ export default function SuperAdminPage() {
                                 }
                               />
                             </td>
-                            <td className="py-2 text-right">
+                            <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
                               <button
                                 type="button"
-                                className={PRIMARY_BUTTON_CLASS}
+                                className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#2980B9]`}
+                                title={t("superAdmin.billingSave")}
                                 onClick={async () => {
                                   const n = Number.parseFloat(
                                     modulePriceEdits[mod.id] ?? "",
@@ -1184,7 +1214,7 @@ export default function SuperAdminPage() {
                                   void loadBilling();
                                 }}
                               >
-                                {t("superAdmin.billingSave")}
+                                <Check className="h-4 w-4 shrink-0" aria-hidden />
                               </button>
                             </td>
                           </tr>
@@ -1588,28 +1618,25 @@ export default function SuperAdminPage() {
           >
             {t("superAdmin.save")}
           </button>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white text-sm">
-            <table className="min-w-full">
-              <thead className="bg-gray-50 text-left text-xs uppercase text-gray-600">
-                <tr>
-                  <th className="px-2 py-2">{t("superAdmin.i18nColKey")}</th>
-                  <th className="px-2 py-2">{t("superAdmin.i18nColValue")}</th>
-                  <th className="px-2 py-2 w-20" />
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={DATA_TABLE_CLASS}>
+              <thead>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.i18nColKey")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.i18nColValue")}</th>
+                  <th className={DATA_TABLE_ACTIONS_TH_CLASS} />
                 </tr>
               </thead>
               <tbody>
                 {i18nRows.map((r) => (
-                  <tr
-                    key={r.id ?? r.key}
-                    className="border-t border-gray-100"
-                  >
-                    <td className="px-2 py-1.5 font-mono text-xs">{r.key}</td>
-                    <td className="px-2 py-1.5">{r.value}</td>
-                    <td className="px-2 py-1.5">
+                  <tr key={r.id ?? r.key} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>{r.key}</td>
+                    <td className={DATA_TABLE_TD_CLASS}>{r.value}</td>
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
                       {r.id ? (
                         <button
                           type="button"
-                          className="text-red-600 text-xs"
+                          className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#E74C3C]`}
                           title={t("superAdmin.i18nRemoveOverrideTitle")}
                           onClick={async () => {
                             await apiFetch(`/api/admin/translations/${r.id}`, {
@@ -1618,10 +1645,10 @@ export default function SuperAdminPage() {
                             void loadI18n();
                           }}
                         >
-                          ×
+                          <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
                         </button>
                       ) : (
-                        <span className="text-gray-300 text-xs">—</span>
+                        <span className="text-[12px] text-[#BDC3C7]">—</span>
                       )}
                     </td>
                   </tr>
@@ -1654,33 +1681,37 @@ export default function SuperAdminPage() {
             <p className="text-sm text-[#7F8C8D]">{t("superAdmin.logsLoad")}</p>
           ) : null}
           {logs && (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white text-xs">
-              <table className="min-w-full">
-                <thead className="bg-gray-50 text-left text-gray-600">
-                  <tr>
-                    <th className="px-2 py-2">{t("superAdmin.logsColTime")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.logsColOrg")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.logsColAction")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.logsColEntity")}</th>
+            <>
+            <div className={DATA_TABLE_VIEWPORT_CLASS}>
+              <table className={`${DATA_TABLE_CLASS} text-xs`}>
+                <thead>
+                  <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("superAdmin.logsColTime")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.logsColOrg")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.logsColAction")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.logsColEntity")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logs.items.map((r) => (
-                    <tr key={r.id} className="border-t border-gray-100">
-                      <td className="px-2 py-1 whitespace-nowrap">{r.createdAt}</td>
-                      <td className="px-2 py-1 font-mono">
+                    <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_RIGHT_CLASS} text-xs whitespace-nowrap`}>
+                        {r.createdAt}
+                      </td>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>
                         {r.organizationId ?? "—"}
                       </td>
-                      <td className="px-2 py-1">{r.action}</td>
-                      <td className="px-2 py-1">{r.entityType}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-xs`}>{r.action}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-xs`}>{r.entityType}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="px-2 py-2 text-gray-500">
+            </div>
+              <div className="mt-2 rounded-[2px] border border-[#D5DADF] bg-[#F8FAFC] px-4 py-2 text-xs text-[#7F8C8D]">
                 {t("superAdmin.logsTotal", { count: logs.total })}
               </div>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -1793,37 +1824,52 @@ export default function SuperAdminPage() {
             <p className="text-sm text-[#7F8C8D]">{t("common.loading")}</p>
           ) : null}
           {chartTpl && (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white text-xs max-h-[60vh] overflow-y-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50 text-left text-gray-600 sticky top-0">
-                  <tr>
-                    <th className="px-2 py-2">{t("superAdmin.chartColCode")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColNameAz")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColNameRu")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColNameEn")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColType")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColParent")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColSort")}</th>
-                    <th className="px-2 py-2">{t("superAdmin.chartColDepr")}</th>
+            <div className={`${DATA_TABLE_VIEWPORT_CLASS} max-h-[60vh]`}>
+              <table className={`${DATA_TABLE_CLASS} text-xs`}>
+                <thead>
+                  <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.chartColCode")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.chartColNameAz")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.chartColNameRu")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.chartColNameEn")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.chartColType")}</th>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.chartColParent")}</th>
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("superAdmin.chartColSort")}</th>
+                    <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("superAdmin.chartColDepr")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {chartTpl.map((r) => (
-                    <tr key={r.id} className="border-t border-gray-100">
-                      <td className="px-2 py-1 font-mono whitespace-nowrap">{r.code}</td>
-                      <td className="px-2 py-1 max-w-[14rem] truncate" title={r.nameAz}>
+                    <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs whitespace-nowrap`}>
+                        {r.code}
+                      </td>
+                      <td
+                        className={`${DATA_TABLE_TD_CLASS} max-w-[14rem] truncate text-xs`}
+                        title={r.nameAz}
+                      >
                         {r.nameAz}
                       </td>
-                      <td className="px-2 py-1 max-w-[14rem] truncate" title={r.nameRu}>
+                      <td
+                        className={`${DATA_TABLE_TD_CLASS} max-w-[14rem] truncate text-xs`}
+                        title={r.nameRu}
+                      >
                         {r.nameRu}
                       </td>
-                      <td className="px-2 py-1 max-w-[14rem] truncate" title={r.nameEn}>
+                      <td
+                        className={`${DATA_TABLE_TD_CLASS} max-w-[14rem] truncate text-xs`}
+                        title={r.nameEn}
+                      >
                         {r.nameEn}
                       </td>
-                      <td className="px-2 py-1">{r.accountType}</td>
-                      <td className="px-2 py-1 font-mono">{r.parentCode ?? "—"}</td>
-                      <td className="px-2 py-1">{r.sortOrder}</td>
-                      <td className="px-2 py-1">{r.isDeprecated ? "✓" : "—"}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-xs`}>{r.accountType}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>
+                        {r.parentCode ?? "—"}
+                      </td>
+                      <td className={`${DATA_TABLE_TD_RIGHT_CLASS} text-xs`}>{r.sortOrder}</td>
+                      <td className={`${DATA_TABLE_TD_CENTER_CLASS} text-xs`}>
+                        {r.isDeprecated ? "✓" : "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1980,53 +2026,55 @@ export default function SuperAdminPage() {
                 {t("superAdmin.userOrgsEmpty")}
               </p>
             ) : userOrgsData ? (
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 text-left text-xs uppercase text-gray-600">
-                    <tr>
-                      <th className="px-2 py-2">
+              <div className={DATA_TABLE_VIEWPORT_CLASS}>
+                <table className={DATA_TABLE_CLASS}>
+                  <thead>
+                    <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>
                         {t("superAdmin.userOrgsColCompany")}
                       </th>
-                      <th className="px-2 py-2">{t("superAdmin.userOrgsColVoen")}</th>
-                      <th className="px-2 py-2">{t("superAdmin.userOrgsColRole")}</th>
-                      <th className="px-2 py-2">{t("superAdmin.userOrgsColTier")}</th>
-                      <th className="px-2 py-2">
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.userOrgsColVoen")}</th>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.userOrgsColRole")}</th>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("superAdmin.userOrgsColTier")}</th>
+                      <th className={DATA_TABLE_TH_RIGHT_CLASS}>
                         {t("superAdmin.userOrgsColExpires")}
                       </th>
-                      <th className="px-2 py-2">
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>
                         {t("superAdmin.userOrgsColModules")}
                       </th>
-                      <th className="px-2 py-2">
+                      <th className={DATA_TABLE_TH_CENTER_CLASS}>
                         {t("superAdmin.userOrgsColTrial")}
                       </th>
-                      <th className="px-2 py-2">
+                      <th className={DATA_TABLE_TH_CENTER_CLASS}>
                         {t("superAdmin.userOrgsColBlocked")}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {userOrgsData.items.map((row) => (
-                      <tr key={row.organizationId} className="border-t border-gray-100">
-                        <td className="px-2 py-2">{row.organizationName}</td>
-                        <td className="px-2 py-2 font-mono text-xs">{row.taxId}</td>
-                        <td className="px-2 py-2">{roleLabel(row.role, t)}</td>
-                        <td className="px-2 py-2">
+                      <tr key={row.organizationId} className={DATA_TABLE_TR_CLASS}>
+                        <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>
+                          {row.organizationName}
+                        </td>
+                        <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>{row.taxId}</td>
+                        <td className={DATA_TABLE_TD_CLASS}>{roleLabel(row.role, t)}</td>
+                        <td className={DATA_TABLE_TD_CLASS}>
                           {row.subscription
                             ? tierLabel(row.subscription.tier, t)
                             : "—"}
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-gray-600">
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
                           {fmtExpires(row.subscription?.expiresAt)}
                         </td>
-                        <td className="px-2 py-2 text-xs max-w-[180px] break-all">
+                        <td className={`${DATA_TABLE_TD_CLASS} max-w-[180px] break-all text-xs`}>
                           {fmtModules(row.subscription?.activeModules)}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className={DATA_TABLE_TD_CENTER_CLASS}>
                           {row.subscription?.isTrial
                             ? t("common.yes")
                             : t("common.no")}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className={DATA_TABLE_TD_CENTER_CLASS}>
                           {row.subscription?.isBlocked
                             ? t("common.yes")
                             : t("common.no")}

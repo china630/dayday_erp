@@ -9,6 +9,12 @@ import { useAuth } from "../../../lib/auth-context";
 import { EmptyState } from "../../../components/empty-state";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { PageHeader } from "../../../components/layout/page-header";
@@ -143,40 +149,38 @@ export default function SuperAdminTranslationsPage() {
         </button>
       </div>
 
-      <div className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
+      <div className={CARD_CONTAINER_CLASS}>
         {loading ? (
           <p className="p-6 text-[#7F8C8D]">{t("common.loading")}</p>
         ) : (
-          <table className="min-w-full text-[13px] border-collapse">
-            <thead>
-              <tr className="border-b border-[#D5DADF] bg-[#F8F9FA] text-left">
-                <th className="p-3 font-semibold text-[#34495E]">Key</th>
-                <th className="p-3 font-semibold text-[#34495E]">
-                  {t("superAdminTranslations.value")}
-                </th>
-                <th className="p-3 font-semibold text-[#34495E]">
-                  {t("superAdminTranslations.source")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice(0, 500).map((r) => (
-                <tr key={r.key} className="border-b border-[#EBEDF0]">
-                  <td className="p-2 font-mono text-[12px] text-[#34495E]">
-                    {r.key}
-                  </td>
-                  <td className="p-2 text-[#34495E] max-w-md truncate">
-                    {r.value}
-                  </td>
-                  <td className="p-2 text-[12px] text-[#7F8C8D]">
-                    {r.isOverride
-                      ? t("superAdminTranslations.fromDb")
-                      : t("superAdminTranslations.fromBundle")}
-                  </td>
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={DATA_TABLE_CLASS}>
+              <thead>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>Key</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>
+                    {t("superAdminTranslations.value")}
+                  </th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>
+                    {t("superAdminTranslations.source")}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.slice(0, 500).map((r) => (
+                  <tr key={r.key} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-mono text-[12px]`}>{r.key}</td>
+                    <td className={`${DATA_TABLE_TD_CLASS} max-w-md truncate`}>{r.value}</td>
+                    <td className={`${DATA_TABLE_TD_CLASS} text-[12px] text-[#7F8C8D]`}>
+                      {r.isOverride
+                        ? t("superAdminTranslations.fromDb")
+                        : t("superAdminTranslations.fromBundle")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

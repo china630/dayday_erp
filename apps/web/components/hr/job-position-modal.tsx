@@ -1,16 +1,18 @@
 "use client";
 
-import { Save, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
-  GHOST_BUTTON_CLASS,
-  PRIMARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
 } from "../../lib/design-system";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
+import { Button } from "../ui/button";
 
 type DeptFlat = { id: string; name: string; parentId: string | null };
 
@@ -72,6 +74,10 @@ export function JobPositionModal({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    if (departments.length === 0) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
     if (!deptId || !name.trim()) {
       toast.error(t("common.fillRequired"));
       return;
@@ -117,23 +123,27 @@ export function JobPositionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} max-h-[90vh] w-full max-w-xl overflow-y-auto bg-white p-6`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="m-0 text-base font-semibold text-gray-900">{title}</h3>
-            <p className="mb-0 mt-1 text-sm text-slate-600">{t("hrPositions.subtitle")}</p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{title}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("hrPositions.subtitle")}</p>
           </div>
-          <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-4">
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("hrStructure.department")}</span>
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("hrStructure.department")}
               <select
-                className={FORM_INPUT_CLASS}
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
                 value={deptId}
                 onChange={(e) => setDeptId(e.target.value)}
                 disabled={isEdit}
@@ -144,62 +154,61 @@ export function JobPositionModal({
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
 
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("hrStructure.positionName")}</span>
-              <input className={FORM_INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("hrStructure.positionName")}
+              <input
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
 
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("hrStructure.slots")}</span>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("hrStructure.slots")}
               <input
                 type="number"
                 min={1}
-                className={FORM_INPUT_CLASS}
+                className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                 value={slots}
                 onChange={(e) => setSlots(e.target.value)}
               />
-            </div>
+            </label>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <span className={FORM_LABEL_CLASS}>{t("hrPositions.minSalary")}</span>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("hrPositions.minSalary")}
                 <input
                   type="number"
                   step="0.01"
                   min={0}
-                  className={FORM_INPUT_CLASS}
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                   value={minSalary}
                   onChange={(e) => setMinSalary(e.target.value)}
                 />
-              </div>
-              <div>
-                <span className={FORM_LABEL_CLASS}>{t("hrPositions.maxSalary")}</span>
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("hrPositions.maxSalary")}
                 <input
                   type="number"
                   step="0.01"
                   min={0}
-                  className={FORM_INPUT_CLASS}
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                   value={maxSalary}
                   onChange={(e) => setMaxSalary(e.target.value)}
                 />
-              </div>
+              </label>
             </div>
           </div>
 
-          <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
-            <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} disabled={busy}>
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
               {t("common.cancel")}
-            </button>
-            <button
-              type="submit"
-              className={PRIMARY_BUTTON_CLASS}
-              disabled={busy || departments.length === 0}
-            >
-              <Save className="h-4 w-4 shrink-0" aria-hidden />
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? "…" : isEdit ? t("common.save") : t("hrStructure.savePosition")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
 import {
   notifyListRefresh,
   subscribeListRefresh,
@@ -12,12 +11,27 @@ import { InventoryAuditCreateFlow } from "../../../components/inventory/inventor
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useRequireAuth } from "../../../lib/use-require-auth";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Eye, X } from "lucide-react";
 import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
+import { Button } from "../../../components/ui/button";
 import {
+  CARD_CONTAINER_CLASS,
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../../lib/design-system";
 
 type AuditRow = {
@@ -124,43 +138,46 @@ export default function InventoryAuditsHistoryPage() {
       )}
 
       {!loading && rows.length > 0 && (
-        <div className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-x-auto">
-          <table className="text-sm min-w-full">
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} min-w-full`}>
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="text-left p-2">{t("inventory.auditThDateDoc")}</th>
-                <th className="text-left p-2">{t("inventory.thWh")}</th>
-                <th className="text-left p-2">{t("inventory.auditThStatus")}</th>
-                <th className="text-left p-2">{t("inventory.auditThCreated")}</th>
-                <th className="text-right p-2">{t("inventory.auditThOpen")}</th>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThDateDoc")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thWh")}</th>
+                <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("inventory.auditThStatus")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.auditThCreated")}</th>
+                <th className={DATA_TABLE_ACTIONS_TH_CLASS}>{t("inventory.auditThOpen")}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-slate-50">
-                  <td className="p-2 whitespace-nowrap">
+                <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                  <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
                     {typeof r.date === "string" ? r.date.slice(0, 10) : "—"}
                   </td>
-                  <td className="p-2 whitespace-nowrap text-slate-700">
+                  <td className={`${DATA_TABLE_TD_CLASS} whitespace-nowrap`}>
                     {r.warehouse?.name ?? "—"}
                   </td>
-                  <td className="p-2 whitespace-nowrap text-slate-600">
+                  <td className={`${DATA_TABLE_TD_CENTER_CLASS} whitespace-nowrap`}>
                     {r.status === "APPROVED"
                       ? t("inventory.auditStatusApproved")
                       : r.status === "DRAFT"
                         ? t("inventory.auditStatusDraft")
                         : r.status}
                   </td>
-                  <td className="p-2 text-slate-600 whitespace-nowrap">
+                  <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
                     {r.createdAt?.slice(0, 19)?.replace("T", " ") ?? "—"}
                   </td>
-                  <td className="p-2 text-right">
-                    <Link
-                      href={`/inventory/audits/${r.id}`}
-                      className="text-action hover:text-primary font-medium"
-                    >
-                      {t("inventory.auditOpen")}
-                    </Link>
+                  <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                    <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/inventory/audits/${r.id}`}
+                        className={TABLE_ROW_ICON_BTN_CLASS}
+                        title={t("inventory.auditOpen")}
+                      >
+                        <Eye className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -171,18 +188,30 @@ export default function InventoryAuditsHistoryPage() {
 
       {auditCreateOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-            <div className="flex shrink-0 items-center justify-end border-b border-slate-100 px-3 py-2">
-              <button
-                type="button"
-                className={SECONDARY_BUTTON_CLASS}
-                onClick={() => closeAuditCreate()}
-                aria-label={t("common.cancel")}
+          <div
+            className={`relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden ${CARD_CONTAINER_CLASS}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inventory-audit-create-modal-title"
+          >
+            <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#D5DADF] px-6 py-4">
+              <h2
+                id="inventory-audit-create-modal-title"
+                className="m-0 min-w-0 flex-1 pr-2 text-lg font-semibold leading-snug text-[#34495E]"
               >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                {t("inventory.auditNewInventoryBtn")}
+              </h2>
+              <Button
+                type="button"
+                variant="ghost"
+                className="!px-2"
+                onClick={() => closeAuditCreate()}
+                aria-label={t("common.close")}
+              >
+                <X className="h-4 w-4 shrink-0" aria-hidden />
+              </Button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
               <InventoryAuditCreateFlow
                 key={auditFlowKey}
                 onNavigateToHistory={() => closeAuditCreate()}

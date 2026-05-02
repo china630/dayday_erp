@@ -43,6 +43,9 @@ const nextConfig: NextConfig = {
       { source: "/manufacturing/recipe/:path*", destination: "/manufacturing/recipes/:path*", permanent: true },
       { source: "/manufacturing/release", destination: "/manufacturing/releases", permanent: true },
       { source: "/manufacturing/release/:path*", destination: "/manufacturing/releases/:path*", permanent: true },
+      { source: "/settings/mapping", destination: "/accounting/mapping", permanent: true },
+      { source: "/settings/chart", destination: "/accounting/chart", permanent: true },
+      { source: "/settings/finance/ifrs-mapping", destination: "/accounting/ifrs-mapping", permanent: true },
     ];
   },
 };

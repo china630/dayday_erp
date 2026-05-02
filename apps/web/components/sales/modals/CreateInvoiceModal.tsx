@@ -1,16 +1,44 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { formatMoneyAzn } from "../../../lib/format-money";
-import { inputFieldWideClass } from "../../../lib/form-classes";
-import { BORDER_MUTED_CLASS, INPUT_BORDERED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  MODAL_CHECKBOX_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
+import type { SupportedCurrency } from "../../../lib/currencies";
 import { useLedger } from "../../../lib/ledger-context";
 import { notifyListRefresh } from "../../../lib/list-refresh-bus";
-import { uuidV4 } from "../../../lib/uuid";
+import {
+  INVOICE_VAT_RATE_VALUES,
+  type InvoiceVatRateValue,
+  type VatRateFormString,
+  formStringToVatRate,
+  normalizeProductVatRate,
+  vatPercentForMath,
+  vatRateToFormString,
+} from "../../../lib/vat-line-rates";
+import { AsyncCombobox } from "../../ui/async-combobox";
+import { Button } from "../../ui/button";
+import { CurrencySelect } from "../../ui/currency-select";
+import { DatePicker } from "../../ui/date-picker";
+import { NumericAmountInput } from "../../ui/numeric-amount-input";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../ui/select";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
 type Counterparty = { id: string; name: string; taxId: string };
@@ -23,33 +51,44 @@ type Product = {
   isService?: boolean;
 };
 
-type LineRow = {
-  key: string;
+type InvoiceLineForm = {
   productId: string;
   quantity: string;
   unitPrice: string;
+  vatRate: VatRateFormString;
 };
 
-function newLine(): LineRow {
+type InvoiceFormValues = {
+  counterpartyId: string;
+  dueDate: string;
+  debitAccountCode: "101" | "221";
+  currency: SupportedCurrency;
+  vatInclusive: boolean;
+  lines: InvoiceLineForm[];
+};
+
+function blankLine(): InvoiceLineForm {
   return {
-    key: uuidV4(),
     productId: "",
-    quantity: "1",
+    quantity: "0",
     unitPrice: "0",
+    vatRate: "18",
   };
 }
 
-/** Effective VAT % for line total (0 or 18; exempt -1 → 0 for amount math). */
-function lineVatRatePctForTotals(products: Product[], productId: string, headerFallback: 0 | 18): number {
-  const p = products.find((x) => x.id === productId);
-  if (!p) return headerFallback;
-  const vr = Number(p.vatRate);
-  if (vr === -1) return 0;
-  if (vr === 0) return 0;
-  return 18;
+function lineVatPercentFromForm(vatRate: VatRateFormString | undefined): number {
+  const r = formStringToVatRate(String(vatRate ?? "18")) ?? 18;
+  return vatPercentForMath(r);
 }
 
-/** VAT split for one line; `unitPrice` is stored as NET price per unit. */
+function vatLineSelectLabel(rate: InvoiceVatRateValue, t: (k: string) => string): string {
+  if (rate === -1) return t("invoiceNew.vatExemptLine");
+  if (rate === 0) return t("products.vatOption0");
+  if (rate === 2) return t("products.vatOption2");
+  if (rate === 8) return t("products.vatOption8");
+  return t("products.vatOption18");
+}
+
 function vatSplitForLine(
   qty: number,
   unitPriceNet: number,
@@ -77,78 +116,80 @@ export function CreateInvoiceModal({
 }) {
   const { t } = useTranslation();
   const { ledgerType, ready: ledgerReady } = useLedger();
-  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [counterpartyId, setCounterpartyId] = useState("");
-  const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [debitAccountCode, setDebitAccountCode] = useState<"101" | "221">("101");
-  const [currency, setCurrency] = useState<"AZN" | "USD" | "EUR">("AZN");
-  const [vatInclusive, setVatInclusive] = useState(false);
-  const [vatRate, setVatRate] = useState<0 | 18>(18);
-  const [lines, setLines] = useState<LineRow[]>(() => []);
   const [busy, setBusy] = useState(false);
   const [netting, setNetting] = useState<NettingPreview | null>(null);
+  const [counterpartyLabel, setCounterpartyLabel] = useState("");
+  const [lineProductLabels, setLineProductLabels] = useState<Record<string, string>>({});
 
-  const fieldClass = `mt-1 ${inputFieldWideClass.replace("max-w-xl", "max-w-2xl")}`;
+  const fieldClass = `mt-1 max-w-2xl ${MODAL_INPUT_CLASS}`;
 
-  const loadRefs = useCallback(async () => {
-    const [c, p] = await Promise.all([apiFetch("/api/counterparties"), apiFetch("/api/products")]);
-    if (c.ok) {
-      const list = (await c.json()) as Counterparty[];
-      setCounterparties(Array.isArray(list) ? list : []);
-      setCounterpartyId((prev) => prev || list[0]?.id || "");
-    } else {
-      setCounterparties([]);
-    }
-    if (p.ok) {
-      const list = (await p.json()) as Product[];
-      const arr = Array.isArray(list) ? list : [];
-      setProducts(arr);
-      const first = arr[0];
-      if (first) {
-        const vr0 = Number(first.vatRate);
-        setVatRate(vr0 === 0 ? 0 : 18);
-      }
-    } else {
-      setProducts([]);
-    }
+  const {
+    control,
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<InvoiceFormValues>({
+    defaultValues: {
+      counterpartyId: "",
+      dueDate: new Date().toISOString().slice(0, 10),
+      debitAccountCode: "101",
+      currency: "AZN",
+      vatInclusive: false,
+      lines: [blankLine()],
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+
+  const watchedLines = useWatch({ control, name: "lines" });
+  const watchedVatInclusive = useWatch({ control, name: "vatInclusive" });
+  const watchedCounterpartyId = useWatch({ control, name: "counterpartyId" });
+
+  const fetchCounterparties = useCallback(async (search: string) => {
+    const q = new URLSearchParams();
+    q.set("limit", "20");
+    const trimmed = search.trim();
+    if (trimmed) q.set("search", trimmed);
+    const res = await apiFetch(`/api/counterparties?${q}`);
+    if (!res.ok) return [];
+    const list = (await res.json()) as Counterparty[];
+    return Array.isArray(list) ? list : [];
+  }, []);
+
+  const fetchProducts = useCallback(async (search: string) => {
+    const q = new URLSearchParams();
+    q.set("limit", "20");
+    const trimmed = search.trim();
+    if (trimmed) q.set("search", trimmed);
+    const res = await apiFetch(`/api/products?${q}`);
+    if (!res.ok) return [];
+    const list = (await res.json()) as Product[];
+    return Array.isArray(list) ? list : [];
   }, []);
 
   useEffect(() => {
     if (!open) return;
     setBusy(false);
-    setDueDate(new Date().toISOString().slice(0, 10));
-    setDebitAccountCode("101");
-    setCurrency("AZN");
-    setVatInclusive(false);
-    setVatRate(18);
-    setLines([]);
-    void loadRefs();
-  }, [open, loadRefs]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!products.length) return;
-    setLines((prev) => {
-      if (prev.length > 0) return prev;
-      const first = products[0];
-      return [
-        {
-          key: uuidV4(),
-          productId: first.id,
-          quantity: "1",
-          unitPrice: String(Number(first.price) || 0),
-        },
-      ];
+    setCounterpartyLabel("");
+    setLineProductLabels({});
+    reset({
+      counterpartyId: "",
+      dueDate: new Date().toISOString().slice(0, 10),
+      debitAccountCode: "101",
+      currency: "AZN",
+      vatInclusive: false,
+      lines: [blankLine()],
     });
-  }, [open, products]);
+  }, [open, reset]);
 
   useEffect(() => {
     if (!open) {
       setNetting(null);
       return;
     }
-    if (!ledgerReady || !counterpartyId) {
+    if (!ledgerReady || !watchedCounterpartyId) {
       setNetting(null);
       return;
     }
@@ -156,7 +197,7 @@ export function CreateInvoiceModal({
     const h = window.setTimeout(() => {
       void (async () => {
         const res = await apiFetch(
-          `/api/reporting/netting/preview?counterpartyId=${encodeURIComponent(counterpartyId)}&ledgerType=${encodeURIComponent(ledgerType)}`,
+          `/api/reporting/netting/preview?counterpartyId=${encodeURIComponent(watchedCounterpartyId)}&ledgerType=${encodeURIComponent(ledgerType)}`,
         );
         if (cancelled) return;
         if (!res.ok) {
@@ -170,9 +211,11 @@ export function CreateInvoiceModal({
       cancelled = true;
       window.clearTimeout(h);
     };
-  }, [open, counterpartyId, ledgerType, ledgerReady]);
+  }, [open, watchedCounterpartyId, ledgerType, ledgerReady]);
 
   const vatTotals = useMemo(() => {
+    const lines = watchedLines ?? [];
+    const vatInclusive = !!watchedVatInclusive;
     let net = 0;
     let vat = 0;
     let gross = 0;
@@ -181,50 +224,44 @@ export function CreateInvoiceModal({
       const u = Number(String(row.unitPrice).replace(",", "."));
       if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(u) || u < 0) continue;
       if (!row.productId) continue;
-      const vr = lineVatRatePctForTotals(products, row.productId, vatRate);
-      const s = vatSplitForLine(q, u, vr);
+      const vrPct = lineVatPercentFromForm(row.vatRate);
+      const mult = 1 + vrPct / 100;
+      const unitNet = vatInclusive ? u / mult : u;
+      const s = vatSplitForLine(q, unitNet, vrPct);
       net += s.net;
       vat += s.vat;
       gross += s.gross;
     }
     return { net, vat, gross };
-  }, [lines, vatRate, products]);
+  }, [watchedLines, watchedVatInclusive]);
 
-  const canSubmit = useMemo(() => {
-    if (!counterpartyId) return false;
-    const parsed = lines
-      .map((row) => {
-        const q = Number(String(row.quantity).replace(",", "."));
-        const u = Number(String(row.unitPrice).replace(",", "."));
-        const okNum = Number.isFinite(q) && q > 0 && Number.isFinite(u) && u >= 0;
-        if (!okNum || !row.productId) return null;
-        const p = products.find((x) => x.id === row.productId);
-        const vr = p ? Number(p.vatRate) : vatRate;
-        const vatR = vr === -1 ? 0 : vr === 0 ? 0 : 18;
-        return { productId: row.productId, quantity: q, unitPrice: u, vatRate: vatR };
-      })
-      .filter(Boolean);
-    return parsed.length > 0;
-  }, [counterpartyId, lines, products, vatRate]);
+  const onValid = async (data: InvoiceFormValues) => {
+    const items: Array<{
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+      vatRate: number;
+    }> = [];
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!counterpartyId) {
-      toast.error(t("invoiceNew.selectBoth"));
-      return;
+    for (const row of data.lines) {
+      if (!row.productId) continue;
+      const q = Number(String(row.quantity).replace(",", "."));
+      const u = Number(String(row.unitPrice).replace(",", "."));
+      if (!Number.isFinite(q) || q <= 0) {
+        toast.error(t("invoiceNew.quantityLineRequired"));
+        return;
+      }
+      if (!Number.isFinite(u) || u < 0) {
+        toast.error(t("invoiceNew.selectBoth"));
+        return;
+      }
+      const vr = Number(row.vatRate);
+      if (![-1, 0, 2, 8, 18].includes(vr)) {
+        toast.error(t("invoiceNew.vatLineRequired"));
+        return;
+      }
+      items.push({ productId: row.productId, quantity: q, unitPrice: u, vatRate: vr });
     }
-    const items = lines
-      .map((row) => {
-        const q = Number(String(row.quantity).replace(",", "."));
-        const u = Number(String(row.unitPrice).replace(",", "."));
-        if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(u) || u < 0) return null;
-        if (!row.productId) return null;
-        const p = products.find((x) => x.id === row.productId);
-        const vr = p ? Number(p.vatRate) : vatRate;
-        const vatR = vr === -1 ? 0 : vr === 0 ? 0 : 18;
-        return { productId: row.productId, quantity: q, unitPrice: u, vatRate: vatR };
-      })
-      .filter(Boolean) as Array<Record<string, unknown>>;
 
     if (items.length === 0) {
       toast.error(t("invoiceNew.selectBoth"));
@@ -236,11 +273,11 @@ export function CreateInvoiceModal({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        counterpartyId,
-        dueDate,
-        debitAccountCode,
-        currency,
-        vatInclusive,
+        counterpartyId: data.counterpartyId,
+        dueDate: data.dueDate,
+        debitAccountCode: data.debitAccountCode,
+        currency: data.currency,
+        vatInclusive: data.vatInclusive,
         items,
       }),
     });
@@ -249,22 +286,40 @@ export function CreateInvoiceModal({
       toast.error(t("common.saveErr"), { description: await res.text() });
       return;
     }
-    const data = (await res.json()) as { stockWarnings?: string[] };
-    if (data.stockWarnings?.length) {
+    const resp = (await res.json()) as { stockWarnings?: string[] };
+    if (resp.stockWarnings?.length) {
       toast.warning(t("invoiceNew.stockWarningsTitle"), {
-        description: data.stockWarnings.join("\n"),
+        description: resp.stockWarnings.join("\n"),
       });
     }
     toast.success(t("common.save"));
     notifyListRefresh("invoices");
     onClose();
-  }
+  };
 
   function productOptionLabel(p: Product): string {
     if (p.isService) {
-      return `${p.name} (${t("products.kindServiceTag")})`;
+      return `${p.name} (Xidmət)`;
     }
     return `${p.name} (${p.sku})`;
+  }
+
+  function onProductChange(index: number, rowId: string, productId: string, p: Product | null) {
+    setValue(`lines.${index}.productId`, productId);
+    setLineProductLabels((prev) => ({
+      ...prev,
+      [rowId]: p ? productOptionLabel(p) : "",
+    }));
+    if (p) {
+      setValue(`lines.${index}.unitPrice`, String(Number(p.price) || 0));
+      setValue(
+        `lines.${index}.vatRate`,
+        vatRateToFormString(normalizeProductVatRate(Number(p.vatRate))),
+      );
+    } else {
+      setValue(`lines.${index}.unitPrice`, "0");
+      setValue(`lines.${index}.vatRate`, "18");
+    }
   }
 
   return (
@@ -273,48 +328,97 @@ export function CreateInvoiceModal({
       title={t("invoiceNew.title")}
       onClose={onClose}
       maxWidthClass="max-w-4xl"
-      footer={<SalesModalFooter onCancel={onClose} busy={busy} formId="create-invoice-form" saveDisabled={!canSubmit} />}
+      footer={
+        <SalesModalFooter
+          onCancel={onClose}
+          busy={busy}
+          formId="create-invoice-form"
+          cancelVariant="ghost"
+        />
+      }
     >
-      <form id="create-invoice-form" className="space-y-5" onSubmit={(e) => void onSubmit(e)}>
+      <form
+        id="create-invoice-form"
+        className="space-y-4"
+        onSubmit={(e) => void handleSubmit(onValid)(e)}
+      >
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="block text-sm font-medium text-gray-700">
-            {t("invoiceNew.counterparty")}
-            <select
-              required
-              value={counterpartyId}
-              onChange={(e) => setCounterpartyId(e.target.value)}
-              className={fieldClass}
-            >
-              <option value="">—</option>
-              {counterparties.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.taxId})
-                </option>
-              ))}
-            </select>
+          <label className="block">
+            <span className={MODAL_FIELD_LABEL_CLASS}>{t("invoiceNew.counterparty")}</span>
+            <Controller
+              control={control}
+              name="counterpartyId"
+              rules={{ required: t("invoiceNew.selectCounterpartyRequired") }}
+              render={({ field }) => (
+                <AsyncCombobox<Counterparty>
+                  value={field.value}
+                  onChange={(id, item) => {
+                    field.onChange(id);
+                    setCounterpartyLabel(item ? `${item.name} (${item.taxId})` : "");
+                  }}
+                  fetcher={fetchCounterparties}
+                  getOptionLabel={(c) => `${c.name} (${c.taxId})`}
+                  placeholder={t("invoiceNew.selectCounterpartyPlaceholder")}
+                  selectedLabel={counterpartyLabel}
+                  className="mt-1 max-w-2xl"
+                  aria-invalid={!!errors.counterpartyId}
+                />
+              )}
+            />
+            {errors.counterpartyId?.message ? (
+              <p className="mt-1 text-[13px] text-red-600">{String(errors.counterpartyId.message)}</p>
+            ) : null}
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("invoiceNew.dueDate")}
-            <input type="date" required value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fieldClass} />
+          <label className="block">
+            <span className={MODAL_FIELD_LABEL_CLASS}>{t("invoiceNew.dueDate")}</span>
+            <Controller
+              control={control}
+              name="dueDate"
+              rules={{ required: true }}
+              render={({ field }) => (
+                <DatePicker
+                  value={field.value}
+                  onChange={field.onChange}
+                  className={fieldClass}
+                  required
+                  aria-invalid={!!errors.dueDate}
+                />
+              )}
+            />
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("invoiceNew.debitOnPayment")}
-            <select
-              value={debitAccountCode}
-              onChange={(e) => setDebitAccountCode(e.target.value as "101" | "221")}
-              className={fieldClass}
-            >
-              <option value="101">{t("invoiceNew.cash101")}</option>
-              <option value="221">{t("invoiceNew.bank221")}</option>
-            </select>
+          <label className="block">
+            <span className={MODAL_FIELD_LABEL_CLASS}>{t("invoiceNew.debitOnPayment")}</span>
+            <Controller
+              control={control}
+              name="debitAccountCode"
+              render={({ field }) => (
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  className={fieldClass}
+                >
+                  <SelectTrigger className="" />
+                  <SelectContent>
+                    <SelectItem value="101">{t("invoiceNew.cash101")}</SelectItem>
+                    <SelectItem value="221">{t("invoiceNew.bank221")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("invoiceNew.currency")}
-            <select value={currency} onChange={(e) => setCurrency(e.target.value as "AZN" | "USD" | "EUR")} className={fieldClass}>
-              <option value="AZN">AZN</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-            </select>
+          <label className="block">
+            <span className={MODAL_FIELD_LABEL_CLASS}>{t("invoiceNew.currency")}</span>
+            <Controller
+              control={control}
+              name="currency"
+              render={({ field }) => (
+                <CurrencySelect
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  className={fieldClass}
+                />
+              )}
+            />
           </label>
         </div>
 
@@ -331,124 +435,126 @@ export function CreateInvoiceModal({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <input type="checkbox" checked={vatInclusive} onChange={(e) => setVatInclusive(e.target.checked)} />
-            {t("invoiceNew.vatInclusive")}
-          </label>
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            {t("invoiceNew.vatRateLabel")}
-            <select
-              value={vatRate}
-              onChange={(e) => setVatRate(Number(e.target.value) as 0 | 18)}
-              className={`h-8 ${INPUT_BORDERED_CLASS}`}
-            >
-              <option value={0}>0%</option>
-              <option value={18}>18%</option>
-            </select>
-            <span className="text-xs font-normal text-[#7F8C8D]">{t("invoiceNew.vatRateLineHint")}</span>
-          </label>
-        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-[13px] text-[#34495E]">
+          <input type="checkbox" className={MODAL_CHECKBOX_CLASS} {...register("vatInclusive")} />
+          {t("invoiceNew.vatInclusive")}
+        </label>
 
-        <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white`}>
-          <table className="min-w-full text-sm">
-            <thead className="bg-[#F4F5F7] text-left text-[#34495E]">
-              <tr>
-                <th className="px-3 py-2 font-semibold">{t("invoiceNew.lineNomenclature")}</th>
-                <th className="w-28 px-3 py-2 text-right font-semibold">{t("invoiceNew.quantity")}</th>
-                <th className="w-40 px-3 py-2 text-right font-semibold">
-                  {vatInclusive ? t("invoiceNew.priceHintGross") : t("invoiceNew.priceHintNet")}
+        <div className="overflow-x-auto rounded-[2px] border border-[#D5DADF] bg-white shadow-sm">
+          <table className={`${DATA_TABLE_CLASS} w-full table-fixed normal-case`}>
+            <thead>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={`${DATA_TABLE_TH_LEFT_CLASS} min-w-0`}>
+                  {t("invoiceNew.lineNomenclature")}
                 </th>
-                <th className="w-12 px-3 py-2" />
+                <th className={`${DATA_TABLE_TH_RIGHT_CLASS} w-[5.25rem] shrink-0`}>
+                  {t("invoiceNew.lineVatColumn")}
+                </th>
+                <th className={`${DATA_TABLE_TH_RIGHT_CLASS} w-20 shrink-0`}>
+                  {t("invoiceNew.quantity")}
+                </th>
+                <th className={`${DATA_TABLE_TH_RIGHT_CLASS} w-28 shrink-0`}>
+                  {watchedVatInclusive ? t("invoiceNew.priceHintGross") : t("invoiceNew.priceHintNet")}
+                </th>
+                <th className={`${DATA_TABLE_TH_CENTER_CLASS} w-10 shrink-0`} />
               </tr>
             </thead>
             <tbody>
-              {lines.map((row, idx) => (
-                <tr key={row.key} className="border-t border-[#EBEDF0]">
-                  <td className="px-3 py-2 align-middle">
-                    <select
-                      value={row.productId}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        const p = products.find((x) => x.id === v);
-                        setLines((prev) =>
-                          prev.map((x, i) =>
-                            i === idx
-                              ? {
-                                  ...x,
-                                  productId: v,
-                                  unitPrice: String(Number(p?.price) || 0),
-                                }
-                              : x,
-                          ),
-                        );
-                      }}
-                      className={inputFieldWideClass}
-                    >
-                      <option value="">{t("invoiceNew.noProductsOption")}</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {productOptionLabel(p)}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2 align-middle text-right">
-                    <input
-                      value={row.quantity}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: v } : x)));
-                      }}
-                      className={`w-28 text-right ${INPUT_BORDERED_CLASS}`}
-                      inputMode="decimal"
-                    />
-                  </td>
-                  <td className="px-3 py-2 align-middle text-right">
-                    <input
-                      value={(() => {
-                        const v = Number(String(row.unitPrice).replace(",", "."));
-                        const vr = lineVatRatePctForTotals(products, row.productId, vatRate);
-                        if (!vatInclusive || !Number.isFinite(v)) return row.unitPrice;
-                        const mult = vr === 18 ? 1.18 : 1;
-                        const gross = v * mult;
-                        return String(Math.round(gross * 10_000) / 10_000);
-                      })()}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const n = Number(String(raw).replace(",", "."));
-                        const vr = lineVatRatePctForTotals(products, row.productId, vatRate);
-                        if (!Number.isFinite(n)) {
-                          setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: raw } : x)));
-                          return;
+              {fields.map((field, idx) => {
+                const row = (watchedLines ?? [])[idx];
+                const vrPct = row ? lineVatPercentFromForm(row.vatRate) : 0;
+                const displayPrice = (() => {
+                  if (!row) return "";
+                  const v = Number(String(row.unitPrice).replace(",", "."));
+                  if (!watchedVatInclusive || !Number.isFinite(v)) return row.unitPrice;
+                  const mult = 1 + vrPct / 100;
+                  const gross = v * mult;
+                  return String(Math.round(gross * 10_000) / 10_000);
+                })();
+
+                return (
+                  <tr key={field.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} min-w-0 !py-1.5 !px-2`}>
+                      <AsyncCombobox<Product>
+                        value={row?.productId ?? ""}
+                        onChange={(id, item) => onProductChange(idx, field.id, id, item)}
+                        fetcher={fetchProducts}
+                        getOptionLabel={productOptionLabel}
+                        placeholder={t("invoiceNew.selectProductPlaceholder")}
+                        selectedLabel={lineProductLabels[field.id] ?? ""}
+                        listClassName="min-w-[16rem]"
+                        className="min-w-0"
+                      />
+                    </td>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} w-[5.25rem] shrink-0 !py-1.5 !px-2`}>
+                      <Select
+                        value={row?.vatRate ?? "18"}
+                        onValueChange={(v) =>
+                          setValue(`lines.${idx}.vatRate`, v as VatRateFormString)
                         }
-                        const mult = vr === 18 ? 1.18 : 1;
-                        const net = vatInclusive ? n / mult : n;
-                        const normalized = String(Math.round(net * 10_000) / 10_000);
-                        setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, unitPrice: normalized } : x)));
-                      }}
-                      className={`w-36 text-right ${INPUT_BORDERED_CLASS}`}
-                      inputMode="decimal"
-                    />
-                  </td>
-                  <td className="px-3 py-2 align-middle text-center">
-                    <button
-                      type="button"
-                      title={t("inventory.purchaseRemoveLine")}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-[2px] border border-[#D5DADF] text-slate-600 hover:bg-[#F4F5F7]"
-                      onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                        className={`box-border w-full max-w-full py-1.5 px-2 text-right ${MODAL_INPUT_CLASS}`}
+                      >
+                        <SelectTrigger className="" />
+                        <SelectContent>
+                          {INVOICE_VAT_RATE_VALUES.map((rate) => (
+                            <SelectItem key={rate} value={String(rate)}>
+                              {vatLineSelectLabel(rate, t)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} w-20 shrink-0 !py-1.5 !px-2`}>
+                      <Controller
+                        control={control}
+                        name={`lines.${idx}.quantity`}
+                        render={({ field }) => (
+                          <NumericAmountInput
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            decimalScale={4}
+                            className="box-border w-full max-w-full py-1.5 px-2"
+                          />
+                        )}
+                      />
+                    </td>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} w-28 shrink-0 !py-1.5 !px-2`}>
+                      <NumericAmountInput
+                        value={displayPrice}
+                        onValueChange={(plain) => {
+                          const n = Number(String(plain).replace(",", "."));
+                          if (!Number.isFinite(n)) {
+                            setValue(`lines.${idx}.unitPrice`, plain);
+                            return;
+                          }
+                          const mult = 1 + vrPct / 100;
+                          const net = watchedVatInclusive ? n / mult : n;
+                          const normalized = String(Math.round(net * 10_000) / 10_000);
+                          setValue(`lines.${idx}.unitPrice`, normalized);
+                        }}
+                        decimalScale={4}
+                        className="box-border w-full max-w-full py-1.5 px-2"
+                      />
+                    </td>
+                    <td className={`${DATA_TABLE_TD_CLASS} w-10 shrink-0 text-center !py-1.5 !px-1`}>
+                      <button
+                        type="button"
+                        className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#E74C3C]`}
+                        title={t("inventory.purchaseRemoveLine")}
+                        onClick={() => remove(idx)}
+                      >
+                        <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         <div
-          className={`flex flex-wrap items-center justify-end gap-x-6 gap-y-2 rounded-[2px] border ${BORDER_MUTED_CLASS} bg-[#F8F9FA] px-4 py-3 text-[13px] text-[#34495E]`}
+          className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2 rounded-[2px] border border-[#D5DADF] bg-[#F8F9FA] px-4 py-3 text-[13px] text-[#34495E]"
         >
           <span>
             {t("invoiceNew.totalsNet")}:{" "}
@@ -464,10 +570,10 @@ export function CreateInvoiceModal({
           </span>
         </div>
 
-        <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setLines((prev) => [...prev, newLine()])}>
+        <Button type="button" variant="secondary" onClick={() => append(blankLine())}>
           <Plus className="h-4 w-4 shrink-0" aria-hidden />
           {t("inventory.purchaseAddLine")}
-        </button>
+        </Button>
       </form>
     </SalesModalShell>
   );

@@ -1,10 +1,23 @@
 "use client";
 
-import { ChevronDown, Package } from "lucide-react";
+import { ChevronDown, Package, Pencil } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
-import { PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
@@ -174,32 +187,35 @@ export default function ProductsPage() {
           />
         )}
         {!loading && rows.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table>
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={DATA_TABLE_CLASS}>
               <thead>
-                <tr>
-                  <th>{t("products.thName")}</th>
-                  <th>{t("products.thSku")}</th>
-                  <th>{t("products.thPrice")}</th>
-                  <th>{t("products.thVat")}</th>
-                  <th />
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("products.thName")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("products.thSku")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("products.thPrice")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("products.thVat")}</th>
+                  <th className={DATA_TABLE_ACTIONS_TH_CLASS}>{t("teamPage.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td className="font-medium text-gray-900">{r.name}</td>
-                    <td>{r.isService ? "—" : r.sku}</td>
-                    <td>{formatMoneyAzn(r.price)}</td>
-                    <td>{formatProductVatCell(r.vatRate, t)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="text-action text-sm hover:underline"
-                        onClick={() => openEdit(r.id)}
-                      >
-                        {t("products.edit")}
-                      </button>
+                  <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>{r.name}</td>
+                    <td className={DATA_TABLE_TD_CLASS}>{r.isService ? "—" : r.sku}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.price)}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatProductVatCell(r.vatRate, t)}</td>
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("products.edit")}
+                          onClick={() => openEdit(r.id)}
+                        >
+                          <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

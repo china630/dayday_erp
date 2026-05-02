@@ -19,7 +19,7 @@
 - В корне репозитория будет `.env` (шаблон: `env.production.example`).
 - Вы понимаете, что `NEXT_PUBLIC_*` переменные **вшиваются в клиентский бандл на этапе build**.
 - На сервере открыт только нужный внешний порт (обычно 80/443); Postgres/Redis наружу не публикуем.
-- После **каждого** деплоя с новым кодом фронта: не забыть шаг **синхронизации переводов в БД** (§7.3) — иначе `/public/translations` и кэш i18n могут расходиться с бандлом `resources.ts`.
+- После **каждого** деплоя с новым кодом фронта: не забыть шаг **синхронизации переводов в БД** (§7.3) — иначе **`GET /api/public/translations`** и кэш i18n могут расходиться с бандлом **`resources.ts`** (на клиенте язык UI — только **ru** / **az**, при неопределённом коде — **az**; см. PRD §7.6.1, TZ §17).
 
 ---
 
@@ -203,7 +203,9 @@ docker compose -f docker-compose.prod.yml exec api npm run db:prod-init
 
 ### 7.3. Синхронизация переводов (i18n) в Postgres — **не пропускать на проде**
 
-Строки **RU/AZ** для UI лежат в **`apps/web/lib/i18n/resources.ts`** (в образ `api` файл копируется при сборке). Таблица **`translation_overrides`** и ответ **`GET /api/public/translations`** должны соответствовать этому словарю: иначе после релиза на проде возможны «старые» подписи или лишние ключи в БД.
+Строки **RU/AZ** для UI лежат в **`apps/web/lib/i18n/resources.ts`** (в образ `api` файл копируется при сборке). Таблица **`translation_overrides`** и ответ **`GET /api/public/translations?locale=ru|az`** должны соответствовать этому словарю: иначе после релиза на проде возможны «старые» подписи или лишние ключи в БД.
+
+**Клиент (web):** в браузере поддерживаются только **`ru`** и **`az`**; при нераспознанном языке (localStorage, браузер) действует **`az`**. Подмешивание оверрайдов из ответа API выполняется с нормализацией плоских ключей и **глубоким merge с перезаписью** совпадающих путей в бандле — иначе правки из БД по ключам, уже есть в `resources.ts`, не будут видны. Подробности реализации — **`apps/web/lib/i18n/apply-db-overrides.ts`**, **`apps/web/lib/i18n/ui-lang.ts`** (PRD §7.6.1, TZ §17).
 
 **Рекомендуемый шаг после `db:migrate:deploy` на каждом релизе** (идемпотентно, из контейнера `api`, `WORKDIR` = корень монорепо в образе):
 
@@ -225,7 +227,25 @@ docker compose -f docker-compose.prod.yml exec api npm run db:deploy
 
 Если нужен только upsert **без** удаления устаревших ключей (редко на проде): `npm run db:sync-i18n` — см. [TZ.md](../TZ.md) §17.
 
-Связь с CI: перед сборкой образов выполняйте **`npm run i18n:audit`** и при изменении `resources.ts` — **`npm run i18n:catalog`** (обновление `apps/api/src/admin/i18n-default-catalog-data.json`); подробности — **PRD §7.6.1**, **TZ §17**.
+Связь с CI: перед сборкой образов выполняйте **`npm run i18n:audit`** (сканирует **`apps/web/app`**, **`apps/web/components`**, **`apps/web/lib`**) и при изменении `resources.ts` — **`npm run i18n:catalog`** (обновление `apps/api/src/admin/i18n-default-catalog-data.json`); подробности — **PRD §7.6.1**, **TZ §17**.
+
+### 7.4. Локально (Windows / dev): тот же порядок, что «migrate + prune + bump»
+
+Из **корня** монорепо, с **`DATABASE_URL`** в корневом **`.env`** (как в [dayday-local-dev](../.cursor/rules/dayday-local-dev.mdc)):
+
+```bash
+npx dotenv-cli -e .env -- npm run db:deploy
+```
+
+Это **`prisma migrate deploy`** + **`db:sync-i18n:prune`** (upsert всех ключей **ru/az** из `resources.ts` в **`translation_overrides`**, prune устаревших, инкремент **`i18n.cacheVersion`**).
+
+Проверка согласованности БД с клиентским пайплайном оверрайдов (dry-run):
+
+```bash
+npx dotenv-cli -e .env -- npm run db:audit-i18n-overrides -w @dayday/database
+```
+
+Ожидаемо: `dropped normalized keys=0`, `invalid raw keys=0`. Подробности — **TZ §17**.
 
 ---
 
@@ -275,7 +295,7 @@ API можно не публиковать отдельно: браузер хо
 - `GET /api/health` через публичный web-origin (например `https://your-domain.tld/api/health`)
 - Логин/регистрация в UI
 - Проверка, что переводы подгружаются (нет ошибок `Failed to fetch`/`Unexpected end of JSON input`)
-- После шага §7.3: `GET /api/public/translations?locale=ru` (и `az`) — не пустой объект при ожидании полного зеркала; при смене языка в UI строки совпадают с ожидаемым релизом (при расхождении повторите `db:sync-i18n:prune` и сброс кэша браузера)
+- После шага §7.3: **`GET /api/public/translations?locale=ru`** и **`?locale=az`** — при полном зеркале из `resources.ts` в ответе большой объект оверрайдов; переключатель языка в UI (**ru** / **az**) должен показывать ожидаемые строки (при расхождении повторите `db:sync-i18n:prune`, сбросьте кэш браузера и проверьте `dayday_i18n_lang` в localStorage)
 
 ---
 

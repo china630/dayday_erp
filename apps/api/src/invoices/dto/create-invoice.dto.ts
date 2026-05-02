@@ -34,10 +34,10 @@ export class CreateInvoiceItemDto {
   @IsNumber()
   unitPrice!: number;
 
-  @ApiProperty({ description: "Ставка НДС, % (0 или 18)" })
+  @ApiProperty({ description: "Ставка НДС строки: -1 (освобождение), 0, 2, 8 или 18 (%)" })
   @Type(() => Number)
   @IsNumber()
-  @IsIn([0, 18])
+  @IsIn([-1, 0, 2, 8, 18])
   vatRate!: number;
 }
 
@@ -69,11 +69,11 @@ export class CreateInvoiceDto {
   items!: CreateInvoiceItemDto[];
 
   @ApiPropertyOptional({
-    enum: ["AZN", "USD", "EUR"],
+    enum: ["AZN", "USD", "EUR", "RUB", "TRY"],
     default: "AZN",
   })
   @IsOptional()
-  @IsIn(["AZN", "USD", "EUR"])
+  @IsIn(["AZN", "USD", "EUR", "RUB", "TRY"])
   currency?: string;
 
   @ApiPropertyOptional({

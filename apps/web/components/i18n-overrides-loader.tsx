@@ -10,7 +10,7 @@ export function I18nOverridesLoader() {
 
   useEffect(() => {
     const ac = new AbortController();
-    void applyTranslationOverrides(i18n, i18n.language, ac.signal);
+    void applyTranslationOverrides(i18n, ac.signal);
     return () => ac.abort();
   }, [i18n, i18n.language]);
 

@@ -15,6 +15,6 @@ export class CreateHoldingDto {
   @IsOptional()
   @IsString()
   @Length(3, 3)
-  @IsIn(["AZN", "USD", "EUR"])
+  @IsIn(["AZN", "USD", "EUR", "RUB", "TRY"])
   baseCurrency?: string;
 }

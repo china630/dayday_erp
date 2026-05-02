@@ -1,17 +1,18 @@
 "use client";
 
-import { Save, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
 } from "../../lib/design-system";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
 import { formatMoneyAzn } from "../../lib/format-money";
+import { Button } from "../ui/button";
 
 type EmpOpt = { id: string; firstName: string; lastName: string };
 
@@ -71,65 +72,73 @@ export function SickCalcModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-2xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{t("payroll.sickCalcTitle")}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("payroll.sickCalcHint")}</p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-[13px] font-semibold leading-snug text-[#34495E]">{t("payroll.sickCalcTitle")}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("payroll.sickCalcHint")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("payroll.pickEmployee")}</span>
-              <select className={FORM_INPUT_CLASS} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.lastName} {e.firstName}
-                  </option>
-                ))}
-              </select>
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("payroll.pickEmployee")}
+                <select
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
+                >
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.lastName} {e.firstName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("payroll.absenceFrom")}
+                <input type="date" className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`} value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("payroll.absenceTo")}
+                <input type="date" className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`} value={to} onChange={(e) => setTo(e.target.value)} />
+              </label>
             </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("payroll.absenceFrom")}</span>
-              <input type="date" className={FORM_INPUT_CLASS} value={from} onChange={(e) => setFrom(e.target.value)} />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("payroll.absenceTo")}</span>
-              <input type="date" className={FORM_INPUT_CLASS} value={to} onChange={(e) => setTo(e.target.value)} />
-            </div>
+
+            {out ? (
+              <div className="space-y-1 rounded-[2px] border border-[#D5DADF] bg-[#F4F5F7] p-4 text-[13px] text-[#34495E]">
+                <div className="font-semibold text-[#34495E]">{t("payroll.sickCalcResult")}</div>
+                <div>
+                  {t("payroll.sickEmployerPay")}: {formatMoneyAzn(out.employerSickPayAmount)} AZN
+                </div>
+                <div className="text-[13px] text-[#7F8C8D]">
+                  {t("payroll.sickStajYears")}: {out.serviceWholeYears} · {t("payroll.sickEmployerPct")}: {out.employerPercent}% ·{" "}
+                  {t("payroll.sickEmployerDays")}: {out.employerCalendarDays} · DSMF: {out.dsmfCalendarDays}
+                </div>
+                {out.noteAz ? <div className="text-[13px] text-[#7F8C8D]">{out.noteAz}</div> : null}
+              </div>
+            ) : null}
           </div>
 
-          {out ? (
-            <div className="rounded-lg bg-slate-50 p-4 text-sm space-y-1">
-              <div className="font-semibold text-gray-900">{t("payroll.sickCalcResult")}</div>
-              <div>
-                {t("payroll.sickEmployerPay")}: {formatMoneyAzn(out.employerSickPayAmount)} AZN
-              </div>
-              <div className="text-slate-600 text-xs">
-                {t("payroll.sickStajYears")}: {out.serviceWholeYears} · {t("payroll.sickEmployerPct")}: {out.employerPercent}% ·{" "}
-                {t("payroll.sickEmployerDays")}: {out.employerCalendarDays} · DSMF: {out.dsmfCalendarDays}
-              </div>
-              {out.noteAz ? <div className="text-slate-600 text-xs">{out.noteAz}</div> : null}
-            </div>
-          ) : null}
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
-            </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy}>
-              <Save className="h-4 w-4 shrink-0" aria-hidden />
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? "…" : t("payroll.sickCalcBtn")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
     </div>
   );
 }
-

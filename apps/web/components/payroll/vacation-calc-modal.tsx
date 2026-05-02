@@ -1,17 +1,18 @@
 "use client";
 
-import { Save, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
 } from "../../lib/design-system";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
 import { formatMoneyAzn } from "../../lib/format-money";
+import { Button } from "../ui/button";
 
 type EmpOpt = { id: string; firstName: string; lastName: string };
 type AbsenceTypeOpt = { id: string; nameAz: string; formula: string };
@@ -25,6 +26,7 @@ type VacationCalcOut = {
   totalGrossInWindow?: string;
   monthsInAverage?: number | string;
   monthsWithData?: number | string;
+  /** Ожидаемое число месяцев в окне (если API вернуло). */
   monthsExpected?: number | string;
 };
 
@@ -97,85 +99,97 @@ export function VacationCalcModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-2xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{t("payroll.vacationCalc")}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("payroll.vacationCalcHint")}</p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{t("payroll.vacationCalc")}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("payroll.vacationCalcHint")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
             <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          </Button>
+        </header>
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("payroll.pickEmployee")}</span>
-              <select className={FORM_INPUT_CLASS} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.lastName} {e.firstName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {laborTypes.length > 0 ? (
-              <div className="md:col-span-2">
-                <span className={FORM_LABEL_CLASS}>{t("payroll.absenceKindLabor")}</span>
-                <select className={FORM_INPUT_CLASS} value={absenceTypeId} onChange={(e) => setAbsenceTypeId(e.target.value)}>
-                  {laborTypes.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.nameAz}
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("payroll.pickEmployee")}
+                <select
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
+                >
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.lastName} {e.firstName}
                     </option>
                   ))}
                 </select>
+              </label>
+
+              {laborTypes.length > 0 ? (
+                <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                  {t("payroll.absenceKindLabor")}
+                  <select
+                    className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                    value={absenceTypeId}
+                    onChange={(e) => setAbsenceTypeId(e.target.value)}
+                  >
+                    {laborTypes.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.nameAz}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("payroll.absenceFrom")}
+                <input type="date" className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`} value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("payroll.absenceTo")}
+                <input type="date" className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`} value={to} onChange={(e) => setTo(e.target.value)} />
+              </label>
+            </div>
+
+            {out ? (
+              <div className="space-y-1 rounded-[2px] border border-[#D5DADF] bg-[#F4F5F7] p-4 text-[13px] text-[#34495E]">
+                <div className="font-semibold text-[#34495E]">{t("payroll.calcResult")}</div>
+                <div>
+                  {formatMoneyAzn(out.vacationPayAmount)} AZN ({Number(out.calendarDays)}{" "}
+                  {t("payroll.absenceThPeriod").toLowerCase()})
+                </div>
+                {out.monthsExpected != null && String(out.monthsExpected) !== "" ? (
+                  <div className="text-[13px] text-[#7F8C8D]">
+                    {t("payroll.calcMonths", { n: Number(out.monthsExpected) || 0 })}
+                  </div>
+                ) : null}
+                <div className="text-[13px] text-[#7F8C8D]">
+                  Ø mes.: {out.averageMonthlyGross} · Ø gün: {out.averageDailyGross} · 12 ay:{" "}
+                  {out.totalGrossInWindow} · ay sayı: {out.monthsWithData ?? out.monthsInAverage}
+                  {out.divisor304 ? ` · ÷ ${out.divisor304}` : ""}
+                </div>
               </div>
             ) : null}
-
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("payroll.absenceFrom")}</span>
-              <input type="date" className={FORM_INPUT_CLASS} value={from} onChange={(e) => setFrom(e.target.value)} />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("payroll.absenceTo")}</span>
-              <input type="date" className={FORM_INPUT_CLASS} value={to} onChange={(e) => setTo(e.target.value)} />
-            </div>
           </div>
 
-          {out ? (
-            <div className="rounded-lg bg-slate-50 p-4 text-sm space-y-1">
-              <div className="font-semibold text-gray-900">{t("payroll.calcResult")}</div>
-              <div>
-                {formatMoneyAzn(out.vacationPayAmount)} AZN ({Number(out.calendarDays)}{" "}
-                {t("payroll.absenceThPeriod").toLowerCase()})
-              </div>
-              {"monthsExpected" in out ? (
-                <div className="text-slate-700 text-xs">
-                  {t("payroll.calcMonths", { n: Number((out as any).monthsExpected) || 0 })}
-                </div>
-              ) : null}
-              <div className="text-slate-600 text-xs">
-                Ø mes.: {out.averageMonthlyGross} · Ø gün: {out.averageDailyGross} · 12 ay:{" "}
-                {out.totalGrossInWindow} · ay sayı: {out.monthsWithData ?? out.monthsInAverage}
-                {out.divisor304 ? ` · ÷ ${out.divisor304}` : ""}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
-            </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy}>
-              <Save className="h-4 w-4 shrink-0" aria-hidden />
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? "…" : t("payroll.calcBtn")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
     </div>
   );
 }
-

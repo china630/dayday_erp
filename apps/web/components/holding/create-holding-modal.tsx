@@ -1,16 +1,19 @@
 "use client";
 
-import { Save, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
 } from "../../lib/design-system";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
+import type { SupportedCurrency } from "../../lib/currencies";
+import { Button } from "../ui/button";
+import { CurrencySelect } from "../ui/currency-select";
 
 export function CreateHoldingModal({
   open,
@@ -24,7 +27,7 @@ export function CreateHoldingModal({
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
-  const [baseCurrency, setBaseCurrency] = useState<"AZN" | "USD" | "EUR">("AZN");
+  const [baseCurrency, setBaseCurrency] = useState<SupportedCurrency>("AZN");
 
   const title = useMemo(() => t("holdingCreate.title"), [t]);
 
@@ -32,6 +35,7 @@ export function CreateHoldingModal({
     if (!open) return;
     setName("");
     setBaseCurrency("AZN");
+    setBusy(false);
   }, [open]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -69,51 +73,52 @@ export function CreateHoldingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">
-              {t("holdingCreate.subtitle")}
-            </p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{title}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("holdingCreate.subtitle")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-4">
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("holdingCreate.name")}</span>
-              <input className={FORM_INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("holdingCreate.baseCurrency")}</span>
-              <select
-                className={FORM_INPUT_CLASS}
-                value={baseCurrency}
-                onChange={(e) => setBaseCurrency(e.target.value as "AZN" | "USD" | "EUR")}
-              >
-                <option value="AZN">AZN</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </div>
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("holdingCreate.name")}
+              <input
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("holdingCreate.baseCurrency")}
+              <div className="mt-1">
+                <CurrencySelect
+                  value={baseCurrency}
+                  onValueChange={setBaseCurrency}
+                  className={`block w-full ${MODAL_INPUT_CLASS}`}
+                />
+              </div>
+            </label>
           </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
-            </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy}>
-              <Save className="h-4 w-4 shrink-0" aria-hidden />
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? "…" : t("holdingCreate.create")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
     </div>
   );
 }
-

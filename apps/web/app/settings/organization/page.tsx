@@ -14,13 +14,16 @@ import {
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
+import { CurrencySelect } from "../../../components/ui/currency-select";
+import { DatePicker } from "../../../components/ui/date-picker";
 import { validateAzIban } from "../../../lib/iban";
+import { coerceSupportedCurrency, type SupportedCurrency } from "../../../lib/currencies";
 
 type BankRow = {
   id?: string;
   bankName: string;
   accountNumber: string;
-  currency: "AZN" | "USD" | "EUR";
+  currency: SupportedCurrency;
   iban: string;
   swift: string;
 };
@@ -106,7 +109,7 @@ export default function OrganizationSettingsPage() {
             id: b.id,
             bankName: b.bankName,
             accountNumber: b.accountNumber,
-            currency: b.currency as BankRow["currency"],
+            currency: coerceSupportedCurrency(b.currency),
             iban: b.iban ?? "",
             swift: b.swift ?? "",
           }))
@@ -465,11 +468,11 @@ export default function OrganizationSettingsPage() {
                 <p className="text-xs text-[#7F8C8D]">{t("orgSettings.periodLockHint")}</p>
                 <label className="block text-[#34495E] text-sm">
                   {t("orgSettings.periodLockUntil")}
-                  <input
-                    type="date"
+                  <DatePicker
+                    respectPeriodLock={false}
+                    triggerClassName={`block mt-1 w-full max-w-xs ${INPUT_BORDERED_CLASS}`}
                     value={lockedPeriodUntil}
-                    onChange={(e) => setLockedPeriodUntil(e.target.value)}
-                    className={`block mt-1 w-full max-w-xs ${INPUT_BORDERED_CLASS}`}
+                    onChange={setLockedPeriodUntil}
                     disabled={!canEditPeriodLock || saving}
                   />
                 </label>
@@ -519,19 +522,17 @@ export default function OrganizationSettingsPage() {
                   </label>
                   <label className="text-sm text-[#34495E]">
                     {t("orgSettings.currency")}
-                    <select
-                      value={b.currency}
-                      onChange={(e) => {
-                        const next = [...banks];
-                        next[idx] = { ...b, currency: e.target.value as BankRow["currency"] };
-                        setBanks(next);
-                      }}
-                      className={`block mt-1 w-full ${INPUT_BORDERED_CLASS}`}
-                    >
-                      <option value="AZN">AZN</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                    </select>
+                    <div className="mt-1">
+                      <CurrencySelect
+                        value={b.currency}
+                        onValueChange={(cur) => {
+                          const next = [...banks];
+                          next[idx] = { ...b, currency: cur };
+                          setBanks(next);
+                        }}
+                        className={`block w-full ${INPUT_BORDERED_CLASS}`}
+                      />
+                    </div>
                   </label>
                   <label className="text-sm text-[#34495E]">
                     {t("orgSettings.iban")}

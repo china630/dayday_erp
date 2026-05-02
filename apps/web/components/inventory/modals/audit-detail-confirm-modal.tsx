@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
-/** Подтверждение действия (синхронизация / проведение) с футером Ləğv et / Yadda saxla. */
+/** Подтверждение действия (синхронизация / проведение); футер — `t("common.cancel")` / `t("common.save")`. */
 export function AuditDetailConfirmModal({
   open,
   title,

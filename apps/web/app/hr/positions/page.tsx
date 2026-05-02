@@ -1,5 +1,6 @@
 "use client";
 
+import { Pencil } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
@@ -9,8 +10,18 @@ import { EmptyState } from "../../../components/empty-state";
 import { formatMoneyAzn } from "../../../lib/format-money";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   PRIMARY_BUTTON_CLASS,
-  BORDER_MUTED_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../../lib/design-system";
 import { JobPositionModal } from "../../../components/hr/job-position-modal";
 
@@ -36,7 +47,6 @@ export default function HrPositionsPage() {
   const [positions, setPositions] = useState<JobPositionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editPosition, setEditPosition] = useState<JobPositionRow | null>(null);
 
@@ -105,39 +115,44 @@ export default function HrPositionsPage() {
           <EmptyState title={t("hrStructure.positionsEmpty")} description={t("hrStructure.positionsEmptyHint")} />
         )}
         {!loading && positions.length > 0 && (
-          <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS}`}>
-            <table className="text-sm min-w-full">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-full`}>
               <thead>
-                <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
-                  <th className="text-left p-2">{t("hrStructure.positionName")}</th>
-                  <th className="text-left p-2">{t("hrStructure.department")}</th>
-                  <th className="text-right p-2">{t("hrStructure.slots")}</th>
-                  <th className="text-right p-2">{t("hrPositions.salaryFork")}</th>
-                  <th className="text-right p-2">{t("hrStructure.positionsEmployees")}</th>
-                  <th className="p-2" />
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("hrStructure.positionName")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("hrStructure.department")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("hrStructure.slots")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("hrPositions.salaryFork")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>
+                    {t("hrStructure.positionsEmployees")}
+                  </th>
+                  <th className={DATA_TABLE_ACTIONS_TH_CLASS}>{t("teamPage.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {positions.map((p) => (
-                  <tr key={p.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
-                    <td className="p-2 font-medium text-gray-900">{p.name}</td>
-                    <td className="p-2">{p.department.name}</td>
-                    <td className="p-2 text-right tabular-nums">{p.totalSlots}</td>
-                    <td className="p-2 text-right tabular-nums text-xs">
+                  <tr key={p.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>{p.name}</td>
+                    <td className={DATA_TABLE_TD_CLASS}>{p.department.name}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{p.totalSlots}</td>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} text-xs`}>
                       {formatMoneyAzn(p.minSalary)} — {formatMoneyAzn(p.maxSalary)}
                     </td>
-                    <td className="p-2 text-right tabular-nums">{p._count.employees}</td>
-                    <td className="p-2 text-right">
-                      <button
-                        type="button"
-                        className="text-sm text-action hover:underline"
-                        onClick={() => {
-                          setEditPosition(p);
-                          setCreateOpen(true);
-                        }}
-                      >
-                        {t("counterparties.edit")}
-                      </button>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{p._count.employees}</td>
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("counterparties.edit")}
+                          onClick={() => {
+                            setEditPosition(p);
+                            setCreateOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

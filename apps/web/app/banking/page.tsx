@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Landmark, Plus, Wallet } from "lucide-react";
+import { Building2, GitMerge, Landmark, Loader2, Plus, Search, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "../../components/layout/page-header";
 import { EmptyState } from "../../components/empty-state";
@@ -12,9 +12,25 @@ import { formatMoneyAzn } from "../../lib/format-money";
 import { FORM_INPUT_CLASS } from "../../lib/form-styles";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../lib/design-system";
+import { Button } from "../../components/ui/button";
 import { ledgerQueryParam, useLedger } from "../../lib/ledger-context";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { SubscriptionPaywall } from "../../components/subscription-paywall";
@@ -124,7 +140,10 @@ function BankingQuickExpenseModal({
       return;
     }
     const amt = Number(amount.replace(",", "."));
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    if (!Number.isFinite(amt) || amt <= 0) {
+      toast.error(t("banking.quickExpenseAmountInvalid"));
+      return;
+    }
     setBusy(true);
     const res = await apiFetch("/api/banking/manual-entry", {
       method: "POST",
@@ -151,87 +170,93 @@ function BankingQuickExpenseModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-lg p-6 bg-white`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{t("banking.quickExpense")}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">
-              {t("banking.manualEntryHint")}
-            </p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 pr-2">
+            <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{t("banking.quickExpense")}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("banking.manualEntryHint")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose}>
-            {t("common.cancel")}
-          </button>
-        </div>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        <form className="space-y-4 mt-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-medium text-gray-700">
-              {t("banking.thAmount")}
-              <input
-                className={FORM_INPUT_CLASS}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
-            </label>
-            <label className="block text-sm font-medium text-gray-700">
-              {t("banking.cashOutDate")}
-              <input
-                type="date"
-                className={FORM_INPUT_CLASS}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </label>
-            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-              {t("banking.manualEntryDds")}
-              <select
-                className={FORM_INPUT_CLASS}
-                value={cfId}
-                onChange={(e) => setCfId(e.target.value)}
-                required
-              >
-                {cfItems.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code} — {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-              {t("banking.manualEntryBankAcc")}
-              <div className="mt-1 flex items-center gap-2">
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("banking.thAmount")}
                 <input
-                  className={`flex-1 ${FORM_INPUT_CLASS}`}
-                  value={bankAcc}
-                  onChange={(e) => setBankAcc(e.target.value)}
-                  required
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                 />
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[2px] border border-[#D5DADF] bg-white text-[#2980B9] hover:bg-[#F4F5F7]"
-                  onClick={() => setCreateAccOpen(true)}
-                  title={t("banking.newBankAccountBtn")}
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("banking.cashOutDate")}
+                <input
+                  type="date"
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </label>
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("banking.manualEntryDds")}
+                <select
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={cfId}
+                  onChange={(e) => setCfId(e.target.value)}
                 >
-                  <Plus className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
-            </label>
-            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-              {t("banking.manualEntryDesc")}
-              <input
-                className={FORM_INPUT_CLASS}
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                placeholder={t("banking.cashOutDescPh")}
-              />
-            </label>
+                  {cfItems.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code} — {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("banking.manualEntryBankAcc")}
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    className={`min-w-0 flex-1 ${MODAL_INPUT_CLASS}`}
+                    value={bankAcc}
+                    onChange={(e) => setBankAcc(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!h-9 !min-w-9 !px-0"
+                    onClick={() => setCreateAccOpen(true)}
+                    title={t("banking.newBankAccountBtn")}
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                  </Button>
+                </div>
+              </label>
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("banking.manualEntryDesc")}
+                <input
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={desc}
+                  onChange={(e) => setDesc(e.target.value)}
+                  placeholder={t("banking.cashOutDescPh")}
+                />
+              </label>
+            </div>
           </div>
-          <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}>
-            {busy ? t("banking.uploadHint") : t("banking.manualEntrySubmit")}
-          </button>
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? t("banking.uploadHint") : t("banking.manualEntrySubmit")}
+            </Button>
+          </div>
         </form>
       </div>
       {createAccOpen ? (
@@ -264,6 +289,10 @@ function CreateBankAccountModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
+    if (!code.trim() || !name.trim()) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
     setBusy(true);
     const res = await apiFetch("/api/accounts/bank-accounts", {
       method: "POST",
@@ -282,38 +311,59 @@ function CreateBankAccountModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-md p-6 bg-white`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">
-              {t("banking.createBankAccountTitle")}
-            </h3>
-          </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose}>
-            {t("common.cancel")}
-          </button>
-        </div>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <h3 className="m-0 min-w-0 flex-1 pr-2 text-lg font-semibold leading-snug text-[#34495E]">
+            {t("banking.createBankAccountTitle")}
+          </h3>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        <form className="mt-4 space-y-4" onSubmit={(e) => void submit(e)}>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("banking.createBankAccountCode")}
-            <input className={FORM_INPUT_CLASS} value={code} onChange={(e) => setCode(e.target.value)} required />
-          </label>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("banking.createBankAccountName")}
-            <input className={FORM_INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label className="block text-sm font-medium text-gray-700">
-            {t("banking.createBankAccountCurrency")}
-            <select className={FORM_INPUT_CLASS} value={currency} onChange={(e) => setCurrency(e.target.value as any)}>
-              <option value="AZN">AZN</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-            </select>
-          </label>
-          <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-50`}>
-            {busy ? t("common.loading") : t("banking.createBankAccountSubmit")}
-          </button>
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void submit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("banking.createBankAccountCode")}
+              <input
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </label>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("banking.createBankAccountName")}
+              <input
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("banking.createBankAccountCurrency")}
+              <select
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as "AZN" | "USD" | "EUR")}
+              >
+                <option value="AZN">AZN</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </label>
+          </div>
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? t("common.loading") : t("banking.createBankAccountSubmit")}
+            </Button>
+          </div>
         </form>
       </div>
     </div>
@@ -827,19 +877,19 @@ function BankingRegistry({
         />
       ) : null}
       {!loading && filteredLines.length > 0 && (
-        <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-          <table className="w-full text-sm">
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} w-full`}>
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/80 text-left">
-                <th className="py-2.5 px-3 font-semibold text-slate-800">{t("banking.thDate")}</th>
-                <th className="py-2.5 px-3 font-semibold text-slate-800">{t("banking.thSource")}</th>
-                <th className="py-2.5 px-3 font-semibold text-slate-800">{t("banking.thCounterparty")}</th>
-                <th className="py-2.5 px-3 font-semibold text-slate-800">{t("banking.thDescription")}</th>
-                <th className="py-2.5 px-3 font-semibold text-slate-800 text-right">
-                  {t("banking.thAmountInOut")}
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("banking.thDate")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.thSource")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("banking.thCounterparty")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.thDescription")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("banking.thAmountInOut")}</th>
+                <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("banking.thStatus")}</th>
+                <th className={`${DATA_TABLE_TH_RIGHT_CLASS} min-w-[140px] w-[140px]`}>
+                  {t("banking.thActions")}
                 </th>
-                <th className="py-2.5 px-3 font-semibold text-slate-800">{t("banking.thStatus")}</th>
-                <th className="py-2.5 px-3 font-semibold text-slate-800">{t("banking.thActions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -852,30 +902,30 @@ function BankingRegistry({
                 const isIn = r.type === "INFLOW";
                 const signed = isIn ? amt : -amt;
                 return (
-                  <tr key={r.id} className="border-b border-slate-50 align-top">
-                    <td className="py-2.5 px-3 whitespace-nowrap text-slate-800">
+                  <tr key={r.id} className={`${DATA_TABLE_TR_CLASS} align-top`}>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
                       {r.valueDate ? String(r.valueDate).slice(0, 10) : "—"}
                     </td>
-                    <td className="py-2.5 px-3">
-                      <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-800">
+                    <td className={DATA_TABLE_TD_CLASS}>
+                      <span className="inline-flex rounded-[2px] bg-[#EBEDF0] px-2 py-0.5 text-xs font-medium text-[#34495E]">
                         {t(sourceLabelKey(r.origin))}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2 min-w-[8rem]">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      <div className="flex items-center justify-end gap-2 min-w-[8rem]">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EBEDF0] text-[#7F8C8D]">
                           <Building2 className="h-4 w-4" aria-hidden />
                         </span>
-                        <span className="text-slate-800 break-words">
+                        <span className="break-words font-mono tabular-nums text-[#34495E]">
                           {r.counterpartyTaxId ?? "—"}
                         </span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-slate-700 max-w-md">
+                    <td className={`${DATA_TABLE_TD_CLASS} max-w-md`}>
                       {r.description ?? r.bankStatement.bankName}
                     </td>
                     <td
-                      className={`py-2.5 px-3 text-right tabular-nums font-medium ${
+                      className={`${DATA_TABLE_TD_RIGHT_CLASS} font-medium ${
                         signed >= 0 ? "text-emerald-700" : "text-rose-700"
                       }`}
                     >
@@ -883,7 +933,7 @@ function BankingRegistry({
                         {isIn ? t("banking.income") : t("banking.expense")} · {formatMoneyAzn(r.amount)}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3">
+                    <td className={DATA_TABLE_TD_CENTER_CLASS}>
                       {r.isMatched ? (
                         <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
                           {t("banking.statusPosted")}
@@ -894,38 +944,46 @@ function BankingRegistry({
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3">
+                    <td className={`${DATA_TABLE_TD_CLASS} w-[140px] min-w-[140px]`}>
                       {!r.isMatched && r.type === "INFLOW" && (
-                        <div className="space-y-2 max-w-md">
-                          <button
-                            type="button"
-                            className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10"
-                            onClick={() => void loadCandidates(r.id)}
-                          >
-                            {t("banking.candidates")}
-                          </button>
+                        <div className="space-y-2 max-w-md text-left">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              className={TABLE_ROW_ICON_BTN_CLASS}
+                              title={t("banking.candidates")}
+                              onClick={() => void loadCandidates(r.id)}
+                            >
+                              {candidatesByLine[r.id] === "loading" ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-[#2980B9]" aria-hidden />
+                              ) : (
+                                <Search className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                              )}
+                            </button>
+                          </div>
                           {candidatesByLine[r.id] === "loading" && (
-                            <span className="text-xs text-slate-500">{t("banking.candidatesLoading")}</span>
+                            <span className="text-xs text-[#7F8C8D]">{t("banking.candidatesLoading")}</span>
                           )}
                           {candidatesByLine[r.id] === "error" && (
                             <span className="text-xs text-red-600">{t("banking.candidatesErr")}</span>
                           )}
                           {Array.isArray(candidatesByLine[r.id]) &&
                             (candidatesByLine[r.id] as Candidate[]).length === 0 && (
-                              <p className="text-xs text-slate-500 m-0">{t("banking.noCandidates")}</p>
+                              <p className="text-xs text-[#7F8C8D] m-0">{t("banking.noCandidates")}</p>
                             )}
                           {Array.isArray(candidatesByLine[r.id]) &&
                             (candidatesByLine[r.id] as Candidate[]).map((c) => (
-                              <div key={c.id} className="flex flex-wrap items-center gap-2 mt-1">
-                                <span className="text-sm text-gray-700">
+                              <div key={c.id} className="flex flex-wrap items-center justify-end gap-1 mt-1">
+                                <span className="text-[13px] text-[#34495E] text-right min-w-0 flex-1">
                                   {c.number} · {c.counterparty.name} · {formatMoneyAzn(c.totalAmount)}
                                 </span>
                                 <button
                                   type="button"
-                                  className="text-sm px-2 py-1 rounded-md bg-action text-white hover:bg-action-hover"
+                                  className={TABLE_ROW_ICON_BTN_CLASS}
+                                  title={t("banking.match")}
                                   onClick={() => void match(r.id, c.id)}
                                 >
-                                  {t("banking.match")}
+                                  <GitMerge className="h-4 w-4 text-[#2980B9]" aria-hidden />
                                 </button>
                               </div>
                             ))}
@@ -1059,30 +1117,30 @@ function OutboundPaymentsSection({ refreshKey }: { refreshKey: number }) {
       </form>
       {loading ? <p className="text-sm text-slate-600 m-0">{t("common.loading")}</p> : null}
       {!loading && (
-        <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-          <table className="w-full text-sm">
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} w-full`}>
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/80 text-left">
-                <th className="py-2.5 px-3">Дата</th>
-                <th className="py-2.5 px-3">Получатель</th>
-                <th className="py-2.5 px-3">Назначение</th>
-                <th className="py-2.5 px-3">Провайдер</th>
-                <th className="py-2.5 px-3 text-right">Сумма</th>
-                <th className="py-2.5 px-3">Статус</th>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>Дата</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>Получатель</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>Назначение</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>Провайдер</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>Сумма</th>
+                <th className={DATA_TABLE_TH_CENTER_CLASS}>Статус</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50">
-                  <td className="py-2.5 px-3">{String(r.createdAt).slice(0, 10)}</td>
-                  <td className="py-2.5 px-3 font-mono text-xs">{r.recipientIban}</td>
-                  <td className="py-2.5 px-3">{r.purpose}</td>
-                  <td className="py-2.5 px-3">{r.provider ?? "—"}</td>
-                  <td className="py-2.5 px-3 text-right tabular-nums">
+                <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>{String(r.createdAt).slice(0, 10)}</td>
+                  <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>{r.recipientIban}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>{r.purpose}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>{r.provider ?? "—"}</td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                     {formatMoneyAzn(Number(r.amount))} {r.currency}
                   </td>
-                  <td className="py-2.5 px-3">
-                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs">
+                  <td className={DATA_TABLE_TD_CENTER_CLASS}>
+                    <span className="inline-flex rounded-full bg-[#EBEDF0] px-2 py-0.5 text-xs text-[#34495E]">
                       {r.status}
                     </span>
                     {r.rejectionReason ? (
@@ -1135,7 +1193,7 @@ export default function BankingPage() {
               >
                 {t("banking.quickExpense")}
               </button>
-              <Link href="/settings/mapping" className={PRIMARY_BUTTON_CLASS}>
+              <Link href="/accounting/mapping" className={PRIMARY_BUTTON_CLASS}>
                 {t("banking.addAccount")}
               </Link>
             </>

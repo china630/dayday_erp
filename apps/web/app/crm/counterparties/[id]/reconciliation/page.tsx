@@ -9,6 +9,16 @@ import { safeJson } from "../../../../../lib/api-fetch";
 import { inputFieldClass } from "../../../../../lib/form-classes";
 import { useRequireAuth } from "../../../../../lib/use-require-auth";
 import { PageHeader } from "../../../../../components/layout/page-header";
+import {
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+} from "../../../../../lib/design-system";
 
 const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
 
@@ -265,39 +275,39 @@ export default function CounterpartyReconciliationPage() {
               {t("counterparties.reconEmail")}
             </button>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-600">
-                <tr>
-                  <th className="px-3 py-2">{t("counterparties.reconThDate")}</th>
-                  <th className="px-3 py-2">{t("counterparties.reconThRef")}</th>
-                  <th className="px-3 py-2">{t("counterparties.reconThKind")}</th>
-                  <th className="px-3 py-2">{t("counterparties.reconThAccount")}</th>
-                  <th className="px-3 py-2 text-right">{t("counterparties.reconThDr")}</th>
-                  <th className="px-3 py-2 text-right">{t("counterparties.reconThCr")}</th>
-                  <th className="px-3 py-2 text-right">{t("counterparties.reconThBal")}</th>
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-full`}>
+              <thead>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("counterparties.reconThDate")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.reconThRef")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.reconThKind")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.reconThAccount")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("counterparties.reconThDr")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("counterparties.reconThCr")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("counterparties.reconThBal")}</th>
                 </tr>
               </thead>
               <tbody>
                 {flatReconRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                  <tr className={DATA_TABLE_TR_CLASS}>
+                    <td colSpan={7} className={`${DATA_TABLE_TD_CLASS} py-6 text-center text-[#7F8C8D]`}>
                       {t("counterparties.reconEmpty")}
                     </td>
                   </tr>
                 ) : (
                   flatReconRows.map((row, idx) => (
-                    <tr key={`${row.journalEntryId ?? "s"}-${idx}`} className="border-t border-slate-100">
-                      <td className="whitespace-nowrap px-3 py-2">{row.date}</td>
-                      <td className="px-3 py-2">{row.reference}</td>
-                      <td className="px-3 py-2 text-xs text-slate-600">{row.kind}</td>
-                      <td className="px-3 py-2">
-                        <div className="font-mono text-xs">{row.accountCode}</div>
-                        <div className="text-xs text-slate-600">{row.accountName}</div>
+                    <tr key={`${row.journalEntryId ?? "s"}-${idx}`} className={DATA_TABLE_TR_CLASS}>
+                      <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>{row.date}</td>
+                      <td className={DATA_TABLE_TD_CLASS}>{row.reference}</td>
+                      <td className={`${DATA_TABLE_TD_CLASS} text-xs text-[#7F8C8D]`}>{row.kind}</td>
+                      <td className={DATA_TABLE_TD_CLASS}>
+                        <div className="font-mono text-xs text-[#34495E]">{row.accountCode}</div>
+                        <div className="text-xs text-[#7F8C8D]">{row.accountName}</div>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{row.debit}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{row.credit}</td>
-                      <td className="px-3 py-2 text-right font-medium tabular-nums">{row.runningBalance}</td>
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>{row.debit}</td>
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>{row.credit}</td>
+                      <td className={`${DATA_TABLE_TD_RIGHT_CLASS} font-semibold`}>{row.runningBalance}</td>
                     </tr>
                   ))
                 )}

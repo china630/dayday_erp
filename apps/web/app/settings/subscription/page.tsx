@@ -30,6 +30,7 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import { EmptyState } from "../../../components/empty-state";
 import { PageHeader } from "../../../components/layout/page-header";
 import { toast } from "sonner";
+import { intlLocaleRuAz } from "../../../lib/i18n/ui-lang";
 
 type PlatformInvoiceRow = {
   id: string;
@@ -176,7 +177,7 @@ export default function SubscriptionSettingsPage() {
     {},
   );
 
-  const locale = i18n.language.startsWith("az") ? "az-AZ" : "ru-RU";
+  const locale = intlLocaleRuAz(i18n.language);
 
   const currentOrg = useMemo(
     () => organizations.find((o) => o.id === organizationId) ?? null,

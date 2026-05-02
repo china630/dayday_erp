@@ -5,9 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CARD_CONTAINER_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
 } from "../../lib/design-system";
 import { apiFetch } from "../../lib/api-client";
+import { Button } from "../ui/button";
 
 type AbsenceTypeOpt = { id: string; nameAz: string; code: string; formula: string };
 export type EmployeeAbsenceRow = {
@@ -64,6 +65,8 @@ export function EmployeeAbsencesModal({
   const [busy, setBusy] = useState(false);
   const [rowsAll, setRowsAll] = useState<EmployeeAbsenceRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  const periodLabel = `${String(month).padStart(2, "0")}.${year}`;
 
   useEffect(() => {
     if (!open) return;
@@ -122,78 +125,66 @@ export function EmployeeAbsencesModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-3xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">
-              {employee
-                ? `${employee.lastName} ${employee.firstName}`
-                : employeeLabel || "—"}
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-[13px] font-semibold leading-snug text-[#34495E]">
+              {employee ? `${employee.lastName} ${employee.firstName}` : employeeLabel || t("common.emptyValue")}
             </h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">
-              Məzuniyyət və buraxılışlar · {String(month).padStart(2, "0")}.{year}
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">
+              {t("payroll.employeeAbsencesSubtitle", { period: periodLabel })}
             </p>
           </div>
-          <button
-            type="button"
-            className={SECONDARY_BUTTON_CLASS}
-            onClick={onClose}
-            aria-label={t("common.cancel")}
-          >
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
             <X className="h-4 w-4" aria-hidden />
-          </button>
+          </Button>
+        </header>
+
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+          {loadErr ? (
+            <div className="text-[13px] text-red-700">
+              {t("common.loadErr")}: {loadErr}
+            </div>
+          ) : busy ? (
+            <div className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</div>
+          ) : rows.length === 0 ? (
+            <div className="text-[13px] text-[#7F8C8D]">{t("common.emptyValue")}</div>
+          ) : (
+            <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
+              <table className="min-w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-[#D5DADF]">
+                    <th className="p-2 text-left font-semibold text-[#34495E]">{t("payroll.absenceThType")}</th>
+                    <th className="p-2 text-left font-semibold text-[#34495E]">{t("payroll.absenceThPeriod")}</th>
+                    <th className="p-2 text-left font-semibold text-[#34495E]">{t("payroll.absenceNote")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((a) => (
+                    <tr key={a.id} className="border-t border-[#EBEDF0]">
+                      <td className="p-2">{a.absenceType?.nameAz ?? t("payroll.absenceTypeUnknown")}</td>
+                      <td className="whitespace-nowrap p-2 tabular-nums">
+                        {String(a.startDate).slice(0, 10)} — {String(a.endDate).slice(0, 10)}
+                      </td>
+                      <td className="p-2">{a.note?.trim() ? a.note : t("common.emptyValue")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {loadErr ? (
-          <div className="mt-5 text-sm text-red-700">
-            {t("common.loadErr")}: {loadErr}
-          </div>
-        ) : busy ? (
-          <div className="mt-5 text-sm text-slate-600">{t("common.loading")}</div>
-        ) : rows.length === 0 ? (
-          <div className="mt-5 text-sm text-slate-600">
-            —
-          </div>
-        ) : (
-          <div className={`mt-5 overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-            <table className="text-sm min-w-full">
-              <thead>
-                <tr className="border-b border-[#D5DADF]">
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceThType")}
-                  </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceThPeriod")}
-                  </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("payroll.absenceNote")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((a) => (
-                  <tr key={a.id} className="border-t border-[#EBEDF0]">
-                    <td className="p-2">
-                      {a.absenceType?.nameAz ?? t("payroll.absenceTypeUnknown")}
-                    </td>
-                    <td className="p-2 whitespace-nowrap tabular-nums">
-                      {String(a.startDate).slice(0, 10)} — {String(a.endDate).slice(0, 10)}
-                    </td>
-                    <td className="p-2">{a.note || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-2 pt-4">
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose}>
-            {t("common.back")}
-          </button>
+        <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t("common.close")}
+          </Button>
         </div>
       </div>
     </div>
   );
 }
-

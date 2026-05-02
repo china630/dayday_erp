@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../lib/api-client";
+import { uiLangRuAz } from "../lib/i18n/ui-lang";
+import {
+  CARD_CONTAINER_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  PRIMARY_BUTTON_CLASS,
+} from "../lib/design-system";
+import { Button } from "./ui/button";
 
 type ModalReason = "quota" | "read_only";
 type CustomUpgradeDetail = {
@@ -79,67 +86,60 @@ export function UpgradePlanModalHost() {
 
   if (!open) return null;
 
-  const lang = i18n.language.startsWith("az") ? "az" : "ru";
+  const lang = uiLangRuAz(i18n.language);
   const quotaMsg =
     quotaDetail &&
     typeof quotaDetail === "object" &&
     quotaDetail !== null &&
     "message" in quotaDetail &&
-    typeof (quotaDetail as { message?: { az?: string; ru?: string } }).message ===
-      "object"
-      ? (quotaDetail as { message: { az?: string; ru?: string } }).message[
-          lang === "az" ? "az" : "ru"
-        ]
+    typeof (quotaDetail as { message?: { az?: string; ru?: string } }).message === "object"
+      ? (quotaDetail as { message: { az?: string; ru?: string } }).message[lang]
       : null;
 
   const body =
-    reason === "quota"
-      ? quotaMsg || t("upgradeModal.quotaBody")
-      : t("upgradeModal.body");
+    reason === "quota" ? quotaMsg || t("upgradeModal.quotaBody") : t("upgradeModal.body");
   const title = custom?.title?.trim() || (reason === "quota" ? t("upgradeModal.quotaTitle") : t("upgradeModal.title"));
   const text = custom?.body?.trim() || body;
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="upgrade-plan-modal-title"
     >
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] min-h-0 w-full max-w-md flex-col overflow-hidden bg-white p-6 shadow-sm`}
+      >
         <h2
           id="upgrade-plan-modal-title"
-          className="text-lg font-semibold text-slate-900"
+          className="m-0 shrink-0 text-lg font-semibold leading-snug text-[#34495E]"
         >
           {title}
         </h2>
-        <p className="text-sm text-slate-600 leading-relaxed">{text}</p>
-        {preview && (
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
-              {t("upgradeModal.previewTitle")}
-            </p>
-            <p className="mt-1 text-sm text-emerald-900">
-              {t("upgradeModal.previewBody", {
-                amount: preview.amountToPay,
-                daysRemaining: preview.daysRemaining,
-                currentTier: preview.currentTier,
-              })}
-            </p>
-          </div>
-        )}
-        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
+        <div className="mt-2 min-h-0 flex-1 space-y-3 overflow-y-auto">
+          <p className="mb-0 text-[13px] leading-relaxed text-[#7F8C8D]">{text}</p>
+          {preview ? (
+            <div className="rounded-[2px] border border-[#D5DADF] bg-[#F4F5F7] px-3 py-2.5">
+              <p className="m-0 text-[13px] font-semibold text-[#34495E]">{t("upgradeModal.previewTitle")}</p>
+              <p className="mb-0 mt-1 text-[13px] leading-snug text-[#34495E]">
+                {t("upgradeModal.previewBody", {
+                  amount: preview.amountToPay,
+                  daysRemaining: preview.daysRemaining,
+                  currentTier: preview.currentTier,
+                })}
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
             {t("upgradeModal.close")}
-          </button>
+          </Button>
           <Link
             href="/settings/subscription"
             onClick={() => setOpen(false)}
-            className="inline-flex justify-center rounded-xl bg-action px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-action-hover"
+            className={PRIMARY_BUTTON_CLASS}
           >
             {t("upgradeModal.openSubscription")}
           </Link>

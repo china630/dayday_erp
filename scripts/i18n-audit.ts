@@ -9,6 +9,8 @@ import { resources } from "../apps/web/lib/i18n/resources";
 const SCAN_ROOTS = [
   path.join(process.cwd(), "apps/web/app"),
   path.join(process.cwd(), "apps/web/components"),
+  /** Ключи в `lib/` (api-client, контексты и т.д.) тоже должны быть в RU/AZ. */
+  path.join(process.cwd(), "apps/web/lib"),
 ];
 
 const ru = resources.ru.translation as Record<string, unknown>;
@@ -123,7 +125,7 @@ function main(): void {
 
   if (!missingRu.length && !missingAz.length && !notString.length) {
     console.info(
-      `i18n audit: OK (RU + AZ) for ${files.length} file(s) under apps/web/app + components.`,
+      `i18n audit: OK (RU + AZ) for ${files.length} file(s) under apps/web/app, components, lib.`,
     );
     process.exit(0);
   } else {

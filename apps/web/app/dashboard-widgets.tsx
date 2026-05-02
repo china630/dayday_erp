@@ -20,6 +20,14 @@ import { MoneyAzn } from "../lib/money-azn";
 import { EmptyState } from "../components/empty-state";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../lib/design-system";
@@ -33,9 +41,6 @@ const FX_FLAGS: Record<string, string> = {
   TRY: "🇹🇷",
   JPY: "🇯🇵",
 };
-
-const DASH_TH =
-  "text-[13px] font-semibold text-[#34495E] border-b border-[#EBEDF0] bg-[#F8F9FA]";
 
 type ClosePeriodPromptPayload = {
   show: boolean;
@@ -666,37 +671,39 @@ export function DashboardWidgets() {
                 {t("dashboard.topDebtors")}
               </h3>
               <p className="mb-3 text-[13px] text-[#7F8C8D]">{t("dashboard.topDebtorsHint")}</p>
-              <div className="-mx-1 overflow-x-auto px-1">
-              <table className="w-full text-[13px] text-[#34495E]">
-                <thead>
-                  <tr>
-                    <th className={`${DASH_TH} text-left py-2.5 pl-3 pr-2`}>
-                      {t("dashboard.thCpName")}
-                    </th>
-                    <th className={`${DASH_TH} py-2.5 pr-3 text-right`}>
-                      {t("dashboard.thBalance")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.topDebtors ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={2} className="p-0">
-                        <EmptyState compact title={t("dashboard.noData")} className="border-0 bg-transparent shadow-none" />
-                      </td>
-                    </tr>
-                  ) : (
-                    (data.topDebtors ?? []).map((r) => (
-                      <tr key={r.counterpartyId} className="border-t border-[#EBEDF0]">
-                        <td className="py-2.5 pl-3 pr-2">{r.name}</td>
-                        <td className="py-2.5 pr-3 text-right font-mono">
-                          <MoneyAzn value={r.balance} className="text-[#34495E]" />
-                        </td>
+              <div className="-mx-1 px-1">
+                <div className={DATA_TABLE_VIEWPORT_CLASS}>
+                  <table className={`${DATA_TABLE_CLASS} w-full`}>
+                    <thead>
+                      <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                        <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("dashboard.thCpName")}</th>
+                        <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("dashboard.thBalance")}</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {(data.topDebtors ?? []).length === 0 ? (
+                        <tr className={DATA_TABLE_TR_CLASS}>
+                          <td colSpan={2} className="p-0">
+                            <EmptyState
+                              compact
+                              title={t("dashboard.noData")}
+                              className="border-0 bg-transparent shadow-none"
+                            />
+                          </td>
+                        </tr>
+                      ) : (
+                        (data.topDebtors ?? []).map((r) => (
+                          <tr key={r.counterpartyId} className={DATA_TABLE_TR_CLASS}>
+                            <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>{r.name}</td>
+                            <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                              <MoneyAzn value={r.balance} className="text-[#34495E]" />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
             <div className={`${CARD_CONTAINER_CLASS} min-w-0 p-5`}>
@@ -704,37 +711,39 @@ export function DashboardWidgets() {
                 {t("dashboard.topCreditors")}
               </h3>
               <p className="mb-3 text-[13px] text-[#7F8C8D]">{t("dashboard.topCreditorsHint")}</p>
-              <div className="-mx-1 overflow-x-auto px-1">
-              <table className="w-full text-[13px] text-[#34495E]">
-                <thead>
-                  <tr>
-                    <th className={`${DASH_TH} text-left py-2.5 pl-3 pr-2`}>
-                      {t("dashboard.thCpName")}
-                    </th>
-                    <th className={`${DASH_TH} py-2.5 pr-3 text-right`}>
-                      {t("dashboard.thBalance")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.topCreditors ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={2} className="p-0">
-                        <EmptyState compact title={t("dashboard.noData")} className="border-0 bg-transparent shadow-none" />
-                      </td>
-                    </tr>
-                  ) : (
-                    (data.topCreditors ?? []).map((r) => (
-                      <tr key={r.counterpartyId} className="border-t border-[#EBEDF0]">
-                        <td className="py-2.5 pl-3 pr-2">{r.name}</td>
-                        <td className="py-2.5 pr-3 text-right font-mono">
-                          <MoneyAzn value={r.balance} className="text-[#34495E]" />
-                        </td>
+              <div className="-mx-1 px-1">
+                <div className={DATA_TABLE_VIEWPORT_CLASS}>
+                  <table className={`${DATA_TABLE_CLASS} w-full`}>
+                    <thead>
+                      <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                        <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("dashboard.thCpName")}</th>
+                        <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("dashboard.thBalance")}</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {(data.topCreditors ?? []).length === 0 ? (
+                        <tr className={DATA_TABLE_TR_CLASS}>
+                          <td colSpan={2} className="p-0">
+                            <EmptyState
+                              compact
+                              title={t("dashboard.noData")}
+                              className="border-0 bg-transparent shadow-none"
+                            />
+                          </td>
+                        </tr>
+                      ) : (
+                        (data.topCreditors ?? []).map((r) => (
+                          <tr key={r.counterpartyId} className={DATA_TABLE_TR_CLASS}>
+                            <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>{r.name}</td>
+                            <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                              <MoneyAzn value={r.balance} className="text-[#34495E]" />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -796,39 +805,41 @@ export function DashboardWidgets() {
             <p className="mb-4 text-[13px] text-[#7F8C8D]">
               {t("dashboard.topProductsHint")}
             </p>
-            <div className="-mx-1 overflow-x-auto px-1">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr>
-                  <th className={`${DASH_TH} text-left py-2.5 pl-3 pr-2`}>
-                    {t("dashboard.productCol")}
-                  </th>
-                  <th className={`${DASH_TH} text-left py-2.5 px-2`}>
-                    {t("dashboard.skuCol")}
-                  </th>
-                  <th className={`${DASH_TH} py-2.5 pr-3 text-right`}>
-                    {t("dashboard.qtyCol")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.topProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="p-0">
-                      <EmptyState compact title={t("dashboard.noData")} className="border-0 bg-transparent shadow-none" />
-                    </td>
-                  </tr>
-                ) : (
-                  data.topProducts.map((p) => (
-                    <tr key={p.productId ?? p.sku} className="border-t border-[#EBEDF0]">
-                      <td className="py-2.5 pl-3 pr-2 text-[#34495E]">{p.name}</td>
-                      <td className="px-2 py-2.5 text-[#34495E]">{p.sku}</td>
-                      <td className="py-2.5 pr-3 text-right text-[#34495E]">{p.quantity}</td>
+            <div className="-mx-1 px-1">
+              <div className={DATA_TABLE_VIEWPORT_CLASS}>
+                <table className={`${DATA_TABLE_CLASS} w-full`}>
+                  <thead>
+                    <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("dashboard.productCol")}</th>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("dashboard.skuCol")}</th>
+                      <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("dashboard.qtyCol")}</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {data.topProducts.length === 0 ? (
+                      <tr className={DATA_TABLE_TR_CLASS}>
+                        <td colSpan={3} className="p-0">
+                          <EmptyState
+                            compact
+                            title={t("dashboard.noData")}
+                            className="border-0 bg-transparent shadow-none"
+                          />
+                        </td>
+                      </tr>
+                    ) : (
+                      data.topProducts.map((p) => (
+                        <tr key={p.productId ?? p.sku} className={DATA_TABLE_TR_CLASS}>
+                          <td className={`${DATA_TABLE_TD_CLASS} font-semibold`}>{p.name}</td>
+                          <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs text-[#7F8C8D]`}>
+                            {p.sku}
+                          </td>
+                          <td className={DATA_TABLE_TD_RIGHT_CLASS}>{p.quantity}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </>

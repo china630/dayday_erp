@@ -5,8 +5,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { notifyInventoryListsRefresh } from "../../../lib/list-refresh-bus";
-import { inputFieldWideClass } from "../../../lib/form-classes";
-import { FORM_LABEL_CLASS } from "../../../lib/form-styles";
+import { MODAL_FIELD_LABEL_CLASS, MODAL_INPUT_CLASS } from "../../../lib/design-system";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
 export function NewWarehouseModal({
@@ -62,25 +61,24 @@ export function NewWarehouseModal({
       }
     >
       <form id={formId} className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-        <div>
-          <span className={FORM_LABEL_CLASS}>{t("inventory.whNamePh")}</span>
+        <label className={MODAL_FIELD_LABEL_CLASS}>
+          {t("inventory.whNamePh")}
           <input
             placeholder={t("inventory.whNamePlaceholder")}
             value={whName}
             onChange={(e) => setWhName(e.target.value)}
-            required
-            className={inputFieldWideClass}
+            className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
           />
-        </div>
-        <div>
-          <span className={FORM_LABEL_CLASS}>{t("inventory.whLocPh")}</span>
+        </label>
+        <label className={MODAL_FIELD_LABEL_CLASS}>
+          {t("inventory.whLocPh")}
           <input
             placeholder={t("inventory.whLocPlaceholder")}
             value={whLoc}
             onChange={(e) => setWhLoc(e.target.value)}
-            className={inputFieldWideClass}
+            className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
           />
-        </div>
+        </label>
       </form>
     </InventoryModalShell>
   );

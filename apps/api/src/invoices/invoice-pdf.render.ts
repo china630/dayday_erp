@@ -1,6 +1,12 @@
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 
+import {
+  PDF_FONT_UNICODE,
+  PDF_FONT_UNICODE_BOLD,
+  registerUnicodeFonts,
+} from "../reporting/pdf-font.util";
+
 export type InvoicePdfModel = {
   number: string;
   status: string;
@@ -44,6 +50,9 @@ export async function renderInvoicePdf(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    registerUnicodeFonts(doc);
+    doc.font(PDF_FONT_UNICODE);
+
     doc.fontSize(18).text(`Invoice ${invoice.number}`, { underline: true });
     doc.moveDown();
     doc.fontSize(10);
@@ -84,9 +93,9 @@ export async function renderInvoicePdf(
         .strokeColor("#15803d")
         .lineWidth(1.2)
         .stroke();
-      doc.fillColor("#166534").fontSize(9).font("Helvetica-Bold");
+      doc.fillColor("#166534").fontSize(9).font(PDF_FONT_UNICODE_BOLD);
       doc.text("RƏQƏMSAL İMZA", margin + 8, yStamp + 8, { width: stampW - 16 });
-      doc.font("Helvetica").fontSize(8).fillColor("#14532d");
+      doc.font(PDF_FONT_UNICODE).fontSize(8).fillColor("#14532d");
       doc.text(
         `${invoice.signature.providerLabel} · ${invoice.signature.signedAt.toISOString().slice(0, 19).replace("T", " ")} UTC`,
         margin + 8,

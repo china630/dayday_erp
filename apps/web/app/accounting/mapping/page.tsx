@@ -7,6 +7,7 @@ import { accountDisplayName } from "../../../lib/account-display-name";
 import { apiFetch } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
+import { uiLangRuAz } from "../../../lib/i18n/ui-lang";
 import { SubscriptionPaywall } from "../../../components/subscription-paywall";
 import {
   CARD_CONTAINER_CLASS,
@@ -71,7 +72,7 @@ function AccountMappingContent() {
     if (!token) return;
     setLoading(true);
     setErr(null);
-    const loc = encodeURIComponent(i18n.language || "az");
+    const loc = encodeURIComponent(uiLangRuAz(i18n.language));
     const [rNas, rIfrs, rMap] = await Promise.all([
       apiFetch(`/api/accounts?ledgerType=NAS&locale=${loc}`),
       apiFetch(`/api/accounts?ledgerType=IFRS&locale=${loc}`),

@@ -29,7 +29,7 @@ export default async function RootLayout({
     portalPath;
 
   return (
-    <html lang="ru" suppressHydrationWarning>
+    <html lang="az" suppressHydrationWarning>
       <body style={{ fontFamily: "system-ui", margin: 0 }}>
         <Providers>
           {!token && !publicPath ? (

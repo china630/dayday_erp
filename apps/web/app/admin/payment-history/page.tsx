@@ -9,11 +9,25 @@ import { apiFetch } from "../../../lib/api-client";
 import { useAuth } from "../../../lib/auth-context";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   LINK_ACCENT_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../../lib/design-system";
 import { canAccessBilling } from "../../../lib/role-utils";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
+import { intlLocaleRuAz } from "../../../lib/i18n/ui-lang";
 
 type PlatformInvoiceLine = {
   organizationId: string;
@@ -58,7 +72,7 @@ export default function PaymentHistoryPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
 
-  const locale = i18n.language.startsWith("az") ? "az-AZ" : "ru-RU";
+  const locale = intlLocaleRuAz(i18n.language);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -193,38 +207,35 @@ export default function PaymentHistoryPage() {
             className="!border-0 !shadow-none"
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-[13px]">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={DATA_TABLE_CLASS}>
               <thead>
-                <tr className="border-b border-[#D5DADF] bg-[#F8F9FA] text-left">
-                  <th className="py-3 pl-4 pr-3 font-semibold text-[#34495E]">
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>
                     {t("paymentHistory.colDate")}
                   </th>
-                  <th className="py-3 pr-3 font-semibold text-[#34495E]">
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>
                     {t("paymentHistory.colOrganization")}
                   </th>
-                  <th className="py-3 pr-4 text-right font-semibold text-[#34495E]">
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>
                     {t("paymentHistory.colAmount")}
                   </th>
-                  <th className="py-3 pr-3 font-semibold text-[#34495E]">
+                  <th className={DATA_TABLE_TH_CENTER_CLASS}>
                     {t("paymentHistory.colStatus")}
                   </th>
-                  <th className="py-3 pr-4 w-28 text-right font-semibold text-[#34495E]">
+                  <th className={DATA_TABLE_ACTIONS_TH_CLASS}>
                     {t("paymentHistory.pdf")}
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white">
+              <tbody>
                 {items.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-[#EBEDF0] last:border-0"
-                  >
-                    <td className="py-3 pl-4 pr-3 align-middle text-[#34495E] whitespace-nowrap">
+                  <tr key={row.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
                       {fmtDate(row.date)}
                     </td>
-                    <td className="py-3 pr-3 align-middle">
-                      <div className="font-medium text-[#34495E]">
+                    <td className={DATA_TABLE_TD_CLASS}>
+                      <div className="font-semibold text-[#34495E]">
                         {row.lines.length === 0
                           ? "—"
                           : row.lines.length === 1
@@ -232,7 +243,7 @@ export default function PaymentHistoryPage() {
                             : `${row.lines[0].organizationName} (${t("paymentHistory.moreOrgs", { n: row.lines.length - 1 })})`}
                       </div>
                       {row.lines[0]?.organizationTaxId ? (
-                        <div className="text-[12px] text-[#7F8C8D] mt-0.5">
+                        <div className="mt-0.5 text-[12px] text-[#7F8C8D]">
                           VÖEN {row.lines[0].organizationTaxId}
                           {row.lines.length > 1
                             ? ` · +${row.lines.length - 1}`
@@ -240,24 +251,24 @@ export default function PaymentHistoryPage() {
                         </div>
                       ) : null}
                     </td>
-                    <td className="py-3 pr-4 align-middle text-right tabular-nums font-medium text-[#34495E]">
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} font-semibold`}>
                       {row.amount} AZN
                     </td>
-                    <td className="py-3 pr-3 align-middle">
+                    <td className={DATA_TABLE_TD_CENTER_CLASS}>
                       <span className={statusBadgeClass(row.status)}>
                         {invoiceStatusLabel(row.status)}
                       </span>
                     </td>
-                    <td className="py-3 pr-4 align-middle text-right">
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
                       <button
                         type="button"
-                        className="inline-flex h-8 min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-[2px] border border-[#2980B9] bg-white px-3 text-[13px] font-semibold text-[#2980B9] shadow-sm transition hover:bg-[#2980B9]/10 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#2980B9] disabled:opacity-50 disabled:pointer-events-none"
+                        className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#2980B9]`}
                         disabled={pdfBusyId === row.id}
+                        title={t("paymentHistory.pdf")}
                         aria-label={t("paymentHistory.pdfAria")}
                         onClick={() => void downloadPdf(row)}
                       >
                         <FileDown className="h-4 w-4 shrink-0" aria-hidden />
-                        {pdfBusyId === row.id ? "…" : t("paymentHistory.pdf")}
                       </button>
                     </td>
                   </tr>

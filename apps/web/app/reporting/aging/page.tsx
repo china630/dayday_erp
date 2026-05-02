@@ -8,6 +8,16 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import { TrendingDown } from "lucide-react";
 import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
+import {
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+} from "../../../lib/design-system";
 
 type Row = {
   counterpartyId: string;
@@ -90,39 +100,47 @@ export default function AgingPage() {
       )}
       {!loading && data && data.rows.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="text-sm min-w-full">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-full`}>
               <thead>
-                <tr>
-                  <th className="text-left p-2">{t("aging.thName")}</th>
-                  <th className="text-left p-2">{t("aging.thTaxId")}</th>
-                  <th className="text-right p-2">{t("aging.th030")}</th>
-                  <th className="text-right p-2">{t("aging.th3160")}</th>
-                  <th className="text-right p-2">{t("aging.th61")}</th>
-                  <th className="text-right p-2">{t("aging.thTotal")}</th>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("aging.thName")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("aging.thTaxId")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("aging.th030")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("aging.th3160")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("aging.th61")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("aging.thTotal")}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.rows.map((r) => (
-                  <tr key={r.counterpartyId} className="border-t border-slate-100">
-                    <td className="p-2">{r.name}</td>
-                    <td className="p-2">{r.taxId}</td>
-                    <td className="p-2 text-right font-mono">{formatMoneyAzn(r.bucket0to30)}</td>
-                    <td className="p-2 text-right font-mono">{formatMoneyAzn(r.bucket31to60)}</td>
-                    <td className="p-2 text-right font-mono">{formatMoneyAzn(r.bucket61plus)}</td>
-                    <td className="p-2 text-right font-mono font-medium">{formatMoneyAzn(r.total)}</td>
+                  <tr key={r.counterpartyId} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>{r.name}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{r.taxId}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.bucket0to30)}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.bucket31to60)}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.bucket61plus)}</td>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} font-semibold`}>
+                      {formatMoneyAzn(r.total)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-slate-200 font-semibold">
-                  <td className="p-2" colSpan={2}>
+                <tr className={`${DATA_TABLE_TR_CLASS} border-t-2 border-[#D5DADF] bg-[#F8FAFC] font-semibold`}>
+                  <td className={DATA_TABLE_TD_CLASS} colSpan={2}>
                     {t("aging.totals")}
                   </td>
-                  <td className="p-2 text-right font-mono">{formatMoneyAzn(data.totals.bucket0to30)}</td>
-                  <td className="p-2 text-right font-mono">{formatMoneyAzn(data.totals.bucket31to60)}</td>
-                  <td className="p-2 text-right font-mono">{formatMoneyAzn(data.totals.bucket61plus)}</td>
-                  <td className="p-2 text-right font-mono">{formatMoneyAzn(data.totals.total)}</td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                    {formatMoneyAzn(data.totals.bucket0to30)}
+                  </td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                    {formatMoneyAzn(data.totals.bucket31to60)}
+                  </td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                    {formatMoneyAzn(data.totals.bucket61plus)}
+                  </td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(data.totals.total)}</td>
                 </tr>
               </tfoot>
             </table>

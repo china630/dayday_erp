@@ -1,6 +1,6 @@
 /**
  * Плоский ключ i18n для подписи ОПФ — **строго** `counterparties.legalForm_${enum}` (нижний регистр),
- * в `resources.ts` вложено как `counterparties.legalForm_LLC`, `counterparties.legalForm_CJSC`, …
+ * в `resources.ts` вложено как `counterparties.legalForm_LLC`, …; подпись селекта — **`counterparties.legalFormField`** (не `legalForm`, чтобы точки в ключах из БД не превращали ветку в объект).
  */
 export const COUNTERPARTY_LEGAL_FORM_I18N_PREFIX = "counterparties.legalForm_" as const;
 

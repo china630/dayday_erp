@@ -1,6 +1,7 @@
 import type { i18n as I18nType } from "i18next";
 import { COUNTERPARTY_LEGAL_FORMS } from "../counterparty-legal-form";
 import { safeJson } from "../api-fetch";
+import { uiLangRuAz } from "./ui-lang";
 
 const COUNTERPARTY_LEGAL_FORM_ENUM = new Set<string>(COUNTERPARTY_LEGAL_FORMS);
 
@@ -76,6 +77,19 @@ export function remapCounterpartyLegalFormDottedKeys(
 }
 
 /**
+ * После `remapCounterpartyLegalFormDottedKeys` в плоской карте не должно оставаться `counterparties.legalForm.<x>`:
+ * иначе `flatOverridesToNested` строит объект `legalForm: { x: … }` и ломает ветку **`counterparties`**
+ * (строка **`legalFormField`**, ключи **`legalForm_*`**, **`vatPayerCheckbox`** и т.д.) — на экране сырые ключи.
+ */
+export function dropCounterpartyLegalFormPoisonDottedKeys(
+  flat: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(flat).filter(([k]) => !/^counterparties\.legalForm\.[^.]+$/.test(k)),
+  );
+}
+
+/**
  * Полный пайплайн плоских оверрайдов перед `addResourceBundle` (как на клиенте, так в аудите БД).
  */
 export function processTranslationOverridesFlat(flatRaw: Record<string, string>): Record<string, string> {
@@ -83,7 +97,9 @@ export function processTranslationOverridesFlat(flatRaw: Record<string, string>)
     dropFlatKeysThatShadowNestedObjects(
       dropIdentityValueOverrides(
         dropFlatKeysShadowedByLongerKeys(
-          remapCounterpartyLegalFormDottedKeys(normalizeTranslationOverrideFlat(flatRaw)),
+          dropCounterpartyLegalFormPoisonDottedKeys(
+            remapCounterpartyLegalFormDottedKeys(normalizeTranslationOverrideFlat(flatRaw)),
+          ),
         ),
       ),
     ),
@@ -213,15 +229,16 @@ export function flatOverridesToNested(
   return root;
 }
 
+/**
+ * Подмешивает оверрайды из API. Язык — **только** `i18n.language` (тот же, что детектор / `changeLanguage`
+ * в `client-i18n.ts`); не использовать `resolvedLanguage`, чтобы запрос БД и `addResourceBundle` всегда
+ * совпадали с тем, что пользователь выбрал в UI.
+ */
 export async function applyTranslationOverrides(
   i18n: I18nType,
-  locale: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  const short =
-    (i18n.resolvedLanguage ?? locale).split("-")[0]?.toLowerCase() ?? "ru";
-  const loc =
-    short === "az" ? "az" : short === "en" ? "en" : "ru";
+  const loc = uiLangRuAz(i18n.language);
   const base =
     typeof window !== "undefined"
       ? ""
@@ -253,9 +270,11 @@ export async function applyTranslationOverrides(
   if (Object.keys(flat).length === 0) return;
   const nested = flatOverridesToNested(flat);
   /**
-   * Вливать оверрайды только в бандл той локали, для которой был запрос (`loc`), а не в
-   * `i18n.resolvedLanguage` на момент await: иначе при смене языка во время fetch ответ
-   * «az» может попасть в дерево «ru» и частично сломать ключи (на экране — сырой i18n-ключ).
+   * `loc` зафиксирован в начале функции от `i18n.language`, поэтому после await ответ кладётся
+   * в тот же язык, для которого был запрос (а не в «текущий resolved» после гонки).
+   *
+   * `overwrite: true` — иначе при `deep: true` i18next **не заменяет** уже существующие в
+   * `resources.ts` строки, и правки из БД / новые значения по тем же путям «не видны».
    */
-  await i18n.addResourceBundle(loc, "translation", nested, true, false);
+  await i18n.addResourceBundle(loc, "translation", nested, true, true);
 }

@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -35,12 +36,46 @@ export class CounterpartiesController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Список контрагентов" })
-  list(@OrganizationId() orgId: string) {
+  @ApiOperation({ summary: "Список контрагентов (опционально search + limit для автодополнения)" })
+  list(
+    @OrganizationId() orgId: string,
+    @Query("search") search?: string,
+    @Query("limit") limitRaw?: string,
+    @Query("cashParty") cashParty?: "incoming" | "outgoing",
+  ) {
+    const searchTrim = search?.trim() ?? "";
+    const parsedLimit = limitRaw ? Number.parseInt(limitRaw, 10) : NaN;
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : undefined;
+    const take =
+      searchTrim.length > 0 ? (limit ?? 20) : limit !== undefined ? limit : undefined;
+
+    const roleFilter =
+      cashParty === "incoming"
+        ? { role: { in: [CounterpartyRole.CUSTOMER, CounterpartyRole.BOTH] } }
+        : cashParty === "outgoing"
+          ? { role: { in: [CounterpartyRole.SUPPLIER, CounterpartyRole.BOTH] } }
+          : {};
+
+    const voenDigits = searchTrim.replace(/\D/g, "");
+    const searchOr =
+      searchTrim.length > 0
+        ? [
+            { name: { contains: searchTrim, mode: "insensitive" as const } },
+            ...(voenDigits.length > 0
+              ? [{ taxId: { contains: voenDigits, mode: "insensitive" as const } }]
+              : []),
+          ]
+        : null;
+
     return this.prisma.counterparty.findMany({
-      where: { organizationId: orgId },
+      where: {
+        organizationId: orgId,
+        ...roleFilter,
+        ...(searchOr && searchOr.length > 0 ? { OR: searchOr } : {}),
+      },
       orderBy: { name: "asc" },
       include: { global: true },
+      ...(take !== undefined ? { take } : {}),
     });
   }
 

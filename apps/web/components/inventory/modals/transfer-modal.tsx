@@ -1,11 +1,18 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { notifyInventoryListsRefresh } from "../../../lib/list-refresh-bus";
-import { INPUT_BORDERED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
+import { Button } from "../../ui/button";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
 type Warehouse = { id: string; name: string };
@@ -130,12 +137,12 @@ export function TransferModal({
     >
       <form id={FORM_ID} className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block text-[13px] font-medium text-[#34495E]">
+          <label className={MODAL_FIELD_LABEL_CLASS}>
             {t("inventory.transferFrom")}
             <select
               value={fromId}
               onChange={(e) => setFromId(e.target.value)}
-              className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+              className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
             >
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -144,12 +151,12 @@ export function TransferModal({
               ))}
             </select>
           </label>
-          <label className="block text-[13px] font-medium text-[#34495E]">
+          <label className={MODAL_FIELD_LABEL_CLASS}>
             {t("inventory.transferTo")}
             <select
               value={toId}
               onChange={(e) => setToId(e.target.value)}
-              className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+              className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
             >
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -160,21 +167,22 @@ export function TransferModal({
           </label>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[13px] font-semibold text-[#34495E]">{t("inventory.transferLines")}</span>
-            <button type="button" onClick={() => addLine()} className={SECONDARY_BUTTON_CLASS}>
-              + {t("inventory.transferAddLine")}
-            </button>
+            <Button type="button" variant="secondary" onClick={() => addLine()}>
+              <Plus className="h-4 w-4 shrink-0" aria-hidden />
+              {t("inventory.transferAddLine")}
+            </Button>
           </div>
           {lines.map((row, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2">
-              <label className="block min-w-[200px] flex-1 text-[13px] font-medium text-[#34495E]">
+              <label className={`${MODAL_FIELD_LABEL_CLASS} min-w-[200px] flex-1`}>
                 {t("inventory.thProduct")}
                 <select
                   value={row.productId}
                   onChange={(e) => updateLine(i, { productId: e.target.value })}
-                  className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
                 >
                   <option value="">{t("inventory.transferPickProduct")}</option>
                   {products.map((p) => (
@@ -184,7 +192,7 @@ export function TransferModal({
                   ))}
                 </select>
               </label>
-              <label className="block w-32 text-[13px] font-medium text-[#34495E]">
+              <label className={`${MODAL_FIELD_LABEL_CLASS} w-32`}>
                 {t("inventory.thQty")}
                 <input
                   type="number"
@@ -192,19 +200,20 @@ export function TransferModal({
                   step="any"
                   value={row.quantity}
                   onChange={(e) => updateLine(i, { quantity: e.target.value })}
-                  className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
                 />
               </label>
-              {lines.length > 1 && (
+              {lines.length > 1 ? (
                 <button
                   type="button"
+                  className={`${TABLE_ROW_ICON_BTN_CLASS} mb-1 text-[#E74C3C]`}
                   onClick={() => removeLine(i)}
-                  className={`mb-1 ${SECONDARY_BUTTON_CLASS} min-w-8 px-2`}
-                  aria-label="Remove row"
+                  title={t("inventory.purchaseRemoveLine")}
+                  aria-label={t("inventory.purchaseRemoveLine")}
                 >
-                  ×
+                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
                 </button>
-              )}
+              ) : null}
             </div>
           ))}
         </div>

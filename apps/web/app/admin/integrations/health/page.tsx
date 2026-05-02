@@ -5,7 +5,19 @@ import { useTranslation } from "react-i18next";
 import { EmptyState } from "../../../../components/empty-state";
 import { apiFetch } from "../../../../lib/api-client";
 import { useAuth } from "../../../../lib/auth-context";
-import { CARD_CONTAINER_CLASS } from "../../../../lib/design-system";
+import {
+  CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+} from "../../../../lib/design-system";
 import { PageHeader } from "../../../../components/layout/page-header";
 
 type HealthProviderRow = {
@@ -78,66 +90,70 @@ export default function IntegrationsHealthPage() {
       {err ? (
         <p className="text-sm text-red-600">{err}</p>
       ) : null}
-      <section className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
-        <table className="min-w-full text-sm">
-          <thead className="bg-[#F8F9FA] text-left text-[#7F8C8D]">
-            <tr>
-              <th className="px-3 py-2">Provider</th>
-              <th className="px-3 py-2">Last Sync</th>
-              <th className="px-3 py-2">Latency</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">provider_success_rate</th>
-              <th className="px-3 py-2">Cache Hit Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {busy ? (
-              <tr>
-                <td className="px-3 py-3 text-[#7F8C8D]" colSpan={6}>
-                  {t("common.loading")}
-                </td>
+      <section className={CARD_CONTAINER_CLASS}>
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={DATA_TABLE_CLASS}>
+            <thead>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>Provider</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>Last Sync</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>Latency</th>
+                <th className={DATA_TABLE_TH_CENTER_CLASS}>Status</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>provider_success_rate</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>Cache Hit Rate</th>
               </tr>
-            ) : ordered.length === 0 ? (
-              <tr>
-                <td className="px-3 py-3 text-[#7F8C8D]" colSpan={6}>
-                  No provider metrics yet.
-                </td>
-              </tr>
-            ) : (
-              ordered.map((row) => (
-                <tr key={row.provider} className="border-t border-[#EBEDF0]">
-                  <td className="px-3 py-2 font-medium uppercase">{row.provider}</td>
-                  <td className="px-3 py-2 text-[#34495E]">
-                    {row.lastSync ? new Date(row.lastSync).toLocaleString() : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-[#34495E]">
-                    {row.latencyMs != null ? `${row.latencyMs} ms` : "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={[
-                        "inline-flex rounded-[2px] px-2 py-0.5 text-xs font-semibold",
-                        row.currentStatus === "Up"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : row.currentStatus === "Degraded"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-red-100 text-red-700",
-                      ].join(" ")}
-                    >
-                      {row.currentStatus}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-[#34495E]">
-                    {(row.providerSuccessRate * 100).toFixed(2)}%
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-[#34495E]">
-                    {row.cacheHitRate == null ? "—" : `${(row.cacheHitRate * 100).toFixed(2)}%`}
+            </thead>
+            <tbody>
+              {busy ? (
+                <tr className={DATA_TABLE_TR_CLASS}>
+                  <td className={`${DATA_TABLE_TD_CLASS} text-[#7F8C8D]`} colSpan={6}>
+                    {t("common.loading")}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : ordered.length === 0 ? (
+                <tr className={DATA_TABLE_TR_CLASS}>
+                  <td className={`${DATA_TABLE_TD_CLASS} text-[#7F8C8D]`} colSpan={6}>
+                    No provider metrics yet.
+                  </td>
+                </tr>
+              ) : (
+                ordered.map((row) => (
+                  <tr key={row.provider} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold uppercase`}>
+                      {row.provider}
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {row.lastSync ? new Date(row.lastSync).toLocaleString() : "—"}
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {row.latencyMs != null ? `${row.latencyMs} ms` : "—"}
+                    </td>
+                    <td className={DATA_TABLE_TD_CENTER_CLASS}>
+                      <span
+                        className={[
+                          "inline-flex rounded-[2px] px-2 py-0.5 text-xs font-semibold",
+                          row.currentStatus === "Up"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : row.currentStatus === "Degraded"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-red-100 text-red-700",
+                        ].join(" ")}
+                      >
+                        {row.currentStatus}
+                      </span>
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {(row.providerSuccessRate * 100).toFixed(2)}%
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {row.cacheHitRate == null ? "—" : `${(row.cacheHitRate * 100).toFixed(2)}%`}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

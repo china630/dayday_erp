@@ -1,5 +1,6 @@
 "use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../lib/api-client";
@@ -11,7 +12,23 @@ import { useSubscription } from "../../lib/subscription-context";
 import { EmptyState } from "../../components/empty-state";
 import { PageHeader } from "../../components/layout/page-header";
 import { parseHrEmployeesResponse } from "../../lib/hr-employees-list";
-import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../../lib/design-system";
+import {
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../lib/design-system";
 import { CreateEmployeeModal } from "./employee-modal";
 import { EditEmployeeModal } from "./edit-employee-modal";
 
@@ -156,98 +173,111 @@ export default function EmployeesPage() {
             {rows.map((r) => (
               <div
                 key={r.id}
-                className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm text-sm space-y-1"
+                className="rounded-[2px] border border-[#D5DADF] bg-white p-4 shadow-sm text-[13px] space-y-1"
               >
-                <div className="font-medium text-gray-900">
+                <div className="font-semibold text-[#34495E]">
                   {r.lastName} {r.firstName}
                 </div>
-                <div className="text-xs text-slate-600">
-                  {t("employees.thFin")}: {r.finCode} ·{" "}
+                <div className="text-[13px] text-[#34495E]">
+                  {t("employees.thFin")}:{" "}
+                  <span className="font-mono tabular-nums">{r.finCode}</span> ·{" "}
                   {r.kind === "CONTRACTOR"
                     ? t("employees.kindContractor")
                     : t("employees.kindEmployee")}
                 </div>
                 {r.voen && (
-                  <div className="text-xs">
+                  <div className="text-[13px] text-right font-mono tabular-nums">
                     {t("employees.thVoen")}: {r.voen}
                   </div>
                 )}
-                <div>
+                <div className="text-right font-mono tabular-nums">
                   {t("employees.thGross")}: {formatMoneyAzn(r.salary)}
                 </div>
-                <div className="flex flex-wrap gap-2 pt-2">
+                <div className="flex flex-wrap items-center justify-end gap-1 pt-2">
                   <button
                     type="button"
-                    className="text-xs px-2 py-1 rounded-md border border-slate-200"
+                    className={TABLE_ROW_ICON_BTN_CLASS}
+                    title={t("employees.change")}
                     onClick={() => setEditEmployeeId(r.id)}
                   >
-                    {t("employees.change")}
+                    <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
                   </button>
                   {!hideDestructive && (
                     <button
                       type="button"
-                      className="text-xs px-2 py-1 rounded-md border border-red-200 text-red-700"
+                      className={TABLE_ROW_ICON_BTN_CLASS}
+                      title={t("employees.remove")}
                       onClick={() => void remove(r.id)}
                     >
-                      {t("employees.remove")}
+                      <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
                     </button>
                   )}
                 </div>
               </div>
             ))}
           </div>
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="text-sm min-w-[720px]">
+          <div className={`hidden md:block ${DATA_TABLE_VIEWPORT_CLASS}`}>
+            <table className={`${DATA_TABLE_CLASS} min-w-[720px]`}>
               <thead>
-                <tr>
-                  <th>{t("employees.thFin")}</th>
-                  <th>{t("employees.thKind")}</th>
-                  <th className="hidden lg:table-cell">{t("employees.thVoen")}</th>
-                  <th>{t("employees.thName")}</th>
-                  <th className="hidden xl:table-cell">{t("employees.thPosition")}</th>
-                  <th className="hidden lg:table-cell">{t("employees.thStart")}</th>
-                  <th>{t("employees.thGross")}</th>
-                  <th />
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("employees.thFin")}</th>
+                  <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("employees.thKind")}</th>
+                  <th className={`hidden lg:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
+                    {t("employees.thVoen")}
+                  </th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("employees.thName")}</th>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_LEFT_CLASS}`}>
+                    {t("employees.thPosition")}
+                  </th>
+                  <th className={`hidden lg:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
+                    {t("employees.thStart")}
+                  </th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("employees.thGross")}</th>
+                  <th className={DATA_TABLE_ACTIONS_TH_CLASS}>{t("teamPage.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.finCode}</td>
-                    <td>
+                  <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{r.finCode}</td>
+                    <td className={DATA_TABLE_TD_CENTER_CLASS}>
                       {r.kind === "CONTRACTOR"
                         ? t("employees.kindContractor")
                         : t("employees.kindEmployee")}
                     </td>
-                    <td className="hidden lg:table-cell">{r.voen ?? "—"}</td>
-                    <td>
+                    <td className={`hidden lg:table-cell ${DATA_TABLE_TD_RIGHT_CLASS}`}>
+                      {r.voen ?? "—"}
+                    </td>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>
                       {r.lastName} {r.firstName}
                     </td>
-                    <td className="hidden xl:table-cell">
+                    <td className={`hidden xl:table-cell ${DATA_TABLE_TD_CLASS}`}>
                       {r.jobPosition
                         ? `${r.jobPosition.department.name} — ${r.jobPosition.name}`
                         : "—"}
                     </td>
-                    <td className="hidden lg:table-cell">
+                    <td className={`hidden lg:table-cell ${DATA_TABLE_TD_RIGHT_CLASS}`}>
                       {String(r.startDate).slice(0, 10)}
                     </td>
-                    <td>{formatMoneyAzn(r.salary)}</td>
-                    <td>
-                      <div className="flex flex-wrap gap-2">
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.salary)}</td>
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          className="text-sm px-2 py-1 rounded-md border border-slate-200 hover:border-action/50 hover:bg-action/10"
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("employees.change")}
                           onClick={() => setEditEmployeeId(r.id)}
                         >
-                          {t("employees.change")}
+                          <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
                         </button>
                         {!hideDestructive && (
                           <button
                             type="button"
-                            className="text-sm px-2 py-1 rounded-md border border-slate-200 text-red-700 hover:bg-red-50"
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("employees.remove")}
                             onClick={() => void remove(r.id)}
                           >
-                            {t("employees.remove")}
+                            <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
                           </button>
                         )}
                       </div>

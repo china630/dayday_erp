@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2 } from "lucide-react";
+import { Building2, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../lib/api-client";
@@ -13,10 +13,19 @@ import { PageHeader } from "../../components/layout/page-header";
 import { SubscriptionPaywall } from "../../components/subscription-paywall";
 import { FixedAssetModal } from "../../components/fixed-assets/fixed-asset-modal";
 import {
-  BORDER_MUTED_CLASS,
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   PRIMARY_BUTTON_CLASS,
-  SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../lib/design-system";
 
 type Fa = {
@@ -238,104 +247,93 @@ function FixedAssetsPageContent() {
                     Number(r.purchasePrice) - Number(r.bookedDepreciation),
                   )}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
                   <button
                     type="button"
-                    className={SECONDARY_BUTTON_CLASS}
+                    className={TABLE_ROW_ICON_BTN_CLASS}
+                    title={t("products.edit")}
                     onClick={() => {
                       setFaModalMode("edit");
                       setFaEditId(r.id);
                       setFaModalOpen(true);
                     }}
                   >
-                    {t("products.edit")}
+                    <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
                   </button>
                   {!hideDestructive && (
                     <button
                       type="button"
-                      className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md"
+                      className={TABLE_ROW_ICON_BTN_CLASS}
+                      title={t("fixedAssets.delete")}
                       onClick={() => void remove(r.id)}
                     >
-                      {t("fixedAssets.delete")}
+                      <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
                     </button>
                   )}
                 </div>
               </div>
             ))}
           </div>
-          <div
-            className={`hidden overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white shadow-sm md:block`}
-          >
-            <table className="min-w-[640px] text-sm">
+          <div className={`hidden md:block ${DATA_TABLE_VIEWPORT_CLASS}`}>
+            <table className={`${DATA_TABLE_CLASS} min-w-[640px]`}>
               <thead>
-                <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.thName")}
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("fixedAssets.thName")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("fixedAssets.thInv")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("fixedAssets.commission")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("fixedAssets.initial")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("fixedAssets.life")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("fixedAssets.thBooked")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("fixedAssets.bookValue")}</th>
+                  <th className={`${DATA_TABLE_ACTIONS_TH_CLASS} ${hideDestructive ? "" : "min-w-[88px]"}`}>
+                    {t("teamPage.actions")}
                   </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.thInv")}
-                  </th>
-                  <th className="p-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.commission")}
-                  </th>
-                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.initial")}
-                  </th>
-                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.life")}
-                  </th>
-                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.thBooked")}
-                  </th>
-                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                    {t("fixedAssets.bookValue")}
-                  </th>
-                  <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]">
-                    {t("products.edit")}
-                  </th>
-                  {!hideDestructive ? (
-                    <th className="p-2 text-right text-[13px] font-semibold text-[#34495E]" />
-                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
-                    <td>{r.name}</td>
-                    <td>{r.inventoryNumber}</td>
-                    <td>{String(r.purchaseDate).slice(0, 10)}</td>
-                    <td>{formatMoneyAzn(r.purchasePrice)}</td>
-                    <td>{r.usefulLifeMonths}</td>
-                    <td>{formatMoneyAzn(r.bookedDepreciation)}</td>
-                    <td>
+                  <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>{r.name}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{r.inventoryNumber}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {String(r.purchaseDate).slice(0, 10)}
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.purchasePrice)}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{r.usefulLifeMonths}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {formatMoneyAzn(r.bookedDepreciation)}
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                       {formatMoneyAzn(
                         Number(r.purchasePrice) - Number(r.bookedDepreciation),
                       )}
                     </td>
-                    <td className="p-2 text-right">
-                      <button
-                        type="button"
-                        className={SECONDARY_BUTTON_CLASS}
-                        onClick={() => {
-                          setFaModalMode("edit");
-                          setFaEditId(r.id);
-                          setFaModalOpen(true);
-                        }}
-                      >
-                        {t("products.edit")}
-                      </button>
-                    </td>
-                    {!hideDestructive && (
-                      <td>
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          className="text-red-700 text-xs border border-red-200 px-2 py-1 rounded-md"
-                          onClick={() => void remove(r.id)}
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("products.edit")}
+                          onClick={() => {
+                            setFaModalMode("edit");
+                            setFaEditId(r.id);
+                            setFaModalOpen(true);
+                          }}
                         >
-                          {t("fixedAssets.delete")}
+                          <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
                         </button>
-                      </td>
-                    )}
+                        {!hideDestructive && (
+                          <button
+                            type="button"
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("fixedAssets.delete")}
+                            onClick={() => void remove(r.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

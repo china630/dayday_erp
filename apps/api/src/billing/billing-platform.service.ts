@@ -12,6 +12,7 @@ import {
   UserRole,
 } from "@dayday/database";
 import PDFDocument from "pdfkit";
+import { registerUnicodeFonts, PDF_FONT_UNICODE } from "../reporting/pdf-font.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { PricingService } from "../admin/pricing.service";
 import { SubscriptionAccessService } from "../subscription/subscription-access.service";
@@ -349,6 +350,9 @@ export class BillingPlatformService {
         resolve(Buffer.concat(chunks));
       });
       doc.on("error", reject);
+
+      registerUnicodeFonts(doc);
+      doc.font(PDF_FONT_UNICODE);
 
       doc
         .fontSize(18)

@@ -9,7 +9,16 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import { ArrowUpRight } from "lucide-react";
 import { PageHeader } from "../../../components/layout/page-header";
 import { EmptyState } from "../../../components/empty-state";
-import { CARD_CONTAINER_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+} from "../../../lib/design-system";
 
 type Row = {
   counterpartyId: string;
@@ -88,29 +97,21 @@ export default function ReceivablesPage() {
       )}
       {!loading && data && data.rows.length > 0 && (
         <>
-          <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-            <table className="w-full min-w-[480px] text-sm">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} w-full min-w-[480px]`}>
               <thead>
-                <tr className="border-b border-[#D5DADF]">
-                  <th className="px-3 py-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("receivables.thName")}
-                  </th>
-                  <th className="px-3 py-2 text-left text-[13px] font-semibold text-[#34495E]">
-                    {t("receivables.thTaxId")}
-                  </th>
-                  <th className="px-3 py-2 text-right text-[13px] font-semibold text-[#34495E]">
-                    {t("receivables.thBalance")}
-                  </th>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("receivables.thName")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("receivables.thTaxId")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("receivables.thBalance")}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.rows.map((r) => (
-                  <tr key={r.counterpartyId} className="border-b border-[#EBEDF0]">
-                    <td className="px-3 py-2 text-[13px] text-[#34495E]">{r.name}</td>
-                    <td className="px-3 py-2 font-mono text-[13px] text-[#34495E]">{r.taxId}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[13px] text-[#34495E]">
-                      {formatMoneyAzn(r.balance)}
-                    </td>
+                  <tr key={r.counterpartyId} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>{r.name}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{r.taxId}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.balance)}</td>
                   </tr>
                 ))}
               </tbody>

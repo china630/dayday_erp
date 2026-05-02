@@ -6,9 +6,16 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { notifyInventoryListsRefresh } from "../../../lib/list-refresh-bus";
-import { inputFieldWideClass } from "../../../lib/form-classes";
-import { BORDER_MUTED_CLASS, SECONDARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  MODAL_CHECKBOX_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
 import { uuidV4 } from "../../../lib/uuid";
+import { AsyncCombobox } from "../../ui/async-combobox";
+import { Button } from "../../ui/button";
+import { NumericAmountInput } from "../../ui/numeric-amount-input";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 import {
   buildPurchasePayload,
@@ -31,7 +38,9 @@ function newLine(): LineRow {
 }
 
 function fieldErrorClass(hasError: boolean) {
-  return hasError ? `${inputFieldWideClass} border-red-500 ring-2 ring-red-500/25` : inputFieldWideClass;
+  return hasError
+    ? `${MODAL_INPUT_CLASS} border-red-500 ring-2 ring-red-500/25`
+    : MODAL_INPUT_CLASS;
 }
 
 export function PurchaseModal({
@@ -45,8 +54,8 @@ export function PurchaseModal({
 }) {
   const { t } = useTranslation();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [bins, setBins] = useState<Bin[]>([]);
+  const [productLabels, setProductLabels] = useState<Record<string, string>>({});
   const [warehouseId, setWarehouseId] = useState("");
   const [kind, setKind] = useState<PurchaseKind>("goods");
   const [pricesIncludeVat, setPricesIncludeVat] = useState(false);
@@ -56,11 +65,8 @@ export function PurchaseModal({
 
   const loadRefs = useCallback(async (purchaseKind: PurchaseKind) => {
     const isGoods = purchaseKind === "goods";
-    const productQuery = isGoods ? "isService=false" : "isService=true";
-    const p = await apiFetch(`/api/products?${productQuery}`);
-    const plist = p.ok ? ((await p.json()) as Product[]) : [];
     if (!isGoods) {
-      return { whList: [] as Warehouse[], plist, bins: [] as Bin[], defaultWh: "" };
+      return { whList: [] as Warehouse[], bins: [] as Bin[], defaultWh: "" };
     }
     const [w, cfg, b] = await Promise.all([
       apiFetch("/api/inventory/warehouses"),
@@ -78,20 +84,36 @@ export function PurchaseModal({
       defaultWh = (j.defaultWarehouseId ?? j.defaultWarehouseResolvedId ?? "") || "";
     }
     if (!defaultWh && whList[0]) defaultWh = whList[0].id;
-    return { whList, plist, bins: binList, defaultWh };
+    return { whList, bins: binList, defaultWh };
   }, []);
+
+  const fetchProducts = useCallback(
+    async (search: string) => {
+      const isGoods = kind === "goods";
+      const q = new URLSearchParams();
+      q.set("isService", isGoods ? "false" : "true");
+      q.set("limit", "20");
+      const trimmed = search.trim();
+      if (trimmed) q.set("search", trimmed);
+      const res = await apiFetch(`/api/products?${q}`);
+      if (!res.ok) return [];
+      const list = (await res.json()) as Product[];
+      return Array.isArray(list) ? list : [];
+    },
+    [kind],
+  );
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     void (async () => {
-      const { whList, plist, bins, defaultWh } = await loadRefs(kind);
+      const { whList, bins: binRows, defaultWh } = await loadRefs(kind);
       if (cancelled) return;
       setWarehouses(whList);
-      setProducts(plist);
-      setBins(bins);
+      setBins(binRows);
       setWarehouseId(kind === "goods" ? defaultWh : "");
       setLines([newLine()]);
+      setProductLabels({});
       setFieldErrors({});
       setBusy(false);
     })();
@@ -171,42 +193,42 @@ export function PurchaseModal({
       <form id={FORM_ID} className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
         <div>
           <p className="mb-2 text-[13px] font-medium text-[#34495E]">{t("inventory.purchaseKindLabel")}</p>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <label className="inline-flex items-center gap-2 cursor-pointer">
+          <div className="flex flex-wrap gap-4 text-[13px] text-[#34495E]">
+            <label className="inline-flex cursor-pointer items-center gap-2">
               <input
                 type="radio"
                 name="purchase-kind"
                 checked={kind === "goods"}
                 onChange={() => setKind("goods")}
-                className="text-action"
+                className="h-4 w-4 shrink-0 accent-[#2980B9]"
               />
               {t("inventory.purchaseKindGoods")}
             </label>
-            <label className="inline-flex items-center gap-2 cursor-pointer">
+            <label className="inline-flex cursor-pointer items-center gap-2">
               <input
                 type="radio"
                 name="purchase-kind"
                 checked={kind === "services"}
                 onChange={() => setKind("services")}
-                className="text-action"
+                className="h-4 w-4 shrink-0 accent-[#2980B9]"
               />
               {t("inventory.purchaseKindServices")}
             </label>
           </div>
         </div>
 
-        <label className="flex items-start gap-2 text-[13px] text-[#34495E]">
+        <label className="flex cursor-pointer items-start gap-2 text-[13px] text-[#34495E]">
           <input
             type="checkbox"
             checked={pricesIncludeVat}
             onChange={(e) => setPricesIncludeVat(e.target.checked)}
-            className="mt-0.5 rounded border-slate-300 text-action focus:ring-action"
+            className={`mt-0.5 ${MODAL_CHECKBOX_CLASS}`}
           />
           <span>{t("inventory.purchasePricesIncludeVat")}</span>
         </label>
 
         {isGoods ? (
-          <label className="block text-[13px] font-medium text-[#34495E]">
+          <label className={MODAL_FIELD_LABEL_CLASS}>
             {t("inventory.whSelect")}
             <select
               value={warehouseId}
@@ -218,7 +240,7 @@ export function PurchaseModal({
                   return next;
                 });
               }}
-              className={fieldErrorClass(!!err("warehouseId"))}
+              className={`mt-1 block w-full ${fieldErrorClass(!!err("warehouseId"))}`}
               aria-invalid={!!err("warehouseId")}
             >
               <option value="">{t("inventory.whSelect")}</option>
@@ -232,70 +254,80 @@ export function PurchaseModal({
           </label>
         ) : null}
 
-        <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS}`}>
-          <table className="min-w-full text-sm">
-            <thead className="bg-[#F4F5F7] text-left text-[#34495E]">
+        <div className="overflow-x-auto rounded-[2px] border border-[#D5DADF] bg-white shadow-sm">
+          <table className="min-w-full border-collapse text-[13px]">
+            <thead className="sticky top-0 z-[1] border-b border-[#D5DADF] bg-[#F8FAFC] text-left text-[#34495E]">
               <tr>
-                <th className="px-3 py-2 font-semibold">{t("inventory.purchaseColProduct")}</th>
-                <th className="w-28 px-3 py-2 font-semibold">{t("inventory.purchaseColQty")}</th>
-                <th className="w-32 px-3 py-2 font-semibold">{t("inventory.purchaseColPrice")}</th>
+                <th className="px-4 py-2 text-xs font-bold text-[#475569]">{t("inventory.purchaseColProduct")}</th>
+                <th className="w-28 px-4 py-2 text-xs font-bold text-[#475569]">{t("inventory.purchaseColQty")}</th>
+                <th className="w-32 px-4 py-2 text-xs font-bold text-[#475569]">{t("inventory.purchaseColPrice")}</th>
                 {isGoods ? (
-                  <th className="min-w-[8rem] px-3 py-2 font-semibold">{t("inventory.purchaseColBin")}</th>
+                  <th className="min-w-[8rem] px-4 py-2 text-xs font-bold text-[#475569]">
+                    {t("inventory.purchaseColBin")}
+                  </th>
                 ) : null}
-                <th className="w-12 px-3 py-2" />
+                <th className="w-12 px-4 py-2" />
               </tr>
             </thead>
             <tbody>
               {lines.map((row, idx) => (
-                <tr key={row.key} className="border-t border-[#EBEDF0]">
-                  <td className="px-3 py-2 align-middle">
-                    <select
+                <tr key={row.key} className="border-b border-[#D5DADF] bg-white transition-colors hover:bg-[#F1F5F9]">
+                  <td className="px-4 py-2 align-middle">
+                    <AsyncCombobox<Product>
                       value={row.productId}
-                      onChange={(e) => updateLine(idx, { productId: e.target.value })}
-                      className={fieldErrorClass(!!err(`lines.${idx}.productId`))}
+                      onChange={(id, item) => {
+                        updateLine(idx, { productId: id });
+                        setProductLabels((prev) => ({
+                          ...prev,
+                          [row.key]: item ? (item.isService ? item.name : `${item.name} (${item.sku})`) : "",
+                        }));
+                      }}
+                      fetcher={fetchProducts}
+                      getOptionLabel={(p) => (p.isService ? p.name : `${p.name} (${p.sku})`)}
+                      placeholder={t("common.emptyValue")}
+                      selectedLabel={productLabels[row.key] ?? ""}
+                      className="min-w-0"
+                      listClassName="min-w-[14rem]"
                       aria-invalid={!!err(`lines.${idx}.productId`)}
-                    >
-                      <option value="">—</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.isService ? p.name : `${p.name} (${p.sku})`}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     {err(`lines.${idx}.productId`) ? (
                       <p className="mt-1 text-xs text-red-600 m-0">{err(`lines.${idx}.productId`)}</p>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 align-middle">
-                    <input
+                  <td className="px-4 py-2 align-middle">
+                    <NumericAmountInput
                       value={row.quantity}
-                      onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                      className={fieldErrorClass(!!err(`lines.${idx}.quantity`))}
+                      onValueChange={(plain) => updateLine(idx, { quantity: plain })}
+                      decimalScale={4}
+                      className={
+                        err(`lines.${idx}.quantity`) ? "border-red-500 ring-2 ring-red-500/25" : ""
+                      }
                       aria-invalid={!!err(`lines.${idx}.quantity`)}
-                      inputMode="decimal"
                     />
                     {err(`lines.${idx}.quantity`) ? (
                       <p className="mt-1 text-xs text-red-600 m-0">{err(`lines.${idx}.quantity`)}</p>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 align-middle">
-                    <input
+                  <td className="px-4 py-2 align-middle">
+                    <NumericAmountInput
                       value={row.unitPrice}
-                      onChange={(e) => updateLine(idx, { unitPrice: e.target.value })}
-                      className={fieldErrorClass(!!err(`lines.${idx}.unitPrice`))}
+                      onValueChange={(plain) => updateLine(idx, { unitPrice: plain })}
+                      decimalScale={4}
+                      className={
+                        err(`lines.${idx}.unitPrice`) ? "border-red-500 ring-2 ring-red-500/25" : ""
+                      }
                       aria-invalid={!!err(`lines.${idx}.unitPrice`)}
-                      inputMode="decimal"
                     />
                     {err(`lines.${idx}.unitPrice`) ? (
                       <p className="mt-1 text-xs text-red-600 m-0">{err(`lines.${idx}.unitPrice`)}</p>
                     ) : null}
                   </td>
                   {isGoods ? (
-                    <td className="px-3 py-2 align-middle">
+                    <td className="px-4 py-2 align-middle">
                       <select
                         value={row.binId}
                         onChange={(e) => updateLine(idx, { binId: e.target.value })}
-                        className={inputFieldWideClass}
+                        className={MODAL_INPUT_CLASS}
                       >
                         <option value="">{t("inventory.purchaseBinAuto")}</option>
                         {bins
@@ -308,11 +340,11 @@ export function PurchaseModal({
                       </select>
                     </td>
                   ) : null}
-                  <td className="px-3 py-2 align-middle text-center">
+                  <td className="px-4 py-2 align-middle text-center">
                     <button
                       type="button"
+                      className={`${TABLE_ROW_ICON_BTN_CLASS} text-[#E74C3C]`}
                       title={t("inventory.purchaseRemoveLine")}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-[2px] border border-[#D5DADF] text-slate-600 hover:bg-[#F4F5F7]"
                       onClick={() => {
                         if (lines.length <= 1) return;
                         setLines((prev) => prev.filter((_, j) => j !== idx));
@@ -325,7 +357,7 @@ export function PurchaseModal({
                         });
                       }}
                     >
-                      <Trash2 className="h-4 w-4" aria-hidden />
+                      <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
                     </button>
                   </td>
                 </tr>
@@ -334,10 +366,10 @@ export function PurchaseModal({
           </table>
         </div>
 
-        <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setLines((prev) => [...prev, newLine()])}>
+        <Button type="button" variant="secondary" onClick={() => setLines((prev) => [...prev, newLine()])}>
           <Plus className="h-4 w-4 shrink-0" aria-hidden />
           {t("inventory.purchaseAddLine")}
-        </button>
+        </Button>
       </form>
     </InventoryModalShell>
   );

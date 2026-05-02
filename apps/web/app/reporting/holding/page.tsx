@@ -6,7 +6,18 @@ import { apiFetch } from "../../../lib/api-client";
 import { ledgerQueryParam, useLedger } from "../../../lib/ledger-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
-import { CARD_CONTAINER_CLASS, PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+} from "../../../lib/design-system";
 import { EmptyState } from "../../../components/empty-state";
 import { Building2 } from "lucide-react";
 
@@ -195,33 +206,37 @@ export default function HoldingConsolidatedReportingPage() {
       )}
 
       {report && report.organizations.length > 0 && (
-        <div className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
-          <table className="min-w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-[#E0E6ED]">
-                <th className="px-3 py-2 text-left font-semibold text-[#34495E]">
-                  {t("holdingReport.colOrg", { defaultValue: "Организация" })}
-                </th>
-                <th className="px-3 py-2 text-left font-semibold text-[#34495E]">VÖEN</th>
-                <th className="px-3 py-2 text-right font-semibold text-[#34495E]">
-                  {t("holdingReport.colNetProfit", { defaultValue: "Чистая прибыль" })}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.organizations.map((row) => (
-                <tr key={row.organizationId} className="border-b border-[#F0F3F6]">
-                  <td className="px-3 py-2 text-[#34495E]">{row.organizationName}</td>
-                  <td className="px-3 py-2 text-[#7F8C8D]">{row.taxId}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium text-[#34495E]">
-                    {row.netProfit} {row.currency}
-                  </td>
+        <div className="space-y-0">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-full`}>
+              <thead>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>
+                    {t("holdingReport.colOrg", { defaultValue: "Организация" })}
+                  </th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>VÖEN</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>
+                    {t("holdingReport.colNetProfit", { defaultValue: "Чистая прибыль" })}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="px-3 py-3 border-t border-[#E0E6ED] bg-[#FAFBFC] space-y-1">
-            <p className="text-[12px] font-semibold text-[#34495E]">
+              </thead>
+              <tbody>
+                {report.organizations.map((row) => (
+                  <tr key={row.organizationId} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>
+                      {row.organizationName}
+                    </td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{row.taxId}</td>
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} font-semibold`}>
+                      {row.netProfit} {row.currency}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={`${CARD_CONTAINER_CLASS} rounded-t-none border-t-0 -mt-px space-y-1 px-3 py-3`}>
+            <p className="m-0 text-[12px] font-semibold text-[#34495E]">
               {t("holdingReport.consolidated", { defaultValue: "Итого по валютам" })}
             </p>
             {Object.entries(report.consolidatedNetProfitByCurrency).map(([cur, amt]) => (

@@ -32,6 +32,28 @@
 - Use horizontal layouts for desktop tables.
 - All numeric data must be right-aligned.
 
+## Data Tables (v1.0)
+- **Header**: Background `#F8FAFC`, Text `#475569` (bold, 11-12px), Border-bottom `#D5DADF`. Sticky header is mandatory for long lists.
+- **Rows**: Base background `white`, Hover background `#F1F5F9`.
+- **Typography**: All data 13px (`text-[13px]`).
+- **Alignment**:
+  - Text/Names: Left-aligned.
+  - Numbers/Amounts/Dates: Right-aligned (`text-right`) + Monospace font for digits if possible.
+  - Status/Badges: Centered.
+- **Borders**: Horizontal borders only (`border-b-[#D5DADF]`). No vertical grid lines.
+- **Density**: Compact padding (`py-2 px-4`).
+
+## Table Actions & Icons
+All row actions must be grouped in the last column (fixed width, e.g., `w-[120px]`). Use **Lucide React** icons.
+- **Style**: Ghost buttons, square corners (`rounded-[2px]`), size 28x28px or 32x32px.
+- **Standard Icons**:
+  - **Baxış (View)**: `Eye` icon, Color `#2980B9` (Action Blue).
+  - **Düzəliş (Edit)**: `Pencil` or `Edit3` icon, Color `#7F8C8D` (Asbestos).
+  - **Paylaş / Göndər (Send/Share)**: `Send` or `Share2` icon, Color `#2980B9`.
+  - **Sil (Delete)**: `Trash2` icon, Color `#E74C3C` (Alizarin Red).
+  - **Arxiv / Kilid (Archive/Lock)**: `Archive` or `Lock` icon, Color `#BDC3C7`.
+- **Tooltips**: Every icon button must have a tooltip with the action name (AZ/RU).
+
 ## Treasury (Bank və Kassa) — v7.1
 - Sidebar group label: `nav.sectionTreasury` (AZ: Bank və Kassa; RU: Банк и Касса), icon **Landmark**.
 - Hub `/banking`: grid of **account cards** (cash 101* + bank 221–224) → **statement import** (dropzone, channel BANK/CASH) → **operations registry** with filter All / Bank / Cash.

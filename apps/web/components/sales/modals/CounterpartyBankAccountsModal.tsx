@@ -5,11 +5,18 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Landmark, Trash2 } from "lucide-react";
 import { apiFetch } from "../../../lib/api-client";
-import { inputFieldClass } from "../../../lib/form-classes";
-import { PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import type { SupportedCurrency } from "../../../lib/currencies";
+import {
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_MONO_CLASS,
+} from "../../../lib/design-system";
+import { Button } from "../../ui/button";
+import { CurrencySelect } from "../../ui/currency-select";
 import { SalesModalShell } from "./modal-shell";
 
-const lbl = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5";
+const lbl = MODAL_FIELD_LABEL_CLASS;
 
 type BankAccountRow = {
   id: string;
@@ -39,7 +46,7 @@ export function CounterpartyBankAccountsModal({
   const [bankName, setBankName] = useState("");
   const [iban, setIban] = useState("");
   const [swift, setSwift] = useState("");
-  const [currency, setCurrency] = useState("AZN");
+  const [currency, setCurrency] = useState<SupportedCurrency>("AZN");
 
   const load = useCallback(async () => {
     if (!counterpartyId) return;
@@ -85,7 +92,7 @@ export function CounterpartyBankAccountsModal({
           bankName: bn,
           iban: ib,
           swift: swift.trim() || undefined,
-          currency: currency.trim().toUpperCase() || "AZN",
+          currency,
         }),
       });
       if (!res.ok) {
@@ -132,46 +139,68 @@ export function CounterpartyBankAccountsModal({
       subtitle={subtitle}
       onClose={onClose}
       maxWidthClass="max-w-lg"
+      footer={
+        <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t("common.close")}
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            form="counterparty-bank-add-form"
+            disabled={addBusy}
+          >
+            {addBusy ? t("common.loading") : t("counterparties.bankAccounts_add")}
+          </Button>
+        </div>
+      }
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div>
-          <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#34495E]">
+          <h4 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-[#34495E]">
             <Landmark className="h-4 w-4 shrink-0" aria-hidden />
             {t("counterparties.bankAccounts_current")}
           </h4>
           {loadBusy ? (
-            <p className="text-sm text-slate-600">{t("common.loading")}</p>
+            <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p>
           ) : rows.length === 0 ? (
-            <p className="rounded-[2px] border border-[#D5DADF] bg-[#EBEDF0]/40 p-3 text-sm text-[#7F8C8D]">
+            <p className="rounded-[2px] border border-[#D5DADF] bg-[#EBEDF0]/40 p-3 text-[13px] text-[#7F8C8D]">
               {t("counterparties.bankAccounts_empty")}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-[2px] border border-[#D5DADF]">
-              <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto rounded-[2px] border border-[#D5DADF] bg-white shadow-sm">
+              <table className="w-full text-left text-[13px]">
                 <thead>
-                  <tr className="border-b border-[#D5DADF] bg-[#F4F5F7]">
-                    <th className="p-2 font-semibold text-[#34495E]">{t("counterparties.bankAccounts_colBank")}</th>
-                    <th className="p-2 font-semibold text-[#34495E]">{t("counterparties.bankAccounts_colIban")}</th>
-                    <th className="p-2 font-semibold text-[#34495E]">{t("counterparties.bankAccounts_colCurrency")}</th>
-                    <th className="p-2 w-10" />
+                  <tr className="border-b border-[#D5DADF] bg-[#F8FAFC]">
+                    <th className="p-2 font-semibold text-[#34495E]">
+                      {t("counterparties.bankAccounts_colBank")}
+                    </th>
+                    <th className="p-2 font-semibold text-[#34495E]">
+                      {t("counterparties.bankAccounts_colIban")}
+                    </th>
+                    <th className="p-2 text-right font-semibold text-[#34495E]">
+                      {t("counterparties.bankAccounts_colCurrency")}
+                    </th>
+                    <th className="w-10 p-2" />
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.id} className="border-t border-slate-100">
+                    <tr key={r.id} className="border-t border-[#D5DADF] bg-white hover:bg-[#F1F5F9]">
                       <td className="p-2 align-middle">{r.bankName}</td>
-                      <td className="p-2 align-middle font-mono text-xs">{r.iban}</td>
-                      <td className="p-2 align-middle">{r.currency}</td>
+                      <td className="p-2 align-middle font-mono text-[12px]">{r.iban}</td>
+                      <td className="p-2 align-middle text-right tabular-nums">{r.currency}</td>
                       <td className="p-2 align-middle text-right">
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          className="!px-2"
                           onClick={() => void onDelete(r.id)}
                           disabled={delId === r.id}
-                          className="inline-flex rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
                           aria-label={t("counterparties.bankAccounts_delete")}
                         >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </button>
+                          <Trash2 className="h-4 w-4 text-red-600" aria-hidden />
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -181,13 +210,17 @@ export function CounterpartyBankAccountsModal({
           )}
         </div>
 
-        <form className="space-y-3 border-t border-[#EBEDF0] pt-4" onSubmit={(e) => void onAdd(e)}>
+        <form
+          id="counterparty-bank-add-form"
+          className="space-y-4 border-t border-[#D5DADF] pt-4 mt-4"
+          onSubmit={(e) => void onAdd(e)}
+        >
           <div>
             <span className={lbl}>{t("counterparties.bankAccounts_colBank")}</span>
             <input
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
-              className={inputFieldClass}
+              className={MODAL_INPUT_CLASS}
               placeholder={t("counterparties.bankAccounts_namePh")}
             />
           </div>
@@ -197,8 +230,8 @@ export function CounterpartyBankAccountsModal({
               value={iban}
               onChange={(e) => setIban(e.target.value.toUpperCase())}
               onBlur={(e) => setIban(e.target.value.replace(/\s+/g, "").toUpperCase())}
-              className={`${inputFieldClass} font-mono text-sm`}
-              placeholder="AZ..."
+              className={MODAL_INPUT_MONO_CLASS}
+              placeholder={t("counterparties.bankAccounts_ibanPlaceholder")}
             />
           </div>
           <div>
@@ -206,21 +239,17 @@ export function CounterpartyBankAccountsModal({
             <input
               value={swift}
               onChange={(e) => setSwift(e.target.value.toUpperCase())}
-              className={`${inputFieldClass} font-mono text-sm`}
+              className={MODAL_INPUT_MONO_CLASS}
             />
           </div>
           <div>
             <span className={lbl}>{t("counterparties.bankAccounts_colCurrency")}</span>
-            <input
+            <CurrencySelect
               value={currency}
-              onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))}
-              className={`${inputFieldClass} max-w-[8rem]`}
-              placeholder={t("counterparties.bankAccounts_currencyPh")}
+              onValueChange={setCurrency}
+              className={`${MODAL_INPUT_CLASS} max-w-[10rem]`}
             />
           </div>
-          <button type="submit" disabled={addBusy} className={PRIMARY_BUTTON_CLASS}>
-            {addBusy ? t("common.loading") : t("counterparties.bankAccounts_add")}
-          </button>
         </form>
       </div>
     </SalesModalShell>

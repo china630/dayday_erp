@@ -1,14 +1,25 @@
 "use client";
 
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   INPUT_BORDERED_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
@@ -241,15 +252,15 @@ export default function InventoryPhysicalPage() {
           </button>
         </div>
 
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-[13px]">
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} w-full min-w-[640px] border-collapse`}>
             <thead>
-              <tr className="border-b border-slate-200 text-left text-[#7F8C8D]">
-                <th className="p-2">{t("inventory.thProduct")}</th>
-                <th className="p-2 text-right">{t("inventory.physicalBookQty")}</th>
-                <th className="p-2 text-right">{t("inventory.physicalActualQty")}</th>
-                <th className="p-2 text-right">{t("inventory.physicalDelta")}</th>
-                <th className="p-2 w-10" />
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thProduct")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.physicalBookQty")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.physicalActualQty")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.physicalDelta")}</th>
+                <th className={`${DATA_TABLE_TH_RIGHT_CLASS} w-12 min-w-[3rem]`} />
               </tr>
             </thead>
             <tbody>
@@ -260,8 +271,8 @@ export default function InventoryPhysicalPage() {
                 const delta =
                   row.productId && Number.isFinite(act) && bookN != null ? act - bookN : null;
                 return (
-                  <tr key={i} className="border-b border-slate-100">
-                    <td className="p-2">
+                  <tr key={i} className={DATA_TABLE_TR_CLASS}>
+                    <td className={DATA_TABLE_TD_CLASS}>
                       <select
                         className={`${INPUT_BORDERED_CLASS} w-full max-w-xs`}
                         value={row.productId}
@@ -275,35 +286,34 @@ export default function InventoryPhysicalPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="p-2 text-right tabular-nums text-slate-600">
-                      {row.productId
-                        ? bookN != null
-                          ? bookN
-                          : "0"
-                        : "—"}
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                      {row.productId ? (bookN != null ? bookN : "0") : "—"}
                     </td>
-                    <td className="p-2 text-right">
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} max-w-[9rem]`}>
                       <input
                         type="number"
                         min={0}
                         step="any"
-                        className={`${INPUT_BORDERED_CLASS} w-28 text-right inline-block`}
+                        className={`${MODAL_INPUT_NUMERIC_CLASS} w-full max-w-[8rem] ml-auto`}
                         value={row.actualQty}
                         onChange={(e) => updateLine(i, { actualQty: e.target.value })}
                       />
                     </td>
-                    <td className="p-2 text-right tabular-nums font-medium text-[#34495E]">
+                    <td className={`${DATA_TABLE_TD_RIGHT_CLASS} font-semibold`}>
                       {delta != null && Number.isFinite(delta) ? delta : "—"}
                     </td>
-                    <td className="p-2">
+                    <td className={`${DATA_TABLE_TD_CLASS} w-12 min-w-[3rem]`}>
                       {lines.length > 1 ? (
-                        <button
-                          type="button"
-                          className="text-rose-600 text-xs hover:underline"
-                          onClick={() => removeLine(i)}
-                        >
-                          ×
-                        </button>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("employees.remove")}
+                            onClick={() => removeLine(i)}
+                          >
+                            <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
+                          </button>
+                        </div>
                       ) : null}
                     </td>
                   </tr>

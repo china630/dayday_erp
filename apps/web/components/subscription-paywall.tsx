@@ -8,6 +8,7 @@ import {
   useSubscription,
   type PaywallModuleKey,
 } from "../lib/subscription-context";
+import { uiLangRuAz } from "../lib/i18n/ui-lang";
 
 export type PaywallModule = PaywallModuleKey;
 
@@ -103,7 +104,7 @@ export function SubscriptionPaywall({
           >
             {t("subscription.paywall.cta")}
           </Link>
-          {i18n.language.startsWith("ru") ? (
+          {uiLangRuAz(i18n.language) === "ru" ? (
             <p className="mt-3 text-xs text-slate-500">{t("subscription.paywall.ctaHintRu")}</p>
           ) : (
             <p className="mt-3 text-xs text-slate-500">{t("subscription.paywall.ctaHintAz")}</p>

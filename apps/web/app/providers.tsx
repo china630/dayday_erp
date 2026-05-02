@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { I18nextProvider, useTranslation } from "react-i18next";
 import i18n from "../lib/i18n/client-i18n";
 import { AuthProvider } from "../lib/auth-context";
+import { LedgerPeriodLockProvider } from "../lib/ledger-period-lock-context";
 import { LedgerProvider } from "../lib/ledger-context";
 import { SubscriptionProvider } from "../lib/subscription-context";
 import { Toaster } from "sonner";
@@ -12,11 +13,12 @@ import { UpgradePlanModalHost } from "../components/upgrade-required-modal";
 import { I18nOverridesLoader } from "../components/i18n-overrides-loader";
 import { ApiErrorToaster } from "../components/api-error-toaster";
 import { NetworkErrorToaster } from "../components/network-error-toaster";
+import { uiLangRuAz } from "../lib/i18n/ui-lang";
 
 function HtmlLangSync() {
   const { i18n } = useTranslation();
   useEffect(() => {
-    document.documentElement.lang = i18n.language.startsWith("az") ? "az" : "ru";
+    document.documentElement.lang = uiLangRuAz(i18n.language);
   }, [i18n.language]);
   return null;
 }
@@ -69,7 +71,9 @@ export function Providers({ children }: { children: ReactNode }) {
           <ApiErrorToaster />
           <NetworkErrorToaster />
           <Toaster richColors position="top-right" closeButton />
-          <LedgerProvider>{children}</LedgerProvider>
+          <LedgerPeriodLockProvider>
+            <LedgerProvider>{children}</LedgerProvider>
+          </LedgerPeriodLockProvider>
         </SubscriptionProvider>
       </AuthProvider>
     </I18nextProvider>

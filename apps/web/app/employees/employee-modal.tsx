@@ -1,17 +1,19 @@
 "use client";
 
-import { Save, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
-  GHOST_BUTTON_CLASS,
-  PRIMARY_BUTTON_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_NUMERIC_CLASS,
 } from "../../lib/design-system";
 import { isValidFinCode, normalizeFinInput } from "../../lib/fin-code";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS } from "../../lib/form-styles";
+import { Button } from "../../components/ui/button";
 
 type JobPositionOpt = {
   id: string;
@@ -70,7 +72,6 @@ export function CreateEmployeeModal({
 
   useEffect(() => {
     if (!open) return;
-    // reset fields on open
     setKind("EMPLOYEE");
     setFinCode("");
     setVoen("");
@@ -84,7 +85,12 @@ export function CreateEmployeeModal({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || quotaAtLimit) return;
+    if (busy) return;
+    if (loading) return;
+    if (quotaAtLimit) {
+      toast.error(t("employees.createEmployeeQuotaFull"));
+      return;
+    }
     setLoadErr(null);
 
     if (
@@ -143,7 +149,9 @@ export function CreateEmployeeModal({
       try {
         const j = JSON.parse(raw) as { code?: string; message?: unknown };
         if (j.code === "QUOTA_EXCEEDED") {
-          toast.error(t("employees.staffLimitExceeded", { defaultValue: "Штатный лимит по этой должности исчерпан" }));
+          toast.error(
+            t("employees.staffLimitExceeded", { defaultValue: "Штатный лимит по этой должности исчерпан" }),
+          );
           return;
         }
       } catch {
@@ -162,130 +170,153 @@ export function CreateEmployeeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-2xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("employees.newSection")}</p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-2xl flex-col bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{title}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("employees.newSection")}</p>
           </div>
-          <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        {loadErr ? <p className="text-sm text-red-600 mt-4 mb-0">{loadErr}</p> : null}
-        {loading ? <p className="text-sm text-slate-600 mt-4 mb-0">{t("common.loading")}</p> : null}
+        <div className="mt-4 flex min-h-0 flex-1 flex-col space-y-4">
+        {loadErr ? <p className="m-0 text-[13px] text-red-600">{loadErr}</p> : null}
+        {loading ? <p className="m-0 text-[13px] text-[#7F8C8D]">{t("common.loading")}</p> : null}
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.firstName")}</span>
-              <input className={FORM_INPUT_CLASS} value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.lastName")}</span>
-              <input className={FORM_INPUT_CLASS} value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("employees.patronymic")}</span>
-              <input
-                className={FORM_INPUT_CLASS}
-                value={patronymic}
-                onChange={(e) => setPatronymic(e.target.value)}
-              />
-            </div>
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("employees.firstName")}
+                <input
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                />
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("employees.lastName")}
+                <input
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                />
+              </label>
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("employees.patronymic")}
+                <input
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={patronymic}
+                  onChange={(e) => setPatronymic(e.target.value)}
+                />
+              </label>
 
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.fin")}</span>
-              <input
-                value={finCode}
-                maxLength={7}
-                inputMode="text"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                onChange={(e) => setFinCode(normalizeFinInput(e.target.value))}
-                className={FORM_INPUT_CLASS}
-              />
-            </div>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("employees.fin")}
+                <input
+                  value={finCode}
+                  maxLength={7}
+                  inputMode="text"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  onChange={(e) => setFinCode(normalizeFinInput(e.target.value))}
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS} font-mono uppercase`}
+                />
+              </label>
 
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.kind")}</span>
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as "EMPLOYEE" | "CONTRACTOR")}
-                className={FORM_INPUT_CLASS}
-              >
-                <option value="EMPLOYEE">{t("employees.kindEmployee")}</option>
-                <option value="CONTRACTOR">{t("employees.kindContractor")}</option>
-              </select>
-            </div>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("employees.kind")}
+                <select
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value as "EMPLOYEE" | "CONTRACTOR")}
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                >
+                  <option value="EMPLOYEE">{t("employees.kindEmployee")}</option>
+                  <option value="CONTRACTOR">{t("employees.kindContractor")}</option>
+                </select>
+              </label>
 
-            {kind === "CONTRACTOR" ? (
-              <>
-                <div>
-                  <span className={FORM_LABEL_CLASS}>{t("employees.voen")}</span>
-                  <input
-                    value={voen}
-                    maxLength={10}
-                    onChange={(e) => setVoen(e.target.value.replace(/\D/g, ""))}
-                    className={FORM_INPUT_CLASS}
-                  />
-                </div>
-                <div>
-                  <span className={FORM_LABEL_CLASS}>{t("employees.contractorSocial")}</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={contractorSocial}
-                    onChange={(e) => setContractorSocial(e.target.value)}
-                    className={FORM_INPUT_CLASS}
-                  />
-                </div>
-              </>
-            ) : null}
+              {kind === "CONTRACTOR" ? (
+                <>
+                  <label className={MODAL_FIELD_LABEL_CLASS}>
+                    {t("employees.voen")}
+                    <input
+                      value={voen}
+                      maxLength={10}
+                      onChange={(e) => setVoen(e.target.value.replace(/\D/g, ""))}
+                      className={`mt-1 block w-full ${MODAL_INPUT_CLASS} font-mono tabular-nums`}
+                    />
+                  </label>
+                  <label className={MODAL_FIELD_LABEL_CLASS}>
+                    {t("employees.contractorSocial")}
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={contractorSocial}
+                      onChange={(e) => setContractorSocial(e.target.value)}
+                      className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
+                    />
+                  </label>
+                </>
+              ) : null}
 
-            <div className="md:col-span-2">
-              <span className={FORM_LABEL_CLASS}>{t("employees.jobPositionSelect")}</span>
-              <select value={positionId} onChange={(e) => setPositionId(e.target.value)} className={FORM_INPUT_CLASS}>
-                {positions.length === 0 ? <option value="">{t("common.loading")}</option> : null}
-                {positions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.department.name} — {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <label className={`${MODAL_FIELD_LABEL_CLASS} md:col-span-2`}>
+                {t("employees.jobPositionSelect")}
+                <select
+                  value={positionId}
+                  onChange={(e) => setPositionId(e.target.value)}
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                >
+                  {positions.length === 0 ? <option value="">{t("common.loading")}</option> : null}
+                  {positions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.department.name} — {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.startDate")}</span>
-              <input type="date" className={FORM_INPUT_CLASS} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("employees.salaryGross")}</span>
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                className={FORM_INPUT_CLASS}
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
-              />
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("employees.startDate")}
+                <input
+                  type="date"
+                  className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </label>
+              <label className={MODAL_FIELD_LABEL_CLASS}>
+                {t("employees.salaryGross")}
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
+                  value={salary}
+                  onChange={(e) => setSalary(e.target.value)}
+                />
+              </label>
             </div>
           </div>
 
-          <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
-            <button type="button" className={GHOST_BUTTON_CLASS} onClick={onClose} disabled={busy}>
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
               {t("common.cancel")}
-            </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy || loading || quotaAtLimit}>
-              <Save className="h-4 w-4 shrink-0" aria-hidden />
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? "…" : t("employees.save")}
-            </button>
+            </Button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
 }
-

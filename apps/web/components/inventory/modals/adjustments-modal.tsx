@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiFetch } from "../../../lib/api-client";
 import { notifyInventoryListsRefresh } from "../../../lib/list-refresh-bus";
-import { INPUT_BORDERED_CLASS } from "../../../lib/design-system";
+import { MODAL_FIELD_LABEL_CLASS, MODAL_INPUT_CLASS, MODAL_INPUT_NUMERIC_CLASS } from "../../../lib/design-system";
 import { InventoryModalFooter, InventoryModalShell } from "./modal-shell";
 
 type Warehouse = { id: string; name: string };
@@ -104,12 +104,12 @@ export function AdjustmentsModal({
       footer={<InventoryModalFooter onCancel={onClose} busy={busy} formId={FORM_ID} />}
     >
       <form id={FORM_ID} className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-        <label className="block text-[13px] font-medium text-[#34495E]">
+        <label className={MODAL_FIELD_LABEL_CLASS}>
           {t("inventory.whSelect")}
           <select
             value={warehouseId}
             onChange={(e) => setWarehouseId(e.target.value)}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+            className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
           >
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
@@ -119,12 +119,12 @@ export function AdjustmentsModal({
           </select>
         </label>
 
-        <label className="block text-[13px] font-medium text-[#34495E]">
+        <label className={MODAL_FIELD_LABEL_CLASS}>
           {t("inventory.thProduct")}
           <select
             value={productId}
             onChange={(e) => setProductId(e.target.value)}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+            className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
           >
             {products.map((p) => (
               <option key={p.id} value={p.id}>
@@ -134,41 +134,45 @@ export function AdjustmentsModal({
           </select>
         </label>
 
-        <fieldset className="space-y-2">
-          <legend className="text-[13px] font-medium text-[#34495E]">{t("inventory.adjustType")}</legend>
-          <label className="mr-6 inline-flex items-center gap-2">
+        <fieldset className="space-y-4">
+          <legend className="mb-0 text-[13px] font-semibold text-[#34495E]">{t("inventory.adjustType")}</legend>
+          <div className="flex flex-wrap gap-6">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] text-[#34495E]">
             <input
               type="radio"
               name="adjType"
               checked={type === "OUT"}
               onChange={() => setType("OUT")}
+              className="h-4 w-4 shrink-0 accent-[#2980B9]"
             />
             {t("inventory.adjustOut")}
           </label>
-          <label className="inline-flex items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] text-[#34495E]">
             <input
               type="radio"
               name="adjType"
               checked={type === "IN"}
               onChange={() => setType("IN")}
+              className="h-4 w-4 shrink-0 accent-[#2980B9]"
             />
             {t("inventory.adjustIn")}
           </label>
+          </div>
         </fieldset>
 
-        <label className="block text-[13px] font-medium text-[#34495E]">
+        <label className={MODAL_FIELD_LABEL_CLASS}>
           {t("inventory.adjustInvAccount")}
           <select
             value={inventoryAccountCode}
             onChange={(e) => setInventoryAccountCode(e.target.value === "204" ? "204" : "201")}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+            className={`mt-1 block w-full ${MODAL_INPUT_CLASS}`}
           >
             <option value="201">{t("inventory.adjustInv201")}</option>
             <option value="204">{t("inventory.adjustInv204")}</option>
           </select>
         </label>
 
-        <label className="block text-[13px] font-medium text-[#34495E]">
+        <label className={MODAL_FIELD_LABEL_CLASS}>
           {t("inventory.thQty")}
           <input
             type="number"
@@ -176,12 +180,12 @@ export function AdjustmentsModal({
             step="any"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+            className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
           />
         </label>
 
         {type === "IN" && (
-          <label className="block text-[13px] font-medium text-[#34495E]">
+          <label className={MODAL_FIELD_LABEL_CLASS}>
             {t("inventory.adjustUnitPrice")}
             <input
               type="number"
@@ -189,7 +193,7 @@ export function AdjustmentsModal({
               step="any"
               value={unitPrice}
               onChange={(e) => setUnitPrice(e.target.value)}
-              className={`mt-1 block w-full ${INPUT_BORDERED_CLASS}`}
+              className={`mt-1 block w-full ${MODAL_INPUT_NUMERIC_CLASS}`}
             />
           </label>
         )}

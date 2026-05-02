@@ -356,6 +356,7 @@ export type MainNavSections = {
   catalogCrmActive: boolean;
   payrollHrActive: boolean;
   reportsActive: boolean;
+  chartOfAccountsActive: boolean;
   adminActive: boolean;
   reportingHubActive: boolean;
   inventoryMainActive: boolean;
@@ -746,6 +747,40 @@ export function MainSidebar({
           onNavClick={onNavClick}
         />
 
+        {user && user.role != null && user.role !== "USER" ? (
+          <CollapsibleNavSection
+            sectionKey="chartOfAccounts"
+            title={t("nav.sectionChartOfAccounts")}
+            icon={BookOpen}
+            sectionActive={navSections.chartOfAccountsActive}
+          >
+            <SideNavItem
+              href="/accounting/chart"
+              label={t("nav.chartOfAccountsCatalog")}
+              isActive={pathname.startsWith("/accounting/chart")}
+              icon={BookOpen}
+              nested
+              onNavClick={onNavClick}
+            />
+            <SideNavItem
+              href="/accounting/mapping"
+              label={t("nav.accountingMappingNav")}
+              isActive={pathname.startsWith("/accounting/mapping")}
+              locked={lockedIfrsMapping}
+              icon={Link2}
+              nested
+              onNavClick={onNavClick}
+            />
+            <SideNavSubItem
+              href="/accounting/ifrs-mapping"
+              label={t("nav.accountingIfrsNav")}
+              isActive={pathname.startsWith("/accounting/ifrs-mapping")}
+              icon={Link2}
+              onNavClick={onNavClick}
+            />
+          </CollapsibleNavSection>
+        ) : null}
+
         {(token || user?.isSuperAdmin) && (
           <CollapsibleNavSection
             sectionKey="admin"
@@ -825,32 +860,6 @@ export function MainSidebar({
                     />
                   </>
                 ) : null}
-                <SideNavItem
-                  href="/settings/chart"
-                  label={t("nav.settingsChart")}
-                  isActive={pathname.startsWith("/settings/chart")}
-                  icon={BookOpen}
-                  nested
-                  onNavClick={onNavClick}
-                />
-                <SideNavItem
-                  href="/settings/mapping"
-                  label={t("nav.settingsMapping")}
-                  isActive={pathname.startsWith("/settings/mapping")}
-                  locked={lockedIfrsMapping}
-                  icon={Link2}
-                  nested
-                  onNavClick={onNavClick}
-                />
-                <SideNavSubItem
-                  href="/settings/finance/ifrs-mapping"
-                  label={t("nav.settingsIfrsRules", {
-                    defaultValue: "IFRS Rules",
-                  })}
-                  isActive={pathname.startsWith("/settings/finance/ifrs-mapping")}
-                  icon={Link2}
-                  onNavClick={onNavClick}
-                />
                 <SideNavItem
                   href="/settings/migration"
                   label={t("nav.settingsMigration")}

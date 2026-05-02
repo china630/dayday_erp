@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiFetch } from "../../../../lib/api-client";
-import { useAuth } from "../../../../lib/auth-context";
-import { useRequireAuth } from "../../../../lib/use-require-auth";
+import { apiFetch } from "../../../lib/api-client";
+import { useAuth } from "../../../lib/auth-context";
+import { useRequireAuth } from "../../../lib/use-require-auth";
 import {
   CARD_CONTAINER_CLASS,
   INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
-} from "../../../../lib/design-system";
-import { PageHeader } from "../../../../components/layout/page-header";
+} from "../../../lib/design-system";
+import { PageHeader } from "../../../components/layout/page-header";
 
 type Rule = {
   id: string;

@@ -12,19 +12,23 @@ import {
 import { ledgerQueryParam, useLedger } from "../../lib/ledger-context";
 import { formatMoneyAzn } from "../../lib/format-money";
 import { CHART_ACCOUNT_NAMES_AZ } from "../../lib/i18n/chart-account-names-az";
+import { uiLangRuAz } from "../../lib/i18n/ui-lang";
 import { useRequireAuth } from "../../lib/use-require-auth";
 import { PageHeader } from "../../components/layout/page-header";
 import { EmptyState } from "../../components/empty-state";
 import {
   BORDER_MUTED_CLASS,
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   PRIMARY_BUTTON_CLASS,
 } from "../../lib/design-system";
-
-const REPORT_TH =
-  "px-3 py-2 text-left text-[13px] font-semibold text-[#34495E]";
-const REPORT_TH_NUM =
-  "px-3 py-2 text-right text-[13px] font-semibold text-[#34495E] tabular-nums";
 
 function monthBounds(): { from: string; to: string } {
   const now = new Date();
@@ -72,7 +76,7 @@ type PlPayload = {
 };
 
 function trialBalanceAccountName(code: string, apiName: string, lang: string): string {
-  if (lang.startsWith("az")) {
+  if (uiLangRuAz(lang) === "az") {
     const az = CHART_ACCOUNT_NAMES_AZ[code];
     if (az) return az;
   }
@@ -86,7 +90,7 @@ function plLineDisplayLabel(
 ): string {
   const code = line.accountCode;
   if (!code) return line.label;
-  if (lang.startsWith("az")) {
+  if (uiLangRuAz(lang) === "az") {
     const az = CHART_ACCOUNT_NAMES_AZ[code];
     if (az) return az;
   }
@@ -428,60 +432,51 @@ export default function ReportingPage() {
               </div>
             ))}
           </div>
-          <div className={`hidden md:block overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-            <table className="w-full min-w-[880px] text-sm">
+          <div className={`hidden md:block ${DATA_TABLE_VIEWPORT_CLASS}`}>
+            <table className={`${DATA_TABLE_CLASS} w-full min-w-[880px]`}>
               <thead>
-                <tr className="border-b border-[#D5DADF]">
-                  <th className={REPORT_TH}>{t("reporting.thCode")}</th>
-                  <th className={REPORT_TH}>{t("reporting.thAccName")}</th>
-                  <th className={`hidden lg:table-cell ${REPORT_TH}`}>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("reporting.thCode")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("reporting.thAccName")}</th>
+                  <th className={`hidden lg:table-cell ${DATA_TABLE_TH_LEFT_CLASS}`}>
                     {t("reporting.thType")}
                   </th>
-                  <th className={`hidden xl:table-cell ${REPORT_TH_NUM}`}>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
                     {t("reporting.thOpenDr")}
                   </th>
-                  <th className={`hidden xl:table-cell ${REPORT_TH_NUM}`}>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
                     {t("reporting.thOpenCr")}
                   </th>
-                  <th className={REPORT_TH_NUM}>{t("reporting.thPerDr")}</th>
-                  <th className={REPORT_TH_NUM}>{t("reporting.thPerCr")}</th>
-                  <th className={`hidden xl:table-cell ${REPORT_TH_NUM}`}>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("reporting.thPerDr")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("reporting.thPerCr")}</th>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
                     {t("reporting.thCloseDr")}
                   </th>
-                  <th className={`hidden xl:table-cell ${REPORT_TH_NUM}`}>
+                  <th className={`hidden xl:table-cell ${DATA_TABLE_TH_RIGHT_CLASS}`}>
                     {t("reporting.thCloseCr")}
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {tb.rows.map((r) => (
-                  <tr key={r.accountId} className="border-b border-[#EBEDF0]">
-                    <td className="px-3 py-2 font-mono text-[13px] text-[#34495E]">{r.accountCode}</td>
-                    <td
-                      className="max-w-[200px] truncate px-3 py-2 text-[13px] text-[#34495E]"
-                      title={r.accountName}
-                    >
+                  <tr key={r.accountId} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-mono`}>{r.accountCode}</td>
+                    <td className={`max-w-[200px] truncate ${DATA_TABLE_TD_CLASS}`} title={r.accountName}>
                       {trialBalanceAccountName(r.accountCode, r.accountName, i18n.language)}
                     </td>
-                    <td className="hidden px-3 py-2 text-[13px] text-[#34495E] lg:table-cell">
-                      {r.accountType}
-                    </td>
-                    <td className="hidden px-3 py-2 text-right tabular-nums text-[#34495E] xl:table-cell">
+                    <td className={`hidden ${DATA_TABLE_TD_CLASS} lg:table-cell`}>{r.accountType}</td>
+                    <td className={`hidden ${DATA_TABLE_TD_RIGHT_CLASS} xl:table-cell`}>
                       {formatMoneyAzn(r.openingDebit)}
                     </td>
-                    <td className="hidden px-3 py-2 text-right tabular-nums text-[#34495E] xl:table-cell">
+                    <td className={`hidden ${DATA_TABLE_TD_RIGHT_CLASS} xl:table-cell`}>
                       {formatMoneyAzn(r.openingCredit)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[#34495E]">
-                      {formatMoneyAzn(r.periodDebit)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[#34495E]">
-                      {formatMoneyAzn(r.periodCredit)}
-                    </td>
-                    <td className="hidden px-3 py-2 text-right tabular-nums text-[#34495E] xl:table-cell">
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.periodDebit)}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(r.periodCredit)}</td>
+                    <td className={`hidden ${DATA_TABLE_TD_RIGHT_CLASS} xl:table-cell`}>
                       {formatMoneyAzn(r.closingDebit)}
                     </td>
-                    <td className="hidden px-3 py-2 text-right tabular-nums text-[#34495E] xl:table-cell">
+                    <td className={`hidden ${DATA_TABLE_TD_RIGHT_CLASS} xl:table-cell`}>
                       {formatMoneyAzn(r.closingCredit)}
                     </td>
                   </tr>
@@ -508,12 +503,12 @@ export default function ReportingPage() {
               {exportBusy === "pl-xlsx" ? "…" : t("reporting.exportXlsx", { defaultValue: "Экспорт XLSX" })}
             </button>
           </div>
-          <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-            <table className="w-full text-sm">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} w-full`}>
               <thead>
-                <tr className="border-b border-[#D5DADF]">
-                  <th className={REPORT_TH}>{t("reporting.thPlLine")}</th>
-                  <th className={REPORT_TH_NUM}>{t("reporting.thPlAmount")}</th>
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("reporting.thPlLine")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("reporting.thPlAmount")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -521,17 +516,15 @@ export default function ReportingPage() {
                   const code = line.accountCode;
                   const label = plLineDisplayLabel(line, i18n.language, t);
                   return (
-                    <tr key={`${code ?? line.label}-${i}`} className="border-b border-[#EBEDF0]">
-                      <td className="px-3 py-2 text-[13px] text-[#34495E]">{label}</td>
-                      <td className="px-3 py-2 text-right text-[13px] tabular-nums text-[#34495E]">
-                        {formatMoneyAzn(line.amount)}
-                      </td>
+                    <tr key={`${code ?? line.label}-${i}`} className={DATA_TABLE_TR_CLASS}>
+                      <td className={DATA_TABLE_TD_CLASS}>{label}</td>
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(line.amount)}</td>
                     </tr>
                   );
                 })}
-                <tr className="border-t-2 border-[#D5DADF] bg-[#EBEDF0] font-bold text-[#34495E]">
-                  <td className="px-3 py-2">{t("reporting.netProfit")}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatMoneyAzn(pl.netProfit)}</td>
+                <tr className={`${DATA_TABLE_TR_CLASS} border-t-2 border-[#D5DADF] bg-[#EBEDF0] font-semibold`}>
+                  <td className={DATA_TABLE_TD_CLASS}>{t("reporting.netProfit")}</td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(pl.netProfit)}</td>
                 </tr>
               </tbody>
             </table>

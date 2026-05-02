@@ -1,12 +1,17 @@
 "use client";
 
-import { Loader2, Send, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { apiBaseUrl, apiFetch } from "../../lib/api-client";
-import { FORM_INPUT_CLASS, FORM_LABEL_CLASS, FORM_TEXTAREA_CLASS } from "../../lib/form-styles";
-import { CARD_CONTAINER_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "../../lib/design-system";
+import {
+  CARD_CONTAINER_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_FOOTER_ACTIONS_CLASS,
+  MODAL_INPUT_CLASS,
+} from "../../lib/design-system";
+import { Button } from "../ui/button";
 
 export function VoenRequestModal({
   open,
@@ -31,6 +36,11 @@ export function VoenRequestModal({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const digits = taxId.replace(/\D/g, "").slice(0, 10);
+    if (digits.length !== 10) {
+      toast.error(t("common.fillRequired"));
+      return;
+    }
     if (busy) return;
     setBusy(true);
     try {
@@ -38,7 +48,7 @@ export function VoenRequestModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          taxId: taxId.replace(/\D/g, "").slice(0, 10),
+          taxId: digits,
           message: message.trim() || undefined,
         }),
       });
@@ -61,66 +71,65 @@ export function VoenRequestModal({
 
   if (!open) return null;
 
+  const textareaClass = `mt-1 block min-h-[72px] w-full resize-y ${MODAL_INPUT_CLASS}`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className={`${CARD_CONTAINER_CLASS} w-full max-w-xl bg-white p-6 max-h-[90vh] overflow-y-auto`}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-gray-900 m-0">{title}</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-0">{t("companiesPage.joinHint")}</p>
+      <div
+        className={`${CARD_CONTAINER_CLASS} flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden bg-white p-6`}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="m-0 text-lg font-semibold leading-snug text-[#34495E]">{title}</h3>
+            <p className="mb-0 mt-1 text-[13px] leading-snug text-[#7F8C8D]">{t("companiesPage.joinHint")}</p>
           </div>
-          <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} aria-label={t("common.cancel")}>
-            <X className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+          <Button type="button" variant="ghost" className="!px-2" onClick={onClose} aria-label={t("common.close")}>
+            <X className="h-4 w-4 shrink-0" aria-hidden />
+          </Button>
+        </header>
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <div className="grid gap-4">
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("auth.taxId")}</span>
+        <form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={(e) => void onSubmit(e)}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("auth.taxId")}
               <input
-                required
-                pattern="[0-9]{10}"
                 maxLength={10}
                 inputMode="numeric"
                 value={taxId}
                 onChange={(e) => setTaxId(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                className={FORM_INPUT_CLASS}
+                className={`mt-1 block w-full ${MODAL_INPUT_CLASS} font-mono tabular-nums`}
                 autoComplete="off"
               />
-            </div>
-            <div>
-              <span className={FORM_LABEL_CLASS}>{t("companiesPage.messageOptional")}</span>
+            </label>
+            <label className={MODAL_FIELD_LABEL_CLASS}>
+              {t("companiesPage.messageOptional")}
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={3}
-                className={FORM_TEXTAREA_CLASS}
+                className={textareaClass}
               />
-            </div>
+            </label>
           </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={onClose} disabled={busy}>
-              {t("common.back")}
-            </button>
-            <button type="submit" className={PRIMARY_BUTTON_CLASS} disabled={busy}>
+          <div className={MODAL_FOOTER_ACTIONS_CLASS}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
               {busy ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
-                  <span>{t("common.loading")}</span>
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  {t("common.loading")}
                 </>
               ) : (
-                <>
-                  <Send className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>{t("companiesPage.joinSubmit")}</span>
-                </>
+                t("companiesPage.joinSubmit")
               )}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
     </div>
   );
 }
-

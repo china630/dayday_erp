@@ -8,7 +8,17 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
 import { PageHeader } from "../../../components/layout/page-header";
 import { AdjustmentsModal } from "../../../components/inventory/modals";
-import { BORDER_MUTED_CLASS, PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+} from "../../../lib/design-system";
 
 type Movement = {
   id: string;
@@ -100,32 +110,32 @@ export default function InventoryAdjustmentsPage() {
         <p className="text-sm text-slate-600">{t("inventory.emptyMovementsHint")}</p>
       )}
       {!loading && rows.length > 0 && (
-        <div className={`overflow-x-auto rounded-[2px] border ${BORDER_MUTED_CLASS} bg-white shadow-sm`}>
-          <table className="text-sm min-w-full">
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} min-w-full`}>
             <thead>
-              <tr className={`border-b ${BORDER_MUTED_CLASS}`}>
-                <th className="text-left p-2">{t("inventory.thMovDate")}</th>
-                <th className="text-left p-2">{t("inventory.thWh")}</th>
-                <th className="text-left p-2">{t("inventory.thProduct")}</th>
-                <th className="text-left p-2">{t("inventory.thMovType")}</th>
-                <th className="text-left p-2">{t("inventory.thQty")}</th>
-                <th className="text-right p-2">{t("inventory.thMovPrice")}</th>
-                <th className="text-left p-2">{t("inventory.thNote")}</th>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.thMovDate")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thWh")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thProduct")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thMovType")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.thQty")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("inventory.thMovPrice")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("inventory.thNote")}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((m) => (
-                <tr key={m.id} className={`border-t ${BORDER_MUTED_CLASS}`}>
-                  <td className="p-2 whitespace-nowrap">{rowDate(m)}</td>
-                  <td className="p-2">{m.warehouse.name}</td>
-                  <td className="p-2">
+                <tr key={m.id} className={DATA_TABLE_TR_CLASS}>
+                  <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>{rowDate(m)}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>{m.warehouse.name}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>
                     {m.product.name}
                     {m.product.sku ? ` (${m.product.sku})` : ""}
                   </td>
-                  <td className="p-2">{m.type}</td>
-                  <td className="p-2">{fmtQty(m.quantity)}</td>
-                  <td className="p-2 text-right font-mono">{formatMoneyAzn(m.price)}</td>
-                  <td className="p-2 text-xs">{m.note ?? "—"}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>{m.type}</td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>{fmtQty(m.quantity)}</td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>{formatMoneyAzn(m.price)}</td>
+                  <td className={`${DATA_TABLE_TD_CLASS} text-xs`}>{m.note ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

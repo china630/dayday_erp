@@ -12,11 +12,17 @@ import {
   type CounterpartyLegalForm,
 } from "../../../lib/counterparty-legal-form";
 import { notifyListRefresh } from "../../../lib/list-refresh-bus";
-import { inputFieldClass, inputFieldInlineClass } from "../../../lib/form-classes";
+import {
+  MODAL_CHECKBOX_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  MODAL_INPUT_CLASS,
+  MODAL_INPUT_TAX_ID_CLASS,
+} from "../../../lib/design-system";
 import { Button } from "../../ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../ui/select";
 import { SalesModalFooter, SalesModalShell } from "./modal-shell";
 
-const lbl = "block text-xs font-semibold text-slate-600 mb-1.5";
+const lbl = MODAL_FIELD_LABEL_CLASS;
 
 function isPoisonLookupName(name: string): boolean {
   const n = name.trim();
@@ -286,20 +292,20 @@ export function EditCounterpartyModal({
         <SalesModalFooter
           onCancel={onClose}
           busy={busy || loadBusy}
-          saveDisabled={!taxValid || !name.trim() || !!loadErr}
           formId="edit-counterparty-form"
           cancelVariant="ghost"
         />
       }
     >
-      {loadErr ? <p className="mb-3 text-sm text-red-600">{loadErr}</p> : null}
-      {loadBusy ? <p className="mb-3 text-sm text-slate-600">{t("common.loading")}</p> : null}
-      <form
-        id="edit-counterparty-form"
-        noValidate
-        onSubmit={(e) => void onSubmit(e)}
-        className="space-y-4"
-      >
+      <div className="space-y-4">
+        {loadErr ? <p className="text-[13px] text-red-600">{loadErr}</p> : null}
+        {loadBusy ? <p className="text-[13px] text-[#7F8C8D]">{t("common.loading")}</p> : null}
+        <form
+          id="edit-counterparty-form"
+          noValidate
+          onSubmit={(e) => void onSubmit(e)}
+          className="space-y-4"
+        >
         <div>
           <span className={lbl}>{t("counterparties.name")}</span>
           <input
@@ -307,13 +313,13 @@ export function EditCounterpartyModal({
             autoComplete="organization"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
             disabled={loadBusy}
           />
         </div>
         <div>
           <span className={lbl}>{t("counterparties.taxId")}</span>
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex w-full max-w-md min-w-0 items-center justify-between gap-3">
             <input
               name="taxId"
               inputMode="numeric"
@@ -322,7 +328,7 @@ export function EditCounterpartyModal({
               onChange={(e) => {
                 setTaxId(e.target.value.replace(/\D/g, "").slice(0, 10));
               }}
-              className={inputFieldInlineClass}
+              className={MODAL_INPUT_TAX_ID_CLASS}
               aria-invalid={!taxValid && digits.length > 0}
               disabled={loadBusy}
             />
@@ -332,7 +338,7 @@ export function EditCounterpartyModal({
               disabled={voenCheckBusy || !taxValid || loadBusy}
               aria-busy={voenCheckBusy}
               aria-label={t("counterparties.yoxla")}
-              className="shrink-0"
+              className="shrink-0 self-center"
               onClick={(e) => {
                 e.preventDefault();
                 void handleCheckVoen();
@@ -347,26 +353,26 @@ export function EditCounterpartyModal({
           </div>
         </div>
         <div>
-          <span className={lbl}>{t("counterparties.legalForm")}</span>
-          <select
+          <span className={lbl}>{t("counterparties.legalFormField")}</span>
+          <Select
             key={i18n.language}
             value={legalForm}
-            onChange={(e) => setLegalForm(e.target.value as CounterpartyLegalForm)}
-            className={inputFieldClass}
-            required
+            onValueChange={(v) => setLegalForm(v as CounterpartyLegalForm)}
+            className={MODAL_INPUT_CLASS}
             disabled={loadBusy}
           >
-            {legalFormOptions.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="" />
+            <SelectContent>
+              {legalFormOptions.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border border-slate-300"
+        <label className="flex cursor-pointer items-center gap-2 text-[13px] text-[#34495E]">
+          <input type="checkbox" className={MODAL_CHECKBOX_CLASS}
             checked={isVatPayer}
             onChange={(e) => setIsVatPayer(e.target.checked)}
             disabled={loadBusy}
@@ -374,7 +380,7 @@ export function EditCounterpartyModal({
           <span>{t("counterparties.vatPayerCheckbox")}</span>
         </label>
         {isRiskyTaxpayer === true ? (
-          <div className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+          <div className="inline-flex items-center rounded-[2px] border border-amber-300 bg-amber-100 px-2.5 py-1 text-[13px] font-semibold text-amber-900">
             {t("counterparties.riskyTaxpayerBadge")}
           </div>
         ) : null}
@@ -383,7 +389,7 @@ export function EditCounterpartyModal({
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as typeof role)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
             disabled={loadBusy}
           >
             <option value="CUSTOMER">{t("counterparties.roleCustomer")}</option>
@@ -398,7 +404,7 @@ export function EditCounterpartyModal({
             name="address"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
             disabled={loadBusy}
           />
         </div>
@@ -409,11 +415,12 @@ export function EditCounterpartyModal({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={inputFieldClass}
+            className={MODAL_INPUT_CLASS}
             disabled={loadBusy}
           />
         </div>
-      </form>
+        </form>
+      </div>
     </SalesModalShell>
   );
 }

@@ -8,6 +8,14 @@ import { useRequireAuth } from "../../../lib/use-require-auth";
 import { PageHeader } from "../../../components/layout/page-header";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
@@ -428,11 +436,13 @@ export default function HrTimesheetPage() {
             <p className="text-xs text-slate-500 mt-2">{t("timesheet.legendHint")}</p>
           </section>
 
-          <div className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
-            <table className="min-w-max border-collapse text-xs">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={`${DATA_TABLE_CLASS} min-w-max border-collapse`}>
               <thead>
-                <tr>
-                  <th className="sticky left-0 z-10 min-w-[140px] border-b border-[#D5DADF] bg-white p-2 text-left text-[13px] font-semibold text-[#34495E]">
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th
+                    className={`sticky left-0 z-20 min-w-[140px] border-r border-[#D5DADF] ${DATA_TABLE_TH_LEFT_CLASS} bg-[#F8FAFC]`}
+                  >
                     {t("employees.thName")}
                   </th>
                   {Array.from({ length: lastDay }, (_, i) => i + 1).map((d) => {
@@ -442,7 +452,7 @@ export default function HrTimesheetPage() {
                     return (
                       <th
                         key={d}
-                        className="min-w-[36px] border-b border-[#D5DADF] p-1 text-center text-[13px] font-semibold text-[#34495E]"
+                        className={`min-w-[36px] border-l border-[#D5DADF] ${DATA_TABLE_TH_CENTER_CLASS} bg-[#F8FAFC] py-1 text-[11px]`}
                       >
                         <div className="text-[10px] font-normal text-[#7F8C8D]">{wdl}</div>
                         {d}
@@ -453,8 +463,10 @@ export default function HrTimesheetPage() {
               </thead>
               <tbody>
                 {employees.map((emp) => (
-                  <tr key={emp.id} className="border-t border-slate-50">
-                    <td className="sticky left-0 z-10 bg-white p-2 font-medium text-gray-900 whitespace-nowrap border-r border-slate-100">
+                  <tr key={emp.id} className={`${DATA_TABLE_TR_CLASS} group`}>
+                    <td
+                      className={`sticky left-0 z-10 border-r border-[#D5DADF] ${DATA_TABLE_TD_CLASS} bg-white font-semibold text-[#34495E] whitespace-nowrap group-hover:bg-[#F1F5F9]`}
+                    >
                       <label className="inline-flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -479,7 +491,10 @@ export default function HrTimesheetPage() {
                       const locked = e?.lockedFromAbsence;
                       const typ = e?.type ?? "OFF";
                       return (
-                        <td key={d} className="p-0 text-center border-l border-slate-50">
+                        <td
+                          key={d}
+                          className={`${DATA_TABLE_TD_CENTER_CLASS} border-l border-[#D5DADF] p-0`}
+                        >
                           <button
                             type="button"
                             title={locked ? t("timesheet.absenceLocked") : cellCode(typ)}

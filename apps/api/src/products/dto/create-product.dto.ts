@@ -22,11 +22,11 @@ export class CreateProductDto {
 
   @ApiProperty({
     description:
-      "НДС, %: 18, 0 или -1 (освобождение от ƏDV; в расчётах как 0%)",
+      "НДС, %: 18, 8, 2, 0 или -1 (освобождение от ƏDV; в расчётах как 0%)",
   })
   @Type(() => Number)
   @IsNumber()
-  @IsIn([-1, 0, 18])
+  @IsIn([-1, 0, 2, 8, 18])
   vatRate!: number;
 
   @ApiPropertyOptional({ description: "Услуга (без складского учёта в UI / печать)" })

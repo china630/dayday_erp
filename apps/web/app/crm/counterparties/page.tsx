@@ -1,12 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { CreditCard, MoreVertical, Users2 } from "lucide-react";
+import { CreditCard, Pencil, Scale, Users2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { subscribeListRefresh } from "../../../lib/list-refresh-bus";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
-import { PRIMARY_BUTTON_CLASS } from "../../../lib/design-system";
+import {
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CENTER_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_CENTER_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
+  PRIMARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
+} from "../../../lib/design-system";
 import { useRequireAuth } from "../../../lib/use-require-auth";
 import { EmptyState } from "../../../components/empty-state";
 import { PageHeader } from "../../../components/layout/page-header";
@@ -143,81 +158,62 @@ export default function CounterpartiesPage() {
           />
         )}
         {!loading && filtered().length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="text-sm">
+          <div className={DATA_TABLE_VIEWPORT_CLASS}>
+            <table className={DATA_TABLE_CLASS}>
               <thead>
-                <tr>
-                  <th className="p-2 text-left">{t("counterparties.thName")}</th>
-                  <th className="p-2 text-left">{t("counterparties.thTaxId")}</th>
-                  <th className="p-2 text-left">{t("counterparties.vatStatus")}</th>
-                  <th className="p-2 text-left">{t("counterparties.thLegalForm")}</th>
-                  <th className="p-2 text-left">{t("counterparties.thRole")}</th>
-                  <th className="p-2 text-left">{t("counterparties.thEmail")}</th>
-                  <th className="p-2 w-12" />
+                <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.thName")}</th>
+                  <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("counterparties.thTaxId")}</th>
+                  <th className={DATA_TABLE_TH_CENTER_CLASS}>{t("counterparties.vatStatus")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.thLegalForm")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.thRole")}</th>
+                  <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("counterparties.thEmail")}</th>
+                  <th className={`${DATA_TABLE_ACTIONS_TH_CLASS} min-w-[120px]`}>
+                    {t("counterparties.bankAccounts_actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filtered().map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100">
-                    <td className="p-2 font-medium text-gray-900">{r.name}</td>
-                    <td className="p-2">{r.taxId}</td>
-                    <td className="p-2">
+                  <tr key={r.id} className={DATA_TABLE_TR_CLASS}>
+                    <td className={`${DATA_TABLE_TD_CLASS} font-semibold text-[#34495E]`}>{r.name}</td>
+                    <td className={DATA_TABLE_TD_RIGHT_CLASS}>{r.taxId}</td>
+                    <td className={DATA_TABLE_TD_CENTER_CLASS}>
                       {r.isVatPayer === true
                         ? t("counterparties.vatPayerYes")
                         : r.isVatPayer === false
                           ? t("counterparties.vatPayerNo")
                           : "—"}
                     </td>
-                    <td className="p-2">{legalFormLabel(t, r.legalForm)}</td>
-                    <td className="p-2">{r.role}</td>
-                    <td className="p-2">{r.email ?? "—"}</td>
-                    <td className="p-2 text-right">
-                      <details className="relative inline-block text-left">
-                        <summary
-                          className="inline-flex cursor-pointer list-none items-center justify-center rounded p-1 text-[#34495E] hover:bg-slate-100 [&::-webkit-details-marker]:hidden"
-                          aria-label={t("counterparties.bankAccounts_actions")}
+                    <td className={DATA_TABLE_TD_CLASS}>{legalFormLabel(t, r.legalForm)}</td>
+                    <td className={DATA_TABLE_TD_CLASS}>{r.role}</td>
+                    <td className={DATA_TABLE_TD_CLASS}>{r.email ?? "—"}</td>
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("counterparties.edit")}
+                          onClick={() => setEditId(r.id)}
                         >
-                          <MoreVertical className="h-5 w-5" aria-hidden />
-                        </summary>
-                        <div
-                          className="absolute right-0 z-20 mt-1 min-w-[12.5rem] rounded-[2px] border border-[#D5DADF] bg-white py-1 shadow-md"
-                          onClick={(e) => e.stopPropagation()}
+                          <Pencil className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("counterparties.bankAccounts_menu")}
+                          onClick={() => setBankModal({ id: r.id, name: r.name })}
                         >
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#34495E] hover:bg-[#F4F5F7]"
-                            onClick={(e) => {
-                              const d = e.currentTarget.closest("details");
-                              if (d) (d as HTMLDetailsElement).open = false;
-                              setEditId(r.id);
-                            }}
-                          >
-                            {t("counterparties.edit")}
-                          </button>
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#34495E] hover:bg-[#F4F5F7]"
-                            onClick={(e) => {
-                              const d = e.currentTarget.closest("details");
-                              if (d) (d as HTMLDetailsElement).open = false;
-                              setBankModal({ id: r.id, name: r.name });
-                            }}
-                          >
-                            <CreditCard className="h-4 w-4 shrink-0 text-[#7F8C8D]" aria-hidden />
-                            {t("counterparties.bankAccounts_menu")}
-                          </button>
-                          <Link
-                            href={`/crm/counterparties/${r.id}/reconciliation`}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-action hover:bg-[#F4F5F7]"
-                            onClick={(e) => {
-                              const d = e.currentTarget.closest("details");
-                              if (d) (d as HTMLDetailsElement).open = false;
-                            }}
-                          >
-                            {t("counterparties.tabReconciliation")}
-                          </Link>
-                        </div>
-                      </details>
+                          <CreditCard className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                        </button>
+                        <Link
+                          href={`/crm/counterparties/${r.id}/reconciliation`}
+                          className={TABLE_ROW_ICON_BTN_CLASS}
+                          title={t("counterparties.tabReconciliation")}
+                        >
+                          <Scale className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -28,18 +28,35 @@ export class ProductsController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
-  @ApiOperation({ summary: "Список товаров" })
+  @ApiOperation({ summary: "Список товаров (опционально search + limit для автодополнения)" })
   list(
     @OrganizationId() orgId: string,
     @Query("isService") isService?: string,
+    @Query("search") search?: string,
+    @Query("limit") limitRaw?: string,
   ) {
+    const searchTrim = search?.trim() ?? "";
+    const parsedLimit = limitRaw ? Number.parseInt(limitRaw, 10) : NaN;
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : undefined;
+    const take =
+      searchTrim.length > 0 ? (limit ?? 20) : limit !== undefined ? limit : undefined;
+
     return this.prisma.product.findMany({
       where: {
         organizationId: orgId,
         ...(isService === "false" ? { isService: false } : {}),
         ...(isService === "true" ? { isService: true } : {}),
+        ...(searchTrim.length > 0
+          ? {
+              OR: [
+                { name: { contains: searchTrim, mode: "insensitive" } },
+                { sku: { contains: searchTrim, mode: "insensitive" } },
+              ],
+            }
+          : {}),
       },
       orderBy: { name: "asc" },
+      ...(take !== undefined ? { take } : {}),
     });
   }
 

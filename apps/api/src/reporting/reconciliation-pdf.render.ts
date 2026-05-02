@@ -1,6 +1,12 @@
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 
+import {
+  PDF_FONT_UNICODE,
+  PDF_FONT_UNICODE_BOLD,
+  registerUnicodeFonts,
+} from "./pdf-font.util";
+
 export type ReconciliationPdfLineKind = "OPENING" | "INVOICE" | "PAYMENT";
 
 export type ReconciliationPdfLine = {
@@ -44,7 +50,7 @@ export type ReconciliationPdfModel = {
   signatureVerifyUrl?: string;
 };
 
-/** Akt qarşılıqlı hesablaşma — mətnlər Azərbaycan dilində (PDFKit Helvetica). */
+/** Akt qarşılıqlı hesablaşma — mətnlər Azərbaycan dilində (PDFKit + DejaVu Sans, см. `pdf-font.util.ts`). */
 export async function renderReconciliationPdfAz(
   data: ReconciliationPdfModel,
 ): Promise<Buffer> {
@@ -68,17 +74,19 @@ export async function renderReconciliationPdfAz(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    registerUnicodeFonts(doc);
+
     const pageW = doc.page.width - 80;
     let y = 40;
 
-    doc.fontSize(14).font("Helvetica-Bold");
+    doc.fontSize(14).font(PDF_FONT_UNICODE_BOLD);
     doc.text("QARŞILIQLI HESABLAŞMANIN AKTI", 40, y, {
       width: pageW,
       align: "center",
     });
     y += 28;
 
-    doc.fontSize(9).font("Helvetica");
+    doc.fontSize(9).font(PDF_FONT_UNICODE);
     doc.text(
       `Hesabat dövrü: ${data.dateFrom} - ${data.dateTo}`,
       40,
@@ -87,29 +95,29 @@ export async function renderReconciliationPdfAz(
     );
     y += 22;
 
-    doc.font("Helvetica-Bold").text("Tərəf A (Biz):", 40, y);
+    doc.font(PDF_FONT_UNICODE_BOLD).text("Tərəf A (Biz):", 40, y);
     y += 12;
-    doc.font("Helvetica").text(data.organizationName, 40, y, { width: pageW * 0.48 });
+    doc.font(PDF_FONT_UNICODE).text(data.organizationName, 40, y, { width: pageW * 0.48 });
     doc.text(`VÖEN: ${data.organizationTaxId}`, 40, y + 12);
 
     const rightX = 40 + pageW * 0.52;
-    doc.font("Helvetica-Bold").text("Tərəf B (Kontragent):", rightX, y - 12);
-    doc.font("Helvetica").text(data.counterpartyName, rightX, y, {
+    doc.font(PDF_FONT_UNICODE_BOLD).text("Tərəf B (Kontragent):", rightX, y - 12);
+    doc.font(PDF_FONT_UNICODE).text(data.counterpartyName, rightX, y, {
       width: pageW * 0.48,
     });
     doc.text(`VÖEN: ${data.counterpartyTaxId}`, rightX, y + 12);
     y += 48;
 
-    doc.font("Helvetica-Bold").text("Dövr üzrə yekunlar:", 40, y);
+    doc.font(PDF_FONT_UNICODE_BOLD).text("Dövr üzrə yekunlar:", 40, y);
     y += 14;
-    doc.font("Helvetica");
+    doc.font(PDF_FONT_UNICODE);
     doc.text(`Dövr əvvəli qalığı (AZN): ${data.openingBalance}`, 40, y);
     y += 12;
     doc.text(`Dövr debet (AZN): ${data.turnoverDebit}`, 40, y);
     y += 12;
     doc.text(`Dövr kredit (AZN): ${data.turnoverCredit}`, 40, y);
     y += 12;
-    doc.font("Helvetica-Bold").text(`Dövr sonu qalığı (AZN): ${data.closingBalance}`, 40, y);
+    doc.font(PDF_FONT_UNICODE_BOLD).text(`Dövr sonu qalığı (AZN): ${data.closingBalance}`, 40, y);
     y += 20;
 
     const colDate = 40;
@@ -119,7 +127,7 @@ export async function renderReconciliationPdfAz(
     const colCr = 400;
     const colBal = 465;
 
-    doc.font("Helvetica-Bold").fontSize(8);
+    doc.font(PDF_FONT_UNICODE_BOLD).fontSize(8);
     doc.text("Tarix", colDate, y);
     doc.text("Sənəd", colRef, y);
     doc.text("Təsvir", colDesc, y);
@@ -130,7 +138,7 @@ export async function renderReconciliationPdfAz(
     doc.moveTo(40, y).lineTo(555, y).stroke();
     y += 6;
 
-    doc.font("Helvetica").fontSize(7.5);
+    doc.font(PDF_FONT_UNICODE).fontSize(7.5);
     for (const row of data.lines) {
       if (y > 720) {
         doc.addPage();
@@ -163,23 +171,23 @@ export async function renderReconciliationPdfAz(
       y = 40;
     }
 
-    doc.fontSize(9).font("Helvetica-Bold");
+    doc.fontSize(9).font(PDF_FONT_UNICODE_BOLD);
     doc.text("İMZALAR", 40, y, { width: pageW, align: "center" });
     y += 22;
 
     const colW = pageW / 2 - 8;
     const xRight = 40 + colW + 16;
-    doc.font("Helvetica-Bold").fontSize(8);
+    doc.font(PDF_FONT_UNICODE_BOLD).fontSize(8);
     doc.text("Tərəf A (Biz)", 40, y, { width: colW });
     doc.text("Tərəf B (Kontragent)", xRight, y, { width: colW });
     y += 14;
-    doc.font("Helvetica").fontSize(7).fillColor("#555555");
+    doc.font(PDF_FONT_UNICODE).fontSize(7).fillColor("#555555");
     doc.text("(möhür yeri)", 40, y, { width: colW });
     doc.text("(möhür yeri)", xRight, y, { width: colW });
     doc.fillColor("#000000");
     y += 16;
 
-    doc.font("Helvetica").fontSize(8);
+    doc.font(PDF_FONT_UNICODE).fontSize(8);
     const ySig = y;
     doc.text("Direktor: _________________________", 40, ySig, { width: colW });
     doc.text("Direktor: _________________________", xRight, ySig, { width: colW });

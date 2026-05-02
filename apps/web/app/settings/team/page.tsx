@@ -1,14 +1,26 @@
 "use client";
 
+import { Loader2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../../lib/api-client";
 import { useSearchParams } from "next/navigation";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_ACTIONS_TD_CLASS,
+  DATA_TABLE_ACTIONS_TH_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../../lib/design-system";
 import { useAuth } from "../../../lib/auth-context";
 import { useRequireAuth } from "../../../lib/use-require-auth";
@@ -342,37 +354,46 @@ export default function TeamSettingsPage() {
       {tab === "members" && (
       <section className="space-y-3">
         <h2 className="text-lg font-medium text-gray-900">{t("teamPage.membersTitle")}</h2>
-        <div className={`overflow-x-auto ${CARD_CONTAINER_CLASS}`}>
-          <table className="min-w-full text-[13px]">
-            <thead className="bg-gray-50 text-left text-gray-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">{t("teamPage.email")}</th>
-                <th className="px-4 py-2 font-medium">{t("teamPage.role")}</th>
-                <th className="px-4 py-2 font-medium">{t("teamPage.joined")}</th>
-                {canManage && <th className="px-4 py-2 font-medium">{t("teamPage.actions")}</th>}
+        <div className={DATA_TABLE_VIEWPORT_CLASS}>
+          <table className={`${DATA_TABLE_CLASS} min-w-full`}>
+            <thead>
+              <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("teamPage.email")}</th>
+                <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("teamPage.role")}</th>
+                <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("teamPage.joined")}</th>
+                {canManage && (
+                  <th className={DATA_TABLE_ACTIONS_TH_CLASS}>{t("teamPage.actions")}</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {members.map((m) => (
-                <tr key={m.userId} className="border-t border-gray-100">
-                  <td className="px-4 py-2">{m.user.email}</td>
-                  <td className="px-4 py-2">{m.role}</td>
-                  <td className="px-4 py-2 tabular-nums text-gray-600">
+                <tr key={m.userId} className={DATA_TABLE_TR_CLASS}>
+                  <td className={DATA_TABLE_TD_CLASS}>{m.user.email}</td>
+                  <td className={DATA_TABLE_TD_CLASS}>{m.role}</td>
+                  <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                     {new Date(m.joinedAt).toLocaleDateString()}
                   </td>
                   {canManage && (
-                    <td className="px-4 py-2">
+                    <td className={DATA_TABLE_ACTIONS_TD_CLASS}>
                       {m.role !== "OWNER" && m.userId !== user?.id ? (
-                        <button
-                          type="button"
-                          disabled={busyId === m.userId}
-                          onClick={() => void removeMember(m.userId)}
-                          className="text-red-600 hover:underline text-sm disabled:opacity-50"
-                        >
-                          {t("teamPage.remove")}
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            disabled={busyId === m.userId}
+                            onClick={() => void removeMember(m.userId)}
+                            className={TABLE_ROW_ICON_BTN_CLASS}
+                            title={t("teamPage.remove")}
+                          >
+                            {busyId === m.userId ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-[#E74C3C]" aria-hidden />
+                            ) : (
+                              <Trash2 className="h-4 w-4 text-[#E74C3C]" aria-hidden />
+                            )}
+                          </button>
+                        </div>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-[#7F8C8D]">—</span>
                       )}
                     </td>
                   )}

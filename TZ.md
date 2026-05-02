@@ -45,7 +45,7 @@
 | **Файлы (PDF, логотипы)** | **`STORAGE_SERVICE`**: в **production** ожидается **`STORAGE_DRIVER=s3`** и переменные **`S3_*`**; локально — **`STORAGE_DRIVER=local`** + `STORAGE_LOCAL_ROOT` (см. PRD §11.0) |
 | **Почта** | **Nodemailer (SMTP)** — счета, сброс пароля |
 | **Monorepo** | `apps/web` (Next.js), `apps/api` (NestJS), `packages/database` (Prisma и общие типы при необходимости) |
-| **Локаль** | БД: **UTC**; UI: **i18next**; язык по умолчанию **RU**, подготовка полных строк под **AZ**; форматирование дат и **AZN** — локаль Азербайджана |
+| **Локаль** | БД: **UTC**; UI: **i18next** (**RU** и **AZ**); при неопределённом коде языка — **`az`**; форматирование дат и **AZN** — по правилам продукта (часто локаль Азербайджана); детали — §17 |
 | **Локальная инфра (Windows)** | Тома Docker, загрузки API, **npm-кэш**, **TEMP/TMP** — только **D:** (`D:\DockerData\dayday_erp`); корневой `.npmrc`. Образы Docker — **Disk image location** на D в Docker Desktop |
 
 **Production HTTPS requirement (hardening):**
@@ -233,7 +233,7 @@
 - **Legacy:** **`ChartOfAccountsEntry`** + super-admin UI остаются; при **пустой** таблице **`template_accounts`** онбординг использует прежний путь **`syncAzChartForOrganization`** по **`templateGroup`**.
 - **Seeding:** `prisma db seed` вызывает **`upsertGlobalNasTemplateAccounts`**; отдельно: **`npm run db:seed:nas-templates --workspace=@dayday/database`** (`seed-nas-accounts.ts`). Канон — **`loadChartJson`** / **`getNasCommercialFullAccounts`**.
 - **Онбординг API:** поле **`coaTemplate`**: **`full`** | **`small`** (приоритет над устаревшим **`templateGroup`**). В **`settings.templateGroup`** пишется **`COMMERCIAL`** или **`SMALL_BUSINESS`** для payroll.
-- **Ручное расширение плана:** **`GET /api/accounts/templates`**, **`POST /api/accounts/import-from-template`**; UI **`/settings/chart`**.
+- **Ручное расширение плана:** **`GET /api/accounts/templates`**, **`POST /api/accounts/import-from-template`**; UI **`/accounting/chart`** (редирект с устаревшего **`/settings/chart`**).
 
 ### Транзакции (Transaction) и проводки (Journal Entry)
 
@@ -312,8 +312,8 @@
 ### UI (реализация vX.Y): создание и обновление через модальные компоненты
 
 - Клиент (`apps/web`) для операций **create/update** по REST вызывает **модальные компоненты** с формами на страницах списков (паттерн «таблица + модалка»), а не отдельные полноэкранные страницы форм.
-- Примеры: **CreateInvoiceModal** / редактирование на **`/sales/invoices`**; **акты сверки** — реестр **`/sales/reconciliation`**; **CreateCounterpartyModal** и форма редактирования на **`/crm/counterparties`**; **каталог** — **`/catalog/products`**: кнопка добавления — **выпадающее меню** «+ Yeni məhsul» / «+ Yeni xidmət» (RU: новый товар / новая услуга); **`ProductModal`** (товар: **Ad, SKU, ƏDV, Qiymət**, `isService: false`) и **`CreateServiceModal`** / режим услуги (только **Ad, ƏDV, Qiymət**, `isService: true`, без SKU в UI); инвентаризация — **`InventoryAuditCreateFlow`** в модалке на **`/inventory/audits`**; основные средства — **`FixedAssetModal`** на **`/fixed-assets`**; **закупки** — реестр **`/purchases`** + **`PurchaseModal`**; перемещения — **`/inventory/transfers`** + **`TransferModal`**; корректировки — **`/inventory/adjustments`** + **`AdjustmentsModal`**; настройки склада — **`/inventory/settings`** (**`NewWarehouseModal`**).
-- Устаревшие маршруты (только **редиректы** на реестр **без** query для автозапуска модалок из URL):
+- Примеры: **CreateInvoiceModal** / **ViewInvoiceModal** (просмотр счёта только в модалке на **`/sales/invoices`**, маршрут **`/sales/invoices/[id]`** → редирект с **`?invoice=`**); **акты сверки** — реестр **`/sales/reconciliation`**; **CreateCounterpartyModal** и форма редактирования на **`/crm/counterparties`**; **каталог** — **`/catalog/products`**: кнопка добавления — **выпадающее меню** «+ Yeni məhsul» / «+ Yeni xidmət» (RU: новый товар / новая услуга); **`ProductModal`** (товар: **Ad, SKU, ƏDV, Qiymət**, `isService: false`) и **`CreateServiceModal`** / режим услуги (только **Ad, ƏDV, Qiymət**, `isService: true`, без SKU в UI); инвентаризация — **`InventoryAuditCreateFlow`** в модалке на **`/inventory/audits`**; основные средства — **`FixedAssetModal`** на **`/fixed-assets`**; **закупки** — реестр **`/purchases`** + **`PurchaseModal`**; перемещения — **`/inventory/transfers`** + **`TransferModal`**; корректировки — **`/inventory/adjustments`** + **`AdjustmentsModal`**; настройки склада — **`/inventory/settings`** (**`NewWarehouseModal`**).
+- Устаревшие маршруты (**редиректы** на реестр; **исключение:** query **`?invoice=`** на **`/sales/invoices`** открывает **ViewInvoiceModal** после редиректа с **`/sales/invoices/[id]`**):
   - `/invoices/new` → `/sales/invoices`
   - `/invoices`, `/invoices/*` → `/sales/invoices`, `/sales/invoices/*`
   - `/counterparties`, `/counterparties/*` → `/crm/counterparties`, `/crm/counterparties/*`
@@ -353,13 +353,15 @@
 
 - Генерация уникального номера по маске (например, `INV-2026-001`).
 - Расчёт НДС (ƏDV / EDV) на MVP: **только** 0%, 18% и «освобождён».
+- **UI создания счёта (`CreateInvoiceModal`):** первая строка таблицы при открытии формы инициализируется **пустой** (номенклатура «Seçin…» / плейсхолдер, без автоподстановки первого товара из каталога). **Новая строка** (кнопка добавления и сброс формы): **количество по умолчанию 0**, ставка НДС **пустая** (плейсхолдер «—»), пока пользователь не выберет значение или пока не выбрана номенклатура (тогда подставляется ƏDV из карточки). Выпадающий список номенклатуры включает **все** активные позиции (товары и услуги); для услуг (`isService === true`) в подписи опции добавляется суффикс **`(Xidmət)`**. Селектор **«ставка НДС документа»** в шапке **удалён**; в шапке остаётся только чекбокс **`vatInclusive`** («Qiymətlər ƏDV daxil (brüt)»), ставка НДС — **отдельный select в каждой строке**. Итоги **Net / VAT / Gross** на фронте пересчитываются **в реальном времени** (`react-hook-form` **`useWatch`** по массиву строк + флаг `vatInclusive`), суммированием построчных разбиений. Кнопка **«Сохранить»** (`common.save` / «Yadda saxla») в футере модалки **не блокируется** предварительной проверкой «форма полная» — она **активна** для показа валидации и **отключается только на время сабмита** (`busy` / отправка запроса).
 - Каталог товаров и услуг; акты приёмки-передачи (**Handover Acts**).
 - Статусы оплаты: Draft, Sent, Paid, Overdue, Cancelled.
+- **UI просмотра (`ViewInvoiceModal`, `apps/web/components/sales/modals/ViewInvoiceModal.tsx`):** действие **«Baxış»** на **`/sales/invoices`** открывает модалку с `invoiceId`; **`SalesModalShell`** поддерживает слот **`headerActions`**: в шапке справа (до крестика) — при **`LOCKED_BY_SIGNATURE`** зелёный **`Badge` `success`** с текстом **`formatInvoiceStatus(t, inv.status)`** («İmzalanıb» / «Подписан»), иначе без этого бейджа; кнопка **`invoiceView.signWithEi`** («İmzalamaq (Eİ)» / «Подписать (ЭЦП)»), затем **`Linki paylaş`**. При **`LOCKED_BY_SIGNATURE`** кнопка подписания **не** рендерится. **`Linki paylaş`:** в буфер — **`/sales/invoices?invoice=<id>`** без домена; успех — **`toast.success`** (**`sonner`**), без встроенного текста уведомления в теле модалки. Статусы в таблице и в блоке реквизитов — **`formatInvoiceStatus`** / **`invoiceStatus.*`** в **`resources.ts`** (без сырого enum).
 
 ### НДС и услуги (UI)
 
 - `vatInclusive`: чекбокс «Qiymətlər ƏDV daxil (brüt)» — если включён, `unitPrice` в UI трактуется как **брутто**, backend рассчитывает нетто.
-- `vatRate`: ставка **0%** или **18%**.
+- **Построчный НДС:** в каждой строке — свой **`vatRate`** (**0%**, **18%**, **освобождение** `-1`); при выборе номенклатуры подставляется ставка из карточки товара/услуги (можно изменить вручную). Глобального селекта ставки НДС в шапке документа **нет**.
 - **Товары и услуги в одном инвойсе:** глобальный чекбокс **«Xidmət»** в шапке формы создания счёта **не используется**; пользователь выбирает номенклатуру в каждой строке. Если у выбранного **`Product`** установлено **`isService === true`**, для этой строки **не требуется** склад при проведении и **не создаётся** складское списание; для **`isService === false`** действуют проверки остатков и **`postSaleInventoryInTransaction`** только по таким строкам. В PDF тип строки берётся из номенклатуры (**Məhsul** / **Xidmət**).
 
 ### Бизнес-логика (триггеры)
@@ -1050,7 +1052,7 @@ Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: 
   - Добавлена модель `AccountBalance` с `ledgerType` для хранения ledger-aware остатков в разрезе даты.
   - `AccountingService.postJournalInTransaction(...)` принимает `ledgerType` (по умолчанию `NAS` для backward compatibility).
   - `IfrsAutoMappingService` после успешной NAS-проводки генерирует IFRS mirror-entries на основании активных `IfrsMappingRule`.
-  - Веб-контур дополнен страницей `/settings/finance/ifrs-mapping` (CRUD правил соответствия).
+  - Веб-контур: CRUD правил соответствия — страница **`/accounting/ifrs-mapping`** (редирект с **`/settings/finance/ifrs-mapping`**).
 
 ### 12.2. Дебиторка и акты сверки
 
@@ -1060,7 +1062,7 @@ Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: 
   - `allocatePaymentAcrossInvoices(...)`: FIFO-распределение поступления по старшим долгам контрагента.
   - AR Aging report: корзины `0-30`, `31-60`, `61-90`, `90+` по `dueDate` на дату `asOf`.
 - **Legacy compatibility:** `InvoicePayment` сохраняется как историческая детализация платежей и связь с существующими потоками bank/cash mirror.
-- **Reconciliation Service:** выборка по счетам 211 / 531 для `counterpartyId`; PDF «Акт сверки взаиморасчетов» (AZ) с полями под подписи сторон.
+- **Reconciliation Service:** выборка по счетам 211 / 531 для `counterpartyId`; PDF «Акт сверки взаиморасчетов» (AZ) с полями под подписи сторон; шрифт PDF — **DejaVu Sans** (`pdf-font.util.ts`), Unicode.
 
 ### 12.3. HR & Payroll — расширение
 
@@ -1093,6 +1095,8 @@ Cash Flow is generated for a period (`dateFrom`..`dateTo`, UTC inclusive). API: 
 
 - Адаптивность таблиц; на мобильных — скрытие второстепенных колонок или карточки.
 - **Quick Actions:** кнопка быстрого действия (создать инвойс / провести расход) на ключевых страницах.
+- **AsyncCombobox (`apps/web/components/ui/async-combobox.tsx`):** глобальный переиспользуемый контрол для выбора сущностей с потенциальным объёмом **> 100** записей. Используется в формах **инвойсов**, **закупок** и **кассы (KMO/KXO)** для выбора **товаров/услуг** и **контрагентов** с запросами к API (`GET /api/products`, `GET /api/counterparties` с параметрами `search`, `limit`, при необходимости `cashParty` / `isService`). Реализован **debouncing** запросов (**300 ms** по умолчанию в продукте, параметр `debounceMs`), индикация загрузки и стили в соответствии с [DESIGN.md](./DESIGN.md).
+- **Закрытые перечисления и `<Select>`:** все поля, основанные на **закрытых перечислениях** (Enums: **валюта**, **ставки НДС**, **ОПФ**, **типы кассовых операций**, счёт оплаты в инвойсе и т.п.), строго реализуются через компонент **`Select`** (`apps/web/components/ui/select.tsx`: `Select`, `SelectTrigger`, `SelectContent`, `SelectItem`; нативный `<select>` с токенами **DESIGN.md**) и вспомогательно **`CurrencySelect`** (`apps/web/lib/currencies.ts` — **AZN, USD, EUR, RUB, TRY**, по умолчанию **AZN**). **Свободный текстовый ввод** для таких полей **запрещён** (целостность данных и согласованность с DTO/Prisma).
 
 ### 12.6. v3.1 — масштабирование вычислительного контура
 
@@ -1700,6 +1704,7 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 - **RBAC policy enforcement (M1):** ключевые мутирующие маршруты финансов и настроек закреплены role-политиками; policy-тесты проверяют отказ (`403 Forbidden`) для роли `USER` на создании проводок и изменении настроек/Period Lock.
 - **Hidden routes hardening:** интеграционный health-контур остаётся `owner-only` (`/api/integrations/health`), платформенный `/api/admin/*` остаётся под `SuperAdminGuard`.
 - **Period Lock (M2):** в `Organization.settings.ledger.lockedPeriodUntil` фиксируется дата блокировки; любые проводки с `entryDate <= lockedPeriodUntil` в `AccountingService` отклоняются ошибкой `423 Locked` (`Период закрыт для изменений`).
+- **UI (M2, веб):** операционные поля **даты документа / проводки** — компонент **`DatePicker`**: дни **≤** `lockedPeriodUntil` отображаются как недоступные (серые), чтобы не расходиться с серверной проверкой; поле настройки самой даты lock **не** блокирует выбор по lock. Суммы/цены/количества — **`NumericAmountInput`**: отображение с разделителем тысяч (пробел), в API — plain numeric string без пробелов, выравнивание вправо (см. PRD §10.1).
 - **Period Close Checklist (M2, v95+):** `GET /api/accounting/period-close/checklist?month=YYYY-MM` проверяет перед lock-date:
   1) отсутствие `Invoice.status = DRAFT` за месяц,
   2) отсутствие отрицательных остатков по складу (`stock_items.quantity < 0`) и денежным счетам (101*/221-224 по нетто обороту),
@@ -1709,7 +1714,7 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
   - `GET /api/reporting/trial-balance/export?format=pdf|xlsx`
   - `GET /api/reporting/pl/export?format=pdf|xlsx`
   - `GET /api/reports/cash-flow/export?format=pdf|xlsx`
-  с генерацией файлов через `exceljs` и серверный PDF-рендер.
+  с генерацией файлов через `exceljs` и серверный PDF-рендер (**PDFKit** + **DejaVu Sans** из `dejavu-fonts-ttf`, `apps/api/src/reporting/pdf-font.util.ts` — `registerUnicodeFonts`, без Helvetica/WinAnsi для Unicode).
 - **Atomicity tests (M2):** double-entry posting подтверждён тестами на сценарий сбоя второй записи в рамках `Prisma.$transaction` (без допуска частичных односторонних проводок).
 
 ### 16.3. SaaS Hardening v1 (Batch 2): RBAC Auto-Scanner + Public Perimeter + CRM Degraded
@@ -1748,9 +1753,13 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 
 | Артефакт | Назначение |
 |-----------|------------|
-| **`apps/web/lib/i18n/resources.ts`** | Канонические строки **RU/AZ** для бандла Next.js; вложенная структура (`translation.nav.home`, …). Любой новый ключ `t("…")` в `apps/web/app` или `apps/web/components` должен быть добавлен сюда для **обеих** локалей. |
+| **`apps/web/lib/i18n/resources.ts`** | Канонические строки **RU/AZ** для бандла Next.js; вложенная структура (`translation.nav.home`, …). Любой новый ключ `t("…")` в **`apps/web/app`**, **`apps/web/components`** или **`apps/web/lib`** (см. `scripts/i18n-audit.ts`) должен быть добавлен сюда для **обеих** локалей. |
 | **`apps/api/src/admin/i18n-default-catalog-data.json`** | Плоский снимок тех же строк (`nav.home`, …), **автогенерация** из `resources.ts` скриптом `apps/api/scripts/gen-i18n-defaults.ts`. Читает API при работе с **`TranslationOverride`** и в ответах, где нужны «дефолты» рядом с оверрайдами. **Не редактировать вручную** — только через регенерацию. |
-| **`TranslationOverride` (БД)** | Патчи поверх бандла; выдача клиенту через **`GET /public/translations`** с последующим безопасным merge на фронте (`apply-db-overrides.ts`). Ошибки после деплоя чаще всего из-за «коротких» ключей, затирающих целые ветви, или пустых значений — см. фильтры в `apply-db-overrides.ts`. |
+| **`TranslationOverride` (БД)** | Патчи поверх бандла; выдача клиенту через **`GET /public/translations?locale=ru|az`** с последующим merge на фронте (`apply-db-overrides.ts`). Ошибки после деплоя чаще всего из-за «коротких» ключей, затирающих целые ветви, или пустых значений — см. фильтры в `apply-db-overrides.ts`. |
+
+| **`apps/web/lib/i18n/ui-lang.ts`** | Единая нормализация UI-языка: **`uiLangRuAz`** (только явный `ru`, иначе **`az`**), **`intlLocaleRuAz`** (`ru-RU` / `az-AZ` для `Intl` / `toLocaleString`). Используется в страницах, `client-i18n.ts`, `apply-db-overrides.ts`, `account-display-name.ts` и т.д., чтобы не дублировать ветвления `startsWith("az") ? … : ru`. |
+
+**Поведение клиента (кратко):** `i18n.init` — `supportedLngs: ["ru","az"]`, **`fallbackLng: "az"`** (`client-i18n.ts`). Загрузка оверрайдов — **`applyTranslationOverrides(i18n)`**: локаль запроса и целевой бандл берутся из **`i18n.language`** → `loc ∈ {ru, az}` через **`uiLangRuAz`**; после **`processTranslationOverridesFlat`** вызывается **`addResourceBundle(loc, "translation", nested, true, true)`** (глубокое слияние с **перезаписью** листьев, иначе правки из БД не видны на ключах, уже существующих в `resources.ts`). Ремап ключей ОПФ в плоской карте: **`counterparties.legalForm.<ENUM>`** → **`counterparties.legalForm_<ENUM>`**; оставшиеся «ядовитые» **`counterparties.legalForm.<x>`** (неизвестный суффикс) удаляются **`dropCounterpartyLegalFormPoisonDottedKeys`**, иначе при `flatOverridesToNested` ветка **`counterparties`** ломается. Подпись поля ОПФ в **`resources.ts`** — **`counterparties.legalFormField`** (не **`legalForm`**), чтобы не конфликтовать с ошибочной вложенностью из БД. Аудит таблицы в БД: **`packages/database/prisma/audit-translation-overrides.ts`** — тот же пайплайн **`processTranslationOverridesFlat`** и сопоставление строк по **`effectiveTranslationOverrideLookupKey`**, чтобы dry-run / `--fix` совпадали с рантаймом.
 
 **Команды (корень монорепо):**
 
@@ -1759,12 +1768,13 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 - **`npm run db:deploy`** — рекомендуемый шаг **после** `prisma migrate deploy` на проде: `migrate deploy` + **`db:sync-i18n:prune`** — полный upsert всех плоских ключей **ru/az** из `resources.ts` в **`translation_overrides`**, удаление строк с ключами, которых больше нет в `resources.ts`, инкремент **`i18n.cacheVersion`** (клиенты перезагрузят оверрайды). DDL миграции **не** содержат текстов переводов (см. миграцию `20260502180000_i18n_deploy_post_migrate_note`).
 - **`npm run db:sync-i18n`** — только upsert + bump кэша (**без** удаления устаревших ключей; удобно для локальных экспериментов).
 - **`npm run db:sync-i18n:prune`** — то же + удаление «лишних» **ru/az** строк в БД относительно текущего `resources.ts`.
+- **`npm run db:audit-i18n-overrides -w @dayday/database`** — dry-run по таблице **`translation_overrides`**: сравнение с **`processTranslationOverridesFlat`** (из корня: `npx dotenv-cli -e .env -- npm run db:audit-i18n-overrides -w @dayday/database`). С **`--fix`** — удаление строк, которые клиент всё равно отбросит, + bump **`i18n.cacheVersion`**.
 
 **Вне репозитория / не для прод:** произвольные файлы вида `_i18n-default-catalog-data.new.json` в корне **не** подключаются к Nest и **не** заменяют `i18n-default-catalog-data.json`; хранить их в git не следует — это источник путаницы и рассинхрона с п.2.
 
 ### i18n CI (v14.0)
 
-- CI pipeline **обязан** включать шаг **`npm run i18n:audit`**, гарантирующий полноту ключей локализации для **RU** и **AZ** локалей. Сборка должна **завершаться ошибкой** при обнаружении пропущенных ключей. Скрипт сканирует страницы и компоненты под `apps/web/app` и `apps/web/components` на предмет обращений к `t(...)` / `useTranslation` и сверяет с **`resources.ts`**. EN — рекомендуется, но не блокирует сборку на текущем этапе.
+- CI pipeline **обязан** включать шаг **`npm run i18n:audit`**, гарантирующий полноту ключей локализации для **RU** и **AZ** локалей. Сборка должна **завершаться ошибкой** при обнаружении пропущенных ключей. Скрипт сканирует **`apps/web/app`**, **`apps/web/components`** и **`apps/web/lib`** на предмет литеральных ключей в **`t("…")`** / **`Trans i18nKey="…"`** и сверяет с **`resources.ts`**. EN в виде отдельного языка UI не используется; трёхъязычные поля сущностей — вне этого аудита.
 - Практика мержа: при изменении `resources.ts` в одном PR выполнять также **`npm run i18n:catalog`** и включать дифф **`i18n-default-catalog-data.json`** (см. выше).
 
 ---
@@ -1835,7 +1845,7 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 
 | **2026.04.20** | Архив | SaaS Hardening v1 (Batch 3): Reporting draft leakage prevention, Inventory COGS/FIFO strict calculations, and VAT rounding math. |
 | **2026.04.21** | Архив | Multi-GAAP Foundation: Parallel NAS/IFRS ledgers, automated mapping engine, and ledger-aware reporting. |
-| **2026.04.22** | Архив | NAS Chart of Accounts: i18n support, Commercial/Small template profiles (`TemplateAccount` + `coaTemplate`), and manual account import (`/api/accounts/templates`, `import-from-template`, `/settings/chart`). |
+| **2026.04.22** | Архив | NAS Chart of Accounts: i18n support, Commercial/Small template profiles (`TemplateAccount` + `coaTemplate`), and manual account import (`/api/accounts/templates`, `import-from-template`, `/accounting/chart`). |
 | **2026.04.23** | Архив | SaaS Hardening v1 (M8): Integration raw payload masking and PII protection. |
 | **2026.04.24** | Архив | Finance Core Enhancement: Reconciliation Act generation and Counterparty ledger export. |
 | **2026.04.25** | Архив | Inventory Core: Physical count adjustments, write-offs, and surplus financial postings — §10.1.1 (`InventoryAdjustment` / API `physical-adjustments` / UI `/inventory/physical`). |
@@ -1865,6 +1875,9 @@ Legacy-цены тиров (`billing.price.STARTER` и т.д.) остаются 
 | **2026.05.20** | Текущая | i18n: таблица источников правды и деплой в §17 (`resources.ts` → `i18n-default-catalog-data.json` → БД); команда **`npm run i18n:catalog`**; PRD §7.6.1; уточнён охват `i18n:audit`. |
 | **2026.05.21** | Текущая | i18n: **`npm run db:deploy`**, **`db:sync-i18n:prune`**, prune в `sync-translation-overrides-from-resources.ts`, миграция `20260502180000_i18n_deploy_post_migrate_note`; `db:prod-init` / `db:dev-bootstrap` переведены на prune-синк. |
 | **2026.05.22** | Текущая | **`v1.0.0-RC1` (Release Candidate 1)** — синхронизация ТЗ с этапом: **UI/UX** — модальные окна на реестрах, **`PageHeader`**, сайдбар-only layout (**§11.1**); **Склад** и **Производство** разведены по разделам/маршрутам; **закупки товаров vs услуг** (поля вида закупки, склад, проводки); **VÖEN** — строгая валидация ответа интеграции (**§13.2**), в CRM — **`legalForm`** (ОПФ) и **`isVatPayer`** (**§4**); перекрёстные ссылки на [PRD.md](./PRD.md) §4.3. |
+| **2026.05.23** | Текущая | **i18n (web):** §17 — политика **RU/AZ** с дефолтом **`az`**, таблица **`ui-lang.ts`**, расширен охват **`i18n:audit`** на **`apps/web/lib`**, описаны merge оверрайдов (**`overwrite: true`**), **`processTranslationOverridesFlat`**, ремап ОПФ, аудит **`audit-translation-overrides.ts`**; строка «Локаль» в §1; синхронизация с PRD §7.6.1 / §12. |
+| **2026.05.24** | Текущая | **i18n:** в §17 зафиксированы **`dropCounterpartyLegalFormPoisonDottedKeys`**, ключ **`counterparties.legalFormField`**; команда **`db:audit-i18n-overrides`** в списке; в [docs/deploy.ru.md](../docs/deploy.ru.md) добавлен §**7.4** (локальный **`db:deploy`** + dry-run аудита). |
+| **2026.05.25** | Текущая | **Web / маршруты:** модуль **«План счетов» (Hesablar planı)** — **`/accounting/chart`**, **`/accounting/mapping`**, **`/accounting/ifrs-mapping`**; пункты вынесены из сайдбара «Администрирование» в отдельную секцию. Удалены канонические пути **`/settings/chart`**, **`/settings/mapping`**, **`/settings/finance/ifrs-mapping`** (постоянные **301** редиректы в **`next.config.ts`** приложения **`apps/web`**). |
 
 ### Принцип ведения истории (дальше)
 

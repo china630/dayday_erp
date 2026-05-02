@@ -13,6 +13,7 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "../../../lib/design-system";
 import { PageHeader } from "../../../components/layout/page-header";
+import { uiLangRuAz } from "../../../lib/i18n/ui-lang";
 
 type AccountRow = {
   id: string;
@@ -45,7 +46,7 @@ export default function NasChartSettingsPage() {
   const { token, ready } = useRequireAuth();
   const { user } = useAuth();
   const canImport = canImportNas(user?.role);
-  const loc = (i18n.language ?? "az").split("-")[0] || "az";
+  const loc = uiLangRuAz(i18n.language);
 
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);

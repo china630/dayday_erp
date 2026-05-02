@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Printer, Wallet } from "lucide-react";
+import { CheckCircle2, Eye, Printer, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,15 +10,30 @@ import { KO1PrintForm, type KO1PrintOrder } from "../../../../components/print/K
 import { apiFetch } from "../../../../lib/api-client";
 import {
   CARD_CONTAINER_CLASS,
+  DATA_TABLE_CLASS,
+  DATA_TABLE_HEAD_ROW_CLASS,
+  DATA_TABLE_TD_CLASS,
+  DATA_TABLE_TD_RIGHT_CLASS,
+  DATA_TABLE_TH_LEFT_CLASS,
+  DATA_TABLE_TH_RIGHT_CLASS,
+  DATA_TABLE_TR_CLASS,
+  DATA_TABLE_VIEWPORT_CLASS,
   INPUT_BORDERED_CLASS,
   PRIMARY_BUTTON_CLASS,
   SECONDARY_BUTTON_CLASS,
+  TABLE_ROW_ICON_BTN_CLASS,
 } from "../../../../lib/design-system";
 import { FORM_INPUT_CLASS, FORM_TEXTAREA_CLASS } from "../../../../lib/form-styles";
 import { ledgerQueryParam, useLedger } from "../../../../lib/ledger-context";
 import { useRequireAuth } from "../../../../lib/use-require-auth";
 import { SubscriptionPaywall } from "../../../../components/subscription-paywall";
 import { PageHeader } from "../../../../components/layout/page-header";
+import { AsyncCombobox } from "../../../../components/ui/async-combobox";
+import { CurrencySelect } from "../../../../components/ui/currency-select";
+import { DatePicker } from "../../../../components/ui/date-picker";
+import { NumericAmountInput } from "../../../../components/ui/numeric-amount-input";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../../components/ui/select";
+import type { SupportedCurrency } from "../../../../lib/currencies";
 
 type CashOrderKind = "KMO" | "KXO";
 type CashOrderStatus = "DRAFT" | "POSTED" | "CANCELLED";
@@ -64,7 +79,7 @@ type AccountableRow = {
 };
 
 type CounterpartyRole = "CUSTOMER" | "SUPPLIER" | "BOTH" | "OTHER";
-type CounterpartyOpt = { id: string; name: string; role?: CounterpartyRole };
+type CounterpartySearchRow = { id: string; name: string; taxId?: string | null; role?: CounterpartyRole };
 type EmployeeOpt = {
   id: string;
   firstName: string;
@@ -141,8 +156,9 @@ export default function BankingCashPage() {
   const [balances, setBalances] = useState<Record<string, string> | null>(null);
   const [orders, setOrders] = useState<CashOrderRow[]>([]);
   const [accountable, setAccountable] = useState<AccountableRow[]>([]);
-  const [counterparties, setCounterparties] = useState<CounterpartyOpt[]>([]);
   const [employees, setEmployees] = useState<EmployeeOpt[]>([]);
+  const [pkoCpLabel, setPkoCpLabel] = useState("");
+  const [rkoCpLabel, setRkoCpLabel] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [cashCatalog, setCashCatalog] = useState<CashCatalogRow[]>([]);
@@ -157,7 +173,7 @@ export default function BankingCashPage() {
   const [pkoDate, setPkoDate] = useState(todayIso);
   const [pkoSubtype, setPkoSubtype] = useState<PkoSubtype>("INCOME_FROM_CUSTOMER");
   const [pkoAmount, setPkoAmount] = useState("");
-  const [pkoCurrency, setPkoCurrency] = useState("AZN");
+  const [pkoCurrency, setPkoCurrency] = useState<SupportedCurrency>("AZN");
   const [pkoPurpose, setPkoPurpose] = useState("");
   const [pkoCash, setPkoCash] = useState("101.01");
   const [pkoOffset, setPkoOffset] = useState("");
@@ -170,7 +186,7 @@ export default function BankingCashPage() {
   const [rkoDate, setRkoDate] = useState(todayIso);
   const [rkoSubtype, setRkoSubtype] = useState<RkoSubtype>("SUPPLIER_PAYMENT");
   const [rkoAmount, setRkoAmount] = useState("");
-  const [rkoCurrency, setRkoCurrency] = useState("AZN");
+  const [rkoCurrency, setRkoCurrency] = useState<SupportedCurrency>("AZN");
   const [rkoPurpose, setRkoPurpose] = useState("");
   const [rkoCash, setRkoCash] = useState("101.01");
   const [rkoOffset, setRkoOffset] = useState("");
@@ -194,19 +210,43 @@ export default function BankingCashPage() {
   const [quickAmount, setQuickAmount] = useState("");
   const [quickPurpose, setQuickPurpose] = useState("");
   const [quickCfId, setQuickCfId] = useState("");
+  const [quickCurrency, setQuickCurrency] = useState<SupportedCurrency>("AZN");
   const [quickBusy, setQuickBusy] = useState(false);
 
   const [ko1PrintOrder, setKo1PrintOrder] = useState<KO1PrintOrder | null>(null);
   const [viewOrder, setViewOrder] = useState<CashOrderRow | null>(null);
 
+  const fetchCashCounterpartiesIncoming = useCallback(async (search: string) => {
+    const q = new URLSearchParams();
+    q.set("limit", "20");
+    q.set("cashParty", "incoming");
+    const trimmed = search.trim();
+    if (trimmed) q.set("search", trimmed);
+    const res = await apiFetch(`/api/counterparties?${q}`);
+    if (!res.ok) return [];
+    const list = (await res.json()) as CounterpartySearchRow[];
+    return Array.isArray(list) ? list : [];
+  }, []);
+
+  const fetchCashCounterpartiesOutgoing = useCallback(async (search: string) => {
+    const q = new URLSearchParams();
+    q.set("limit", "20");
+    q.set("cashParty", "outgoing");
+    const trimmed = search.trim();
+    if (trimmed) q.set("search", trimmed);
+    const res = await apiFetch(`/api/counterparties?${q}`);
+    if (!res.ok) return [];
+    const list = (await res.json()) as CounterpartySearchRow[];
+    return Array.isArray(list) ? list : [];
+  }, []);
+
   const loadCore = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setErr(null);
-    const [b, o, c, e, chart, cf, desks] = await Promise.all([
+    const [b, o, e, chart, cf, desks] = await Promise.all([
       apiFetch(`/api/banking/cash/balances?${lq}`),
       apiFetch("/api/banking/cash/orders"),
-      apiFetch("/api/counterparties"),
       apiFetch("/api/hr/employees?page=1&pageSize=100"),
       apiFetch("/api/accounts/chart/cash-catalog"),
       apiFetch("/api/treasury/cash-flow-items"),
@@ -221,9 +261,6 @@ export default function BankingCashPage() {
     }
     setBalances((await b.json()) as Record<string, string>);
     setOrders((await o.json()) as CashOrderRow[]);
-    if (c.ok) {
-      setCounterparties((await c.json()) as CounterpartyOpt[]);
-    }
     if (e.ok) {
       const ej = (await e.json()) as { items?: EmployeeOpt[] };
       setEmployees(ej.items ?? []);
@@ -266,6 +303,7 @@ export default function BankingCashPage() {
       setPkoEmpId("");
     } else if (pkoSubtype === "RETURN_FROM_ACCOUNTABLE") {
       setPkoCpId("");
+      setPkoCpLabel("");
     }
   }, [pkoSubtype]);
 
@@ -380,6 +418,8 @@ export default function BankingCashPage() {
       setPkoAmount("");
       setPkoPurpose("");
       setPkoNotes("");
+      setPkoCpId("");
+      setPkoCpLabel("");
       await loadCore();
     }
   }
@@ -419,6 +459,8 @@ export default function BankingCashPage() {
       setRkoPurpose("");
       setRkoNotes("");
       setRkoWithholding("");
+      setRkoCpId("");
+      setRkoCpLabel("");
       await loadCore();
     }
   }
@@ -446,7 +488,7 @@ export default function BankingCashPage() {
         date: quickDate,
         rkoSubtype: "OTHER",
         amount: amt,
-        currency: "AZN",
+        currency: quickCurrency,
         purpose: quickPurpose.trim(),
         cashAccountCode: "101.01",
         offsetAccountCode: "731",
@@ -623,82 +665,86 @@ export default function BankingCashPage() {
               )}
             </div>
 
-            <div className={`${CARD_CONTAINER_CLASS} overflow-x-auto`}>
-              <h2 className="m-0 px-4 pt-4 text-base font-semibold text-[#34495E]">
+            <div className="space-y-2">
+              <h2 className="m-0 text-base font-semibold text-[#34495E]">
                 {t("banking.cash.journalTitle")}
               </h2>
-              <table className="min-w-full text-sm mt-3">
-                <thead>
-                  <tr className="border-b border-[#D5DADF] text-left text-[13px] text-[#34495E]">
-                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colOrderNo")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colDate")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colType")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colParty")}</th>
-                    <th className="px-4 py-2 font-semibold">{t("banking.cash.colPurpose")}</th>
-                    <th className="px-4 py-2 text-right font-semibold">{t("banking.cash.colAmount")}</th>
-                    <th className="w-36 px-4 py-2 font-semibold">{t("banking.cash.colActions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-50">
-                      <td className="px-4 py-2 font-mono text-xs">
-                        <button
-                          type="button"
-                          className="text-left hover:underline underline-offset-2"
-                          onClick={() => setViewOrder(row)}
-                        >
-                          {row.orderNumber}
-                        </button>
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        {row.date?.slice?.(0, 10) ?? "—"}
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className="block">{typeLabel(row)}</span>
-                        <span className="text-xs text-slate-500">{statusLabel(row.status)}</span>
-                      </td>
-                      <td className="px-4 py-2">{partyLabel(row)}</td>
-                      <td className="px-4 py-2 max-w-xs truncate" title={row.purpose}>
-                        {row.purpose}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {row.amount} {row.currency}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex flex-wrap gap-2">
+              <div className={DATA_TABLE_VIEWPORT_CLASS}>
+                <table className={`${DATA_TABLE_CLASS} min-w-full`}>
+                  <thead>
+                    <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.cash.colOrderNo")}</th>
+                      <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("banking.cash.colDate")}</th>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.cash.colType")}</th>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.cash.colParty")}</th>
+                      <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.cash.colPurpose")}</th>
+                      <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("banking.cash.colAmount")}</th>
+                      <th className={`${DATA_TABLE_TH_RIGHT_CLASS} w-[120px] min-w-[7.5rem]`}>
+                        {t("banking.cash.colActions")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((row) => (
+                      <tr key={row.id} className={DATA_TABLE_TR_CLASS}>
+                        <td className={`${DATA_TABLE_TD_CLASS} font-mono text-xs`}>
                           <button
                             type="button"
+                            className="text-left font-medium text-[#2980B9] hover:underline underline-offset-2"
                             onClick={() => setViewOrder(row)}
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
                           >
-                            {t("common.view")}
+                            {row.orderNumber}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => printKo1ForRow(row)}
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                            title={t("banking.cash.print")}
-                          >
-                            <Printer className="h-3.5 w-3.5" aria-hidden />
-                            {t("banking.cash.print")}
-                          </button>
-                          {row.status === "DRAFT" && (
+                        </td>
+                        <td className={`${DATA_TABLE_TD_RIGHT_CLASS} whitespace-nowrap`}>
+                          {row.date?.slice?.(0, 10) ?? "—"}
+                        </td>
+                        <td className={DATA_TABLE_TD_CLASS}>
+                          <span className="block">{typeLabel(row)}</span>
+                          <span className="text-xs text-[#7F8C8D]">{statusLabel(row.status)}</span>
+                        </td>
+                        <td className={DATA_TABLE_TD_CLASS}>{partyLabel(row)}</td>
+                        <td className={`${DATA_TABLE_TD_CLASS} max-w-xs truncate`} title={row.purpose}>
+                          {row.purpose}
+                        </td>
+                        <td className={DATA_TABLE_TD_RIGHT_CLASS}>
+                          {row.amount} {row.currency}
+                        </td>
+                        <td className={`${DATA_TABLE_TD_CLASS} w-[120px] min-w-[7.5rem]`}>
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
                             <button
                               type="button"
-                              onClick={() => void postOrder(row.id)}
-                              className="inline-flex items-center gap-1 rounded-md bg-action px-2 py-1 text-xs font-medium text-white hover:bg-action-hover"
+                              onClick={() => setViewOrder(row)}
+                              className={TABLE_ROW_ICON_BTN_CLASS}
+                              title={t("common.view")}
                             >
-                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                              {t("banking.cash.postOrder")}
+                              <Eye className="h-4 w-4 text-[#2980B9]" aria-hidden />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                            <button
+                              type="button"
+                              onClick={() => printKo1ForRow(row)}
+                              className={TABLE_ROW_ICON_BTN_CLASS}
+                              title={t("banking.cash.print")}
+                            >
+                              <Printer className="h-4 w-4 text-[#7F8C8D]" aria-hidden />
+                            </button>
+                            {row.status === "DRAFT" && (
+                              <button
+                                type="button"
+                                onClick={() => void postOrder(row.id)}
+                                className={TABLE_ROW_ICON_BTN_CLASS}
+                                title={t("banking.cash.postOrder")}
+                              >
+                                <CheckCircle2 className="h-4 w-4 text-[#2980B9]" aria-hidden />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {!loading && orders.length === 0 && (
                 <p className="px-4 py-6 text-slate-500 text-sm">—</p>
               )}
@@ -766,20 +812,20 @@ export default function BankingCashPage() {
             <div className={`${CARD_CONTAINER_CLASS} p-4`}>
               <h2 className="m-0 text-sm font-semibold text-[#34495E]">{t("banking.cash.sideAccountableTitle")}</h2>
               <p className="mb-3 mt-1 text-xs text-[#7F8C8D]">{t("banking.cash.accountableHint")}</p>
-              <table className="min-w-full text-xs">
+              <table className={`${DATA_TABLE_CLASS} min-w-full`}>
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-slate-500">
-                    <th className="py-1.5 pr-2 font-medium">{t("banking.cash.thEmployee")}</th>
-                    <th className="py-1.5 font-medium text-right">{t("banking.cash.thBalance")}</th>
+                  <tr className={DATA_TABLE_HEAD_ROW_CLASS}>
+                    <th className={DATA_TABLE_TH_LEFT_CLASS}>{t("banking.cash.thEmployee")}</th>
+                    <th className={DATA_TABLE_TH_RIGHT_CLASS}>{t("banking.cash.thBalance")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {accountable.map((r) => (
-                    <tr key={r.employee.id} className="border-b border-slate-50">
-                      <td className="py-1.5 pr-2">
+                    <tr key={r.employee.id} className={DATA_TABLE_TR_CLASS}>
+                      <td className={DATA_TABLE_TD_CLASS}>
                         {r.employee.firstName} {r.employee.lastName}
                       </td>
-                      <td className="py-1.5 text-right tabular-nums">
+                      <td className={DATA_TABLE_TD_RIGHT_CLASS}>
                         {r.balance} {r.currency}
                       </td>
                     </tr>
@@ -803,27 +849,36 @@ export default function BankingCashPage() {
               </div>
 
               <form className="space-y-3 mt-4" onSubmit={submitQuickCashOut}>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outAmount")}</p>
-                    <input
-                      className={FORM_INPUT_CLASS}
+                    <NumericAmountInput
+                      fieldVariant="form"
+                      className="mt-1"
                       value={quickAmount}
-                      onChange={(e) => setQuickAmount(e.target.value)}
+                      onValueChange={setQuickAmount}
                       required
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.currency")}</p>
+                    <CurrencySelect
+                      value={quickCurrency}
+                      onValueChange={setQuickCurrency}
+                      className={FORM_INPUT_CLASS}
                     />
                   </div>
                   <div>
                     <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outDate")}</p>
-                    <input
-                      type="date"
-                      className={FORM_INPUT_CLASS}
+                    <DatePicker
+                      fieldVariant="form"
+                      className="mt-1"
                       value={quickDate}
-                      onChange={(e) => setQuickDate(e.target.value)}
+                      onChange={setQuickDate}
                       required
                     />
                   </div>
-                  <div className="sm:col-span-1">
+                  <div className="sm:col-span-2 lg:col-span-1">
                     <p className="mb-1 text-xs font-medium text-[#34495E]">{t("banking.cash.outDesc")}</p>
                     <input
                       className={FORM_INPUT_CLASS}
@@ -897,11 +952,10 @@ export default function BankingCashPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#34495E]">{t("banking.cash.advanceReportDate")}</label>
-                  <input
-                    type="date"
-                    className={FORM_INPUT_CLASS}
+                  <DatePicker
+                    fieldVariant="form"
                     value={advDate}
-                    onChange={(e) => setAdvDate(e.target.value)}
+                    onChange={setAdvDate}
                     required
                   />
                 </div>
@@ -909,13 +963,14 @@ export default function BankingCashPage() {
                   <p className="mb-2 text-xs font-medium text-[#34495E]">{t("banking.cash.advanceLines")}</p>
                   {advLines.map((line, i) => (
                     <div key={i} className="flex flex-wrap gap-2 mb-2">
-                      <input
-                        className={FORM_INPUT_CLASS + " max-w-[100px]"}
+                      <NumericAmountInput
+                        fieldVariant="form"
+                        className="max-w-[140px]"
                         placeholder={t("banking.cash.amount")}
                         value={line.amount}
-                        onChange={(e) => {
+                        onValueChange={(plain) => {
                           const next = [...advLines];
-                          next[i] = { ...next[i], amount: e.target.value };
+                          next[i] = { ...next[i], amount: plain };
                           setAdvLines(next);
                         }}
                       />
@@ -982,43 +1037,51 @@ export default function BankingCashPage() {
               <form className="mt-4 space-y-3" onSubmit={submitPko}>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.date")}</label>
-                  <input
-                    type="date"
-                    className={FORM_INPUT_CLASS}
+                  <DatePicker
+                    fieldVariant="form"
                     value={pkoDate}
-                    onChange={(e) => setPkoDate(e.target.value)}
+                    onChange={setPkoDate}
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.pkoSubtype")}</label>
-                  <select
+                  <Select
                     className={FORM_INPUT_CLASS}
                     value={pkoSubtype}
-                    onChange={(e) => setPkoSubtype(e.target.value as PkoSubtype)}
+                    onValueChange={(v) => setPkoSubtype(v as PkoSubtype)}
                   >
-                    <option value="INCOME_FROM_CUSTOMER">{t("banking.cash.subtypeIncomeCustomer")}</option>
-                    <option value="RETURN_FROM_ACCOUNTABLE">{t("banking.cash.subtypeReturnAccountable")}</option>
-                    <option value="WITHDRAWAL_FROM_BANK">{t("banking.cash.subtypeBankWithdrawal")}</option>
-                    <option value="OTHER">{t("banking.cash.subtypeOther")}</option>
-                  </select>
+                    <SelectTrigger className="" />
+                    <SelectContent>
+                      <SelectItem value="INCOME_FROM_CUSTOMER">
+                        {t("banking.cash.subtypeIncomeCustomer")}
+                      </SelectItem>
+                      <SelectItem value="RETURN_FROM_ACCOUNTABLE">
+                        {t("banking.cash.subtypeReturnAccountable")}
+                      </SelectItem>
+                      <SelectItem value="WITHDRAWAL_FROM_BANK">
+                        {t("banking.cash.subtypeBankWithdrawal")}
+                      </SelectItem>
+                      <SelectItem value="OTHER">{t("banking.cash.subtypeOther")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-600">{t("banking.cash.amount")}</label>
-                    <input
-                      className={FORM_INPUT_CLASS}
+                    <NumericAmountInput
+                      fieldVariant="form"
                       value={pkoAmount}
-                      onChange={(e) => setPkoAmount(e.target.value)}
+                      onValueChange={setPkoAmount}
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600">{t("banking.cash.currency")}</label>
-                    <input
+                    <CurrencySelect
                       className={FORM_INPUT_CLASS}
                       value={pkoCurrency}
-                      onChange={(e) => setPkoCurrency(e.target.value)}
+                      onValueChange={setPkoCurrency}
                     />
                   </div>
                 </div>
@@ -1045,20 +1108,22 @@ export default function BankingCashPage() {
                 {pkoSubtype === "INCOME_FROM_CUSTOMER" && (
                   <div>
                     <label className="block text-xs font-medium text-slate-600">{t("banking.cash.counterparty")}</label>
-                    <select
-                      className={FORM_INPUT_CLASS}
+                    <AsyncCombobox<CounterpartySearchRow>
                       value={pkoCpId}
-                      onChange={(e) => setPkoCpId(e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {counterparties
-                        .filter((c) => c.role === "CUSTOMER" || c.role === "BOTH" || c.role == null)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                    </select>
+                      onChange={(id, item) => {
+                        setPkoCpId(id);
+                        setPkoCpLabel(
+                          item
+                            ? `${item.name}${item.taxId ? ` (${String(item.taxId)})` : ""}`
+                            : "",
+                        );
+                      }}
+                      fetcher={fetchCashCounterpartiesIncoming}
+                      getOptionLabel={(c) => `${c.name}${c.taxId ? ` (${String(c.taxId)})` : ""}`}
+                      placeholder="—"
+                      selectedLabel={pkoCpLabel}
+                      className={FORM_INPUT_CLASS}
+                    />
                   </div>
                 )}
                 {pkoSubtype === "RETURN_FROM_ACCOUNTABLE" && (
@@ -1136,53 +1201,57 @@ export default function BankingCashPage() {
               <form className="mt-4 space-y-3" onSubmit={submitRko}>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.date")}</label>
-                  <input
-                    type="date"
-                    className={FORM_INPUT_CLASS}
+                  <DatePicker
+                    fieldVariant="form"
                     value={rkoDate}
-                    onChange={(e) => setRkoDate(e.target.value)}
+                    onChange={setRkoDate}
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.rkoSubtype")}</label>
-                  <select
+                  <Select
                     className={FORM_INPUT_CLASS}
                     value={rkoSubtype}
-                    onChange={(e) => setRkoSubtype(e.target.value as RkoSubtype)}
+                    onValueChange={(v) => setRkoSubtype(v as RkoSubtype)}
                   >
-                    <option value="SALARY">{t("banking.cash.subtypeSalary")}</option>
-                    <option value="SUPPLIER_PAYMENT">{t("banking.cash.subtypeSupplier")}</option>
-                    <option value="ACCOUNTABLE_ISSUE">{t("banking.cash.subtypeAccountableIssue")}</option>
-                    <option value="BANK_DEPOSIT">{t("banking.cash.subtypeBankDeposit")}</option>
-                    <option value="OTHER">{t("banking.cash.subtypeOther")}</option>
-                  </select>
+                    <SelectTrigger className="" />
+                    <SelectContent>
+                      <SelectItem value="SALARY">{t("banking.cash.subtypeSalary")}</SelectItem>
+                      <SelectItem value="SUPPLIER_PAYMENT">{t("banking.cash.subtypeSupplier")}</SelectItem>
+                      <SelectItem value="ACCOUNTABLE_ISSUE">
+                        {t("banking.cash.subtypeAccountableIssue")}
+                      </SelectItem>
+                      <SelectItem value="BANK_DEPOSIT">{t("banking.cash.subtypeBankDeposit")}</SelectItem>
+                      <SelectItem value="OTHER">{t("banking.cash.subtypeOther")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-600">{t("banking.cash.amount")}</label>
-                    <input
-                      className={FORM_INPUT_CLASS}
+                    <NumericAmountInput
+                      fieldVariant="form"
                       value={rkoAmount}
-                      onChange={(e) => setRkoAmount(e.target.value)}
+                      onValueChange={setRkoAmount}
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600">{t("banking.cash.currency")}</label>
-                    <input
+                    <CurrencySelect
                       className={FORM_INPUT_CLASS}
                       value={rkoCurrency}
-                      onChange={(e) => setRkoCurrency(e.target.value)}
+                      onValueChange={setRkoCurrency}
                     />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.withholdingTax")}</label>
-                  <input
-                    className={FORM_INPUT_CLASS}
+                  <NumericAmountInput
+                    fieldVariant="form"
                     value={rkoWithholding}
-                    onChange={(e) => setRkoWithholding(e.target.value)}
+                    onValueChange={setRkoWithholding}
                     placeholder="0"
                   />
                   <p className="mt-1 text-[11px] text-slate-500 m-0">{t("banking.cash.withholdingHint")}</p>
@@ -1209,14 +1278,20 @@ export default function BankingCashPage() {
                 )}
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.counterparty")}</label>
-                  <select className={FORM_INPUT_CLASS} value={rkoCpId} onChange={(e) => setRkoCpId(e.target.value)}>
-                    <option value="">—</option>
-                    {counterparties.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <AsyncCombobox<CounterpartySearchRow>
+                    value={rkoCpId}
+                    onChange={(id, item) => {
+                      setRkoCpId(id);
+                      setRkoCpLabel(
+                        item ? `${item.name}${item.taxId ? ` (${String(item.taxId)})` : ""}` : "",
+                      );
+                    }}
+                    fetcher={fetchCashCounterpartiesOutgoing}
+                    getOptionLabel={(c) => `${c.name}${c.taxId ? ` (${String(c.taxId)})` : ""}`}
+                    placeholder="—"
+                    selectedLabel={rkoCpLabel}
+                    className={FORM_INPUT_CLASS}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600">{t("banking.cash.employee")}</label>

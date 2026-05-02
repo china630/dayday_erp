@@ -982,15 +982,15 @@ export class InvoicesService {
         });
         if (!p) throw new NotFoundException(`Product ${row.productId} not found`);
         productId = p.id;
-        unitPriceInput = p.price;
-        vatRate = p.vatRate;
+        unitPriceInput = new Decimal(row.unitPrice);
+        vatRate = new Decimal(row.vatRate);
         description = description ?? p.name;
       }
 
       const vr = vatRate.toNumber();
       const vatForCalc = vr === -1 ? new Decimal(0) : vatRate;
-      if (vr !== -1 && vr !== 0 && vr !== 18) {
-        throw new BadRequestException("vatRate must be 0, 18, or -1 (VAT exempt)");
+      if (![-1, 0, 2, 8, 18].includes(vr)) {
+        throw new BadRequestException("vatRate must be -1 (exempt), 0, 2, 8, or 18");
       }
 
       const qty = new Decimal(row.quantity);
